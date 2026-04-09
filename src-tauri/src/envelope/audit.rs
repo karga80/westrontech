@@ -1,0 +1,36 @@
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use chrono::Utc;
+use crate::envelope::types::AuditEntry;
+
+pub struct AuditLog {
+    pub log_dir: PathBuf,
+}
+
+impl AuditLog {
+    pub fn new() -> Self {
+        let home = dirs_next::home_dir().expect("Cannot find home directory");
+        let log_dir = home
+            .join("Library")
+            .join("Application Support")
+            .join("Westron")
+            .join("audit");
+        fs::create_dir_all(&log_dir).expect("Cannot create audit log directory");
+        AuditLog { log_dir }
+    }
+
+    pub fn write_entry(&self, entry: &AuditEntry) -> std::io::Result<()> {
+        let date = Utc::now().format("%Y-%m-%d").to_string();
+        let log_file = self.log_dir.join(format!("audit-{}.jsonl", date));
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)?;
+        let line = serde_json::to_string(entry)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        writeln!(file, "{}", line)?;
+        file.sync_all()?;
+        Ok(())
+    }
+}

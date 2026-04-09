@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  reactCompiler: true,
-};
+const isProd = process.env.NODE_ENV === 'production';
 
+const nextConfig: NextConfig = {
+  ...(isProd ? { output: 'export' } : {}),
+  trailingSlash: true,
+  images: { unoptimized: true },
+  turbopack: {
+    root: __dirname,
+  },
+};
 export default nextConfig;
