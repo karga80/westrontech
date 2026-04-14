@@ -763,9 +763,11 @@ impl MarketplaceClient {
 
     /// Fetch active collection offers from OpenSea /api/v2/orders/ethereum/seaport/offers
     /// Returns orders sorted by price descending (best offers first).
+    /// Note: OpenSea only supports `order_by=eth_price` for single-token queries, so we
+    /// fetch by created_date and sort client-side to keep "best offers first" semantics.
     pub async fn fetch_collection_offers(&self, slug: &str, limit: u32) -> Result<Vec<CollectionOffer>, String> {
         let url = format!(
-            "{}/orders/ethereum/seaport/offers?collection_slug={}&order_by=eth_price&order_direction=desc&limit={}",
+            "{}/orders/ethereum/seaport/offers?collection_slug={}&order_by=created_date&order_direction=desc&limit={}",
             OPENSEA_API_BASE, slug, limit.min(50)
         );
 
@@ -817,8 +819,11 @@ impl MarketplaceClient {
                     expiration,
                     order_hash,
                 })
-            }).collect())
+            }).collect::<Vec<CollectionOffer>>())
             .unwrap_or_default();
+
+        let mut offers = offers;
+        offers.sort_by(|a, b| b.price_eth.partial_cmp(&a.price_eth).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(offers)
     }

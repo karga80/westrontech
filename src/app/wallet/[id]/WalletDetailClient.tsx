@@ -279,8 +279,44 @@ function mapTransfer(t: AssetTransfer, walletAddress: string) {
   };
 }
 
+/** Build a wallet config for an arbitrary stored wallet whose id isn't in
+ *  WALLET_CONFIGS (anything added via the dashboard "Add wallet" modal gets
+ *  a Date.now() id). Keeps the analytics mock layout while making header
+ *  fields (name, address, badge) reflect the actual wallet the user clicked. */
+function syntheticConfig(
+  id: string,
+  name: string,
+  address: string,
+): (typeof WALLET_CONFIGS)[number] {
+  const template = WALLET_CONFIGS[0];
+  return {
+    ...template,
+    id,
+    name,
+    address,
+    badge: 'ETH',
+    totalValue: '—',
+    unrealizedPnl: '—',
+    analytics: {
+      ...template.analytics,
+      portfolioValue: '—',
+      portfolioChange: '—',
+    },
+  };
+}
+
 export default function WalletDetailClient({ id }: { id: string }) {
-  const wallet = WALLET_CONFIGS.find(w => w.id === id) ?? WALLET_CONFIGS[0];
+  // Resolve the wallet: prefer WALLET_CONFIGS (has analytics mocks), fall back
+  // to the stored record so user-added wallets show their own name/address
+  // instead of silently loading Main Wallet data.
+  const walletFromConfig = WALLET_CONFIGS.find(w => w.id === id);
+  const storedLookup = typeof window !== 'undefined'
+    ? loadWallets().find(w => w.id === id)
+    : undefined;
+  const wallet: (typeof WALLET_CONFIGS)[number] = walletFromConfig
+    ?? (storedLookup
+      ? syntheticConfig(id, storedLookup.name, storedLookup.address)
+      : WALLET_CONFIGS[0]);
   const [tab, setTab] = useState<Tab>('Holdings');
   const [timeFilter, setTimeFilter] = useState<string>('24h');
 

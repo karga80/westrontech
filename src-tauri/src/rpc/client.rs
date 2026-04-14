@@ -338,25 +338,13 @@ impl AlchemyClient {
         })
     }
 
+    /// **Removed** — ETH price now comes exclusively from `crate::data::alchemy::prices`
+    /// (Alchemy Prices API). CoinGecko has been retired as a wallet-data source.
+    /// This stub remains so callers that still hold an `AlchemyClient` get a clear
+    /// compile-time pointer to the new layer; remove once all callers migrate.
+    #[deprecated(note = "Use crate::data::PriceProvider::get_eth_price_usd via crate::data::default_provider")]
+    #[allow(dead_code)]
     pub async fn get_eth_price_usd(&self) -> Result<f64, String> {
-        let response = self
-            .client
-            .get("https://api.coingecko.com/api/v3/simple/price")
-            .query(&[("ids", "ethereum"), ("vs_currencies", "usd")])
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        #[derive(serde::Deserialize)]
-        struct CoinGeckoResponse {
-            ethereum: EthPrice,
-        }
-        #[derive(serde::Deserialize)]
-        struct EthPrice {
-            usd: f64,
-        }
-
-        let data: CoinGeckoResponse = response.json().await.map_err(|e| e.to_string())?;
-        Ok(data.ethereum.usd)
+        Err("get_eth_price_usd moved to crate::data::alchemy::prices — use the data layer".to_string())
     }
 }

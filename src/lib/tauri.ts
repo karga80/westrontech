@@ -130,7 +130,121 @@ export async function getTokenMetadata(contractAddress: string, apiKey: string):
 }
 
 export async function getEthPriceUsd(apiKey: string): Promise<number> {
+  // Sourced from Alchemy Prices API (CoinGecko removed).
   return invoke<number>('get_eth_price_usd', { apiKey });
+}
+
+// ── New unified data layer (Alchemy Prices + Portfolio + NFT v3) ────────────
+
+export interface TokenPrice {
+  symbol: string;
+  address?: string | null;
+  network?: string | null;
+  usd?: number | null;
+  lastUpdatedAt?: string | null;
+}
+
+export interface WalletToken {
+  address: string;
+  network: string;
+  tokenAddress?: string | null;
+  symbol?: string | null;
+  name?: string | null;
+  decimals?: number | null;
+  logo?: string | null;
+  balanceRaw?: string | null;
+  balance?: number | null;
+  usdValue?: number | null;
+  usdPrice?: number | null;
+  priceLastUpdatedAt?: string | null;
+  isNative: boolean;
+}
+
+export interface WalletPortfolio {
+  wallet: string;
+  ethBalance: number;
+  ethPriceUsd?: number | null;
+  totalUsd: number;
+  tokens: WalletToken[];
+}
+
+export interface NftCollectionMeta {
+  address: string;
+  name?: string | null;
+  symbol?: string | null;
+  totalSupply?: string | null;
+  tokenType?: string | null;
+  deployedBlockNumber?: number | null;
+  deployer?: string | null;
+  openseaFloorPriceEth?: number | null;
+  openseaCollectionName?: string | null;
+  openseaImageUrl?: string | null;
+  openseaBannerUrl?: string | null;
+  openseaSafelistStatus?: string | null;
+}
+
+export interface NftSale {
+  contractAddress: string;
+  tokenId: string;
+  marketplace?: string | null;
+  seller?: string | null;
+  buyer?: string | null;
+  priceEth?: number | null;
+  priceUsd?: number | null;
+  blockNumber?: number | null;
+  blockTimestamp?: string | null;
+  txHash?: string | null;
+  quantity?: number | null;
+}
+
+export async function getTokenPricesBySymbol(symbols: string[], apiKey: string): Promise<TokenPrice[]> {
+  return invoke<TokenPrice[]>('get_token_prices_by_symbol', { symbols, apiKey });
+}
+
+export async function getTokenPricesByAddress(addresses: string[], apiKey: string): Promise<TokenPrice[]> {
+  return invoke<TokenPrice[]>('get_token_prices_by_address', { addresses, apiKey });
+}
+
+export async function getWalletPortfolio(wallet: string, apiKey: string): Promise<WalletPortfolio> {
+  return invoke<WalletPortfolio>('get_wallet_portfolio', { wallet, apiKey });
+}
+
+export async function getWalletTokens(wallet: string, apiKey: string): Promise<WalletToken[]> {
+  return invoke<WalletToken[]>('get_wallet_tokens', { wallet, apiKey });
+}
+
+export async function getCollectionMetadata(contract: string, apiKey: string): Promise<NftCollectionMeta> {
+  return invoke<NftCollectionMeta>('get_collection_metadata', { contract, apiKey });
+}
+
+export async function getNftSales(
+  contract: string,
+  apiKey: string,
+  opts: { tokenId?: string; limit?: number } = {},
+): Promise<NftSale[]> {
+  return invoke<NftSale[]>('get_nft_sales', {
+    contract,
+    tokenId: opts.tokenId ?? null,
+    limit: opts.limit ?? 50,
+    apiKey,
+  });
+}
+
+// ── Real-time subscription bridge ────────────────────────────────────────────
+
+export interface WatchSet {
+  wallets: string[];
+  collections: string[];
+  priceSymbols: string[];
+  subscribeBlocks: boolean;
+}
+
+export async function realtimeInit(apiKey: string): Promise<void> {
+  return invoke<void>('realtime_init', { apiKey });
+}
+
+export async function realtimeSetWatchSet(set: WatchSet): Promise<void> {
+  return invoke<void>('realtime_set_watch_set', { set });
 }
 
 // NFT

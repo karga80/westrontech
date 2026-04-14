@@ -716,6 +716,7 @@ name = "app"
 version = "0.2.0"
 dependencies = [
  "alloy",
+ "async-trait",
  "chrono",
  "dirs-next",
  "futures-util",

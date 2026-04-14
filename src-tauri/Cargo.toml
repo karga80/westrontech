@@ -35,3 +35,4 @@ alloy = { version = "1", features = ["signers", "signer-local", "consensus", "ne
 open = "5"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
+async-trait = "0.1"

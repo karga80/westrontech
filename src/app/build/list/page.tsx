@@ -64,51 +64,53 @@ const STATIC_NFTS: NFT[] = [
   { id: 14, name: 'Pudgy #4492',     collection: 'Pudgy Penguins', collectionColor: '#34d399', wallet: 'cold', floor: 4.5,  rank: '173',  emoji: '🐧', listed: false, listedPrice: null },
 ];
 
-// Trait data per collection — each NFT gets a seeded slice based on id
-interface NFTTrait { type: string; value: string; rarity: number; offerFloor: number; }
+// Trait data per collection — each NFT gets a seeded slice based on id.
+// floor      = lowest listing price for NFTs holding this trait
+// offerFloor = highest open collection bid for NFTs holding this trait
+interface NFTTrait { type: string; value: string; rarity: number; floor: number; offerFloor: number; }
 
 const COLLECTION_TRAITS: Record<string, NFTTrait[]> = {
   'Bored Ape YC': [
-    { type: 'Background', value: 'Army Green',      rarity: 12.4, offerFloor: 24.1 },
-    { type: 'Fur',        value: 'Golden Brown',     rarity:  4.8, offerFloor: 26.5 },
-    { type: 'Eyes',       value: 'Bored',            rarity: 22.1, offerFloor: 23.5 },
-    { type: 'Mouth',      value: 'Bored Unshaven',   rarity:  7.6, offerFloor: 25.0 },
-    { type: 'Clothes',    value: 'Striped Tee',      rarity:  8.2, offerFloor: 24.8 },
+    { type: 'Background', value: 'Army Green',      rarity: 12.4, floor: 26.2, offerFloor: 24.1 },
+    { type: 'Fur',        value: 'Golden Brown',     rarity:  4.8, floor: 28.9, offerFloor: 26.5 },
+    { type: 'Eyes',       value: 'Bored',            rarity: 22.1, floor: 25.1, offerFloor: 23.5 },
+    { type: 'Mouth',      value: 'Bored Unshaven',   rarity:  7.6, floor: 27.3, offerFloor: 25.0 },
+    { type: 'Clothes',    value: 'Striped Tee',      rarity:  8.2, floor: 27.0, offerFloor: 24.8 },
   ],
   'Azuki': [
-    { type: 'Type',       value: 'Human',            rarity: 81.9, offerFloor: 34.2 },
-    { type: 'Hair',       value: 'Red Spiky',        rarity: 12.9, offerFloor: 38.0 },
-    { type: 'Eyes',       value: 'Determined',       rarity: 26.7, offerFloor: 35.1 },
-    { type: 'Clothing',   value: 'White Qipao',      rarity:  3.1, offerFloor: 52.0 },
-    { type: 'Background', value: 'Off White A',      rarity: 17.2, offerFloor: 34.5 },
+    { type: 'Type',       value: 'Human',            rarity: 81.9, floor: 36.1, offerFloor: 34.2 },
+    { type: 'Hair',       value: 'Red Spiky',        rarity: 12.9, floor: 41.0, offerFloor: 38.0 },
+    { type: 'Eyes',       value: 'Determined',       rarity: 26.7, floor: 37.8, offerFloor: 35.1 },
+    { type: 'Clothing',   value: 'White Qipao',      rarity:  3.1, floor: 55.5, offerFloor: 52.0 },
+    { type: 'Background', value: 'Off White A',      rarity: 17.2, floor: 37.2, offerFloor: 34.5 },
   ],
   'Doodles': [
-    { type: 'Background', value: 'Gradient 1',       rarity: 18.4, offerFloor:  3.0 },
-    { type: 'Head',       value: 'Pink Puff',        rarity:  9.2, offerFloor:  3.4 },
-    { type: 'Face',       value: 'Happy',            rarity: 31.0, offerFloor:  2.9 },
-    { type: 'Body',       value: 'Purple Fleece',    rarity:  6.7, offerFloor:  3.6 },
-    { type: 'Accessories',value: 'Headphones',       rarity:  4.1, offerFloor:  4.1 },
+    { type: 'Background', value: 'Gradient 1',       rarity: 18.4, floor:  3.3, offerFloor:  3.0 },
+    { type: 'Head',       value: 'Pink Puff',        rarity:  9.2, floor:  3.7, offerFloor:  3.4 },
+    { type: 'Face',       value: 'Happy',            rarity: 31.0, floor:  3.1, offerFloor:  2.9 },
+    { type: 'Body',       value: 'Purple Fleece',    rarity:  6.7, floor:  3.9, offerFloor:  3.6 },
+    { type: 'Accessories',value: 'Headphones',       rarity:  4.1, floor:  4.5, offerFloor:  4.1 },
   ],
   'Pudgy Penguins': [
-    { type: 'Background', value: 'Blue',             rarity:  7.4, offerFloor:  4.9 },
-    { type: 'Skin',       value: 'Normal',           rarity: 68.2, offerFloor:  4.5 },
-    { type: 'Head',       value: 'Beanie',           rarity:  3.2, offerFloor:  6.2 },
-    { type: 'Body',       value: 'Turtleneck',       rarity:  5.8, offerFloor:  5.1 },
-    { type: 'Eyes',       value: 'Half Closed',      rarity: 11.3, offerFloor:  4.7 },
+    { type: 'Background', value: 'Blue',             rarity:  7.4, floor:  5.3, offerFloor:  4.9 },
+    { type: 'Skin',       value: 'Normal',           rarity: 68.2, floor:  4.8, offerFloor:  4.5 },
+    { type: 'Head',       value: 'Beanie',           rarity:  3.2, floor:  6.7, offerFloor:  6.2 },
+    { type: 'Body',       value: 'Turtleneck',       rarity:  5.8, floor:  5.5, offerFloor:  5.1 },
+    { type: 'Eyes',       value: 'Half Closed',      rarity: 11.3, floor:  5.1, offerFloor:  4.7 },
   ],
   'Clonex': [
-    { type: 'DNA',        value: 'Human',            rarity: 93.4, offerFloor:  4.1 },
-    { type: 'Eye Color',  value: 'Hazel',            rarity: 21.0, offerFloor:  4.2 },
-    { type: 'Body',       value: 'White Suit',       rarity:  8.4, offerFloor:  5.0 },
-    { type: 'Jewellery',  value: 'Gold Chain',       rarity:  6.1, offerFloor:  5.3 },
-    { type: 'Background', value: 'Purple',           rarity: 14.2, offerFloor:  4.3 },
+    { type: 'DNA',        value: 'Human',            rarity: 93.4, floor:  4.4, offerFloor:  4.1 },
+    { type: 'Eye Color',  value: 'Hazel',            rarity: 21.0, floor:  4.5, offerFloor:  4.2 },
+    { type: 'Body',       value: 'White Suit',       rarity:  8.4, floor:  5.4, offerFloor:  5.0 },
+    { type: 'Jewellery',  value: 'Gold Chain',       rarity:  6.1, floor:  5.7, offerFloor:  5.3 },
+    { type: 'Background', value: 'Purple',           rarity: 14.2, floor:  4.6, offerFloor:  4.3 },
   ],
   'Moonbirds': [
-    { type: 'Body',       value: 'Crescent',         rarity: 15.6, offerFloor:  1.9 },
-    { type: 'Eyes',       value: 'Open',             rarity: 28.8, offerFloor:  1.8 },
-    { type: 'Headwear',   value: 'Durag',            rarity:  4.3, offerFloor:  2.5 },
-    { type: 'Beak',       value: 'Short',            rarity: 62.1, offerFloor:  1.8 },
-    { type: 'Background', value: 'Pink',             rarity: 11.7, offerFloor:  1.9 },
+    { type: 'Body',       value: 'Crescent',         rarity: 15.6, floor:  2.1, offerFloor:  1.9 },
+    { type: 'Eyes',       value: 'Open',             rarity: 28.8, floor:  2.0, offerFloor:  1.8 },
+    { type: 'Headwear',   value: 'Durag',            rarity:  4.3, floor:  2.7, offerFloor:  2.5 },
+    { type: 'Beak',       value: 'Short',            rarity: 62.1, floor:  2.0, offerFloor:  1.8 },
+    { type: 'Background', value: 'Pink',             rarity: 11.7, floor:  2.1, offerFloor:  1.9 },
   ],
 };
 
@@ -118,8 +120,9 @@ function getNftTraits(nft: NFT): NFTTrait[] {
   const offset = nft.id % base.length;
   return [...base.slice(offset), ...base.slice(0, offset)].map((t, i) => ({
     ...t,
-    // Vary rarity slightly per NFT
+    // Vary rarity + prices slightly per NFT so cards aren't identical
     rarity: Math.round((t.rarity + ((nft.id * (i + 1)) % 5) - 2) * 10) / 10,
+    floor: Math.round((t.floor + ((nft.id % 3) - 1) * 0.2) * 100) / 100,
     offerFloor: Math.round((t.offerFloor + ((nft.id % 3) - 1) * 0.2) * 100) / 100,
   }));
 }
@@ -651,25 +654,37 @@ export default function BulkListPage() {
                           </div>
                           <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text-4)' }}>↩</div>
                         </div>
-                        {/* Column headers */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', padding: '6px 12px', borderBottom: '1px solid var(--wr-border)', flexShrink: 0 }}>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#555' }}>Trait</span>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#555' }}>Rarity</span>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#555', textAlign: 'right' }}>Offer</span>
-                        </div>
-                        {/* Trait rows */}
+                        {/* Trait rows — 2-line layout: title on top, metrics below.
+                            Row 2 is a 3-col equal grid so Rarity / Floor / Offer
+                            columns line up pixel-perfect across every trait. */}
                         <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#3a3a3a #0A0A0A' }}>
                           {traits.map((trait, i) => {
                             const rc = trait.rarity < 5 ? '#f97316' : trait.rarity < 15 ? '#60a5fa' : '#71717A';
+                            const METRIC_LABEL = { fontFamily: 'var(--font-jetbrains)', fontSize: '7px', fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase' as const, color: '#555', lineHeight: 1 };
+                            const METRIC_VALUE = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, lineHeight: 1.1, marginTop: '3px' } as const;
                             return (
                               <div key={i} onClick={e => e.stopPropagation()}
-                                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', padding: '7px 12px', borderBottom: '1px solid var(--wr-surface)', alignItems: 'center' }}>
-                                <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1 }}>{trait.type}</div>
-                                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>{trait.value}</div>
+                                style={{ padding: '8px 12px', borderBottom: '1px solid var(--wr-surface)' }}>
+                                {/* Row 1 — full trait title (type + value). */}
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px', minWidth: 0 }}>
+                                  <span style={METRIC_LABEL}>{trait.type}</span>
+                                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1 }}>{trait.value}</span>
                                 </div>
-                                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: rc }}>{trait.rarity}%</span>
-                                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-accent)', textAlign: 'right' }}>{trait.offerFloor}</span>
+                                {/* Row 2 — three equal columns so headers & values align perfectly. */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                                  <div>
+                                    <div style={METRIC_LABEL}>Rarity</div>
+                                    <div style={{ ...METRIC_VALUE, color: rc }}>{trait.rarity}%</div>
+                                  </div>
+                                  <div>
+                                    <div style={METRIC_LABEL}>Floor</div>
+                                    <div style={{ ...METRIC_VALUE, color: 'var(--wr-text-1)' }}>{trait.floor}</div>
+                                  </div>
+                                  <div>
+                                    <div style={METRIC_LABEL}>Offer</div>
+                                    <div style={{ ...METRIC_VALUE, color: 'var(--wr-accent)' }}>{trait.offerFloor}</div>
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
@@ -754,8 +769,12 @@ export default function BulkListPage() {
             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Duration</div>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: '0' }}>
               <input
-                type="number" min="1" value={durationValue} onChange={e => setDurationValue(e.target.value)}
-                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, width: '52px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', borderRight: 'none', color: 'var(--wr-text)', padding: '5px 8px', outline: 'none', textAlign: 'center' }} />
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={durationValue}
+                onChange={e => setDurationValue(e.target.value.replace(/[^0-9]/g, ''))}
+                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, width: '52px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', borderRight: 'none', color: 'var(--wr-text)', padding: '5px 8px', outline: 'none', textAlign: 'center', MozAppearance: 'textfield' as const, WebkitAppearance: 'none' as const }} />
               {(['min', 'hour', 'day', 'week', 'month'] as const).map(u => (
                 <button key={u} onClick={() => setDurationUnit(u)}
                   style={{

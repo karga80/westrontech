@@ -3,7 +3,10 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startStream, stopStream, type PortfolioSnapshot, type AssetTransfer, type StreamEvent, type StreamStatus } from '@/lib/tauri';
+import { getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startStream, stopStream, openExternalUrl, type PortfolioSnapshot, type AssetTransfer, type StreamEvent, type StreamStatus } from '@/lib/tauri';
+import { useTrackedNfts } from '@/hooks/useTrackedNfts';
+import { removeTrackedNft, loadTrackedNfts, type TrackedNft } from '@/lib/trackedNftStore';
+import { TrackedNftNotificationModal } from '@/components/TrackedNftNotificationModal';
 import { loadWallets, removeWallet } from '@/lib/walletStore';
 import { loadCollections, saveCollection, removeCollection, type WatchedCollection } from '@/lib/collectionStore';
 import { fetchCollectionByContract } from '@/lib/tauri';
@@ -339,6 +342,11 @@ export default function MonitorPage() {
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
   const relSettingsRef = useRef<HTMLDivElement>(null);
 
+  // ── Tracked NFTs state ───────────────────────────────────────────────────
+  const trackedNfts = useTrackedNfts();
+  const [trackedEditTarget, setTrackedEditTarget] = useState<TrackedNft | null>(null);
+  const [trackedModalOpen, setTrackedModalOpen] = useState(false);
+
   // Load collections and start stream
   useEffect(() => {
     const cols = loadCollections();
@@ -604,9 +612,15 @@ export default function MonitorPage() {
               <div className="flex flex-col" style={{ gap: 3 }}>
                 <div className="flex items-center gap-1">
                   <span style={{ color: 'var(--wr-text)', fontSize: 12, fontWeight: 500 }}>{w.address}</span>
-                  <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(`https://etherscan.io/address/${w.rawAddress}`, '_blank', 'noopener,noreferrer'); }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.open(`https://etherscan.io/address/${w.rawAddress}`, '_blank', 'noopener,noreferrer'); } }}
+                    className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex cursor-pointer"
+                  >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
+                  </span>
                 </div>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: 10, fontWeight: 400 }}>{w.label}</span>
                 {(() => {
@@ -690,7 +704,7 @@ export default function MonitorPage() {
       </div>
 
       {/* ── NFT Collections ── */}
-      <div>
+      <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, letterSpacing: '2px', color: 'var(--wr-accent)', textTransform: 'uppercase' }}>NFT Collections</span>
@@ -825,6 +839,204 @@ export default function MonitorPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Tracked NFTs ──────────────────────────────────────────────────── */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, letterSpacing: '2px', color: 'var(--wr-accent)', textTransform: 'uppercase' }}>Tracked NFTs</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5"
+              style={{ color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)', border: '1px solid var(--wr-info)' }}>
+              {trackedNfts.length}
+            </span>
+          </div>
+        </div>
+
+        {trackedNfts.length === 0 ? (
+          <div style={{ border: '1px solid var(--wr-border)', padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+            No tracked NFTs yet. Visit a collection detail page and tap the ★ on any item to start tracking.
+          </div>
+        ) : (() => {
+          // Shared grid template — used by both header and every data row so
+          // every column lines up pixel-perfect vertically. Defined once here
+          // to eliminate the risk of drift between header and rows.
+          // Columns: Image | NFT Name | NFT ID | Collection | Rarity | Floor | Trait Floor | Rules | Actions
+          const GRID_COLS = '44px minmax(140px, 1.6fr) 90px minmax(120px, 1.2fr) 80px 100px 110px 140px 200px';
+          const ROW_PADDING = '14px 20px';
+          const CELL_LABEL: React.CSSProperties = {
+            fontFamily: 'var(--font-jetbrains)',
+            fontSize: '9px', fontWeight: 700,
+            color: 'var(--wr-text-3)',
+            letterSpacing: '0.12em', textTransform: 'uppercase',
+            lineHeight: 1,
+          };
+          // Buttons in the action cell all share this shape so they render at
+          // exactly the same height regardless of text length.
+          const ACTION_BTN_BASE: React.CSSProperties = {
+            fontFamily: 'var(--font-jetbrains)',
+            fontSize: '10px', fontWeight: 600,
+            lineHeight: 1,
+            height: '26px',
+            padding: '0 12px',
+            cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          };
+          return (
+            <div className="overflow-hidden" style={{ border: '1px solid var(--wr-border)', fontFamily: 'var(--font-jetbrains), monospace' }}>
+              {/* Column header row */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: GRID_COLS,
+                padding: '12px 20px',
+                borderBottom: '1px solid var(--wr-border)',
+                backgroundColor: 'var(--wr-surface-alt)',
+                alignItems: 'center',
+              }}>
+                {['', 'NFT', 'NFT ID', 'Collection', 'Rarity', 'Floor', 'Trait Floor', 'Rules', ''].map((h, i) => (
+                  <div key={i} style={CELL_LABEL}>{h}</div>
+                ))}
+              </div>
+
+              {trackedNfts.map(nft => {
+                const rulesSummary: string[] = [];
+                if (nft.notifications.onListed) rulesSummary.push('List');
+                if (nft.notifications.onListedBelow != null) rulesSummary.push(`<${nft.notifications.onListedBelow}Ξ`);
+                if (nft.notifications.onSold) rulesSummary.push('Sold');
+                if (nft.notifications.onTransferred) rulesSummary.push('Xfer');
+                const openseaUrl = `https://opensea.io/assets/ethereum/${nft.contract}/${nft.tokenId}`;
+                return (
+                  <div key={nft.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: GRID_COLS,
+                      padding: ROW_PADDING,
+                      borderBottom: '1px solid var(--wr-border)',
+                      alignItems: 'center',
+                      transition: 'background-color 0.12s',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+                  >
+                    {/* Image — matches header column 1 (44px) */}
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {nft.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={nft.imageUrl} alt={nft.name} style={{ width: '32px', height: '32px', objectFit: 'cover', display: 'block', borderRadius: '2px' }} />
+                      ) : (
+                        <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', borderRadius: '2px' }} />
+                      )}
+                    </div>
+                    {/* Name — matches header col 2 */}
+                    <div style={{ minWidth: 0, paddingRight: '12px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{nft.name}</div>
+                    </div>
+                    {/* NFT ID — dedicated column, matches header col 3 */}
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wr-text-1)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                      #{nft.tokenId}
+                    </div>
+                    {/* Collection — matches header col 4 */}
+                    <div style={{ minWidth: 0, paddingRight: '12px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--wr-text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
+                        {nft.collectionName}
+                      </div>
+                    </div>
+                    {/* Rarity — matches header col 5 */}
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: nft.rarity != null ? '#a78bfa' : 'var(--wr-text-3)', lineHeight: 1 }}>
+                      {nft.rarity != null ? `#${nft.rarity}` : '—'}
+                    </div>
+                    {/* Floor — matches header col 6 */}
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--wr-text)', lineHeight: 1 }}>
+                      {nft.floorEth != null ? `${nft.floorEth.toFixed(3)} ETH` : '—'}
+                    </div>
+                    {/* Trait Floor — matches header col 7 */}
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: nft.traitFloorEth != null ? 'var(--wr-text)' : 'var(--wr-text-3)', lineHeight: 1 }}>
+                      {nft.traitFloorEth != null ? `${nft.traitFloorEth.toFixed(3)} ETH` : '—'}
+                    </div>
+                    {/* Rules summary chips — matches header col 8 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', paddingRight: '12px' }}>
+                      {rulesSummary.length === 0 ? (
+                        <span style={{ fontSize: '10px', color: 'var(--wr-text-3)' }}>No rules</span>
+                      ) : rulesSummary.map((tag, i) => (
+                        <span key={i}
+                          style={{
+                            fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                            color: 'var(--wr-accent)', backgroundColor: 'var(--wr-accent-dim, rgba(190,255,0,0.08))',
+                            border: '1px solid var(--wr-accent)', padding: '3px 6px', lineHeight: 1,
+                          }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    {/* Actions — matches header col 9 (right-aligned, fixed-height buttons) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          const rec = loadTrackedNfts().find(n => n.id === nft.id);
+                          if (!rec) return;
+                          setTrackedEditTarget(rec);
+                          setTrackedModalOpen(true);
+                        }}
+                        title="Edit rules"
+                        style={{
+                          ...ACTION_BTN_BASE,
+                          color: 'var(--wr-text-3)', backgroundColor: 'transparent',
+                          border: '1px solid var(--wr-border)',
+                        }}
+                      >Edit</button>
+                      <button
+                        className="btn-cta"
+                        onClick={e => {
+                          e.stopPropagation();
+                          openExternalUrl(openseaUrl).catch(() => window.open(openseaUrl, '_blank'));
+                        }}
+                        style={{
+                          ...ACTION_BTN_BASE,
+                          fontWeight: 700,
+                          color: '#000', backgroundColor: '#BEFF00', border: '1px solid #BEFF00',
+                        }}
+                      >Buy</button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          const offerUrl = `${openseaUrl}?make_offer=true`;
+                          openExternalUrl(offerUrl).catch(() => window.open(offerUrl, '_blank'));
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.4)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none'; }}
+                        style={{
+                          ...ACTION_BTN_BASE,
+                          color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)',
+                          border: '1px solid var(--wr-info)', transition: 'filter 0.12s',
+                        }}
+                      >Offer</button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          removeTrackedNft(nft.contract, nft.tokenId);
+                        }}
+                        title="Untrack"
+                        style={{
+                          ...ACTION_BTN_BASE,
+                          width: '26px', padding: 0, fontSize: '12px',
+                          color: 'var(--wr-text-3)', backgroundColor: 'transparent',
+                          border: '1px solid var(--wr-border)',
+                        }}
+                      >×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+
+      <TrackedNftNotificationModal
+        open={trackedModalOpen}
+        onClose={() => { setTrackedModalOpen(false); setTrackedEditTarget(null); }}
+        target={trackedEditTarget}
+      />
 
     </main>
   );

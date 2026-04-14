@@ -4,7 +4,13 @@ import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Tag, NFT_ACTIVITY_VARIANT } from '@/components/Tag';
-import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, getEthBalance, getTokenBalances, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue } from '@/lib/tauri';
+import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, fetchCollectionNfts, getEthBalance, getTokenBalances, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue } from '@/lib/tauri';
+import {
+  addTrackedNft, isTracked, loadTrackedNfts, removeTrackedNft, trackedNftId,
+  type TrackedNft,
+} from '@/lib/trackedNftStore';
+import { subscribeTrackedNfts } from '@/lib/trackedNftStore';
+import { TrackedNftNotificationModal } from '@/components/TrackedNftNotificationModal';
 import { openSeaApi, type OpenSeaNftItem, type SortOption, SORT_OPTIONS } from '@/lib/opensea-api';
 import { loadWallets } from '@/lib/walletStore';
 
@@ -75,7 +81,9 @@ const MOCK_TRAITS = [
 ];
 
 // ── Mock alert rules ───────────────────────────────────────────────────────────
-const ALERTS = [
+type AlertRule = { id: number; label: string; enabled: boolean; channel: string };
+const ALERT_CHANNELS = ['macOS', 'Discord', 'macOS + Discord'] as const;
+const ALERTS: AlertRule[] = [
   { id: 1, label: 'Floor drops below 12 ETH',       enabled: true,  channel: 'macOS + Discord' },
   { id: 2, label: 'Floor rises above 20 ETH',       enabled: false, channel: 'macOS' },
   { id: 3, label: 'Volume spike > 500 ETH in 1hr',  enabled: true,  channel: 'Discord' },
@@ -101,8 +109,25 @@ function MonitorCollectionInner() {
   const hoverOn  = (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--wr-hover-bg)'; };
   const hoverOff = (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; };
   const [tab, setTab] = useState<Tab>('Items');
-  const [alerts, setAlerts] = useState(ALERTS);
+  const [alerts, setAlerts] = useState<AlertRule[]>(ALERTS);
   const toggleAlert = (id: number) => setAlerts(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
+  const deleteAlert = (id: number) => setAlerts(prev => prev.filter(a => a.id !== id));
+  const [alertEditor, setAlertEditor] = useState<{ mode: 'add' | 'edit'; id: number | null; label: string; channel: string } | null>(null);
+  const openAddAlert = () => setAlertEditor({ mode: 'add', id: null, label: '', channel: ALERT_CHANNELS[0] });
+  const openEditAlert = (a: AlertRule) => setAlertEditor({ mode: 'edit', id: a.id, label: a.label, channel: a.channel });
+  const closeAlertEditor = () => setAlertEditor(null);
+  const saveAlertEditor = () => {
+    if (!alertEditor) return;
+    const label = alertEditor.label.trim();
+    if (!label) return;
+    if (alertEditor.mode === 'add') {
+      const nextId = alerts.reduce((m, a) => Math.max(m, a.id), 0) + 1;
+      setAlerts(prev => [...prev, { id: nextId, label, channel: alertEditor.channel, enabled: true }]);
+    } else if (alertEditor.id != null) {
+      setAlerts(prev => prev.map(a => a.id === alertEditor.id ? { ...a, label, channel: alertEditor.channel } : a));
+    }
+    setAlertEditor(null);
+  };
 
   const collectionName = searchParams.get('name') ?? '';
   const slugParam = searchParams.get('slug') ?? '';
@@ -144,6 +169,36 @@ function MonitorCollectionInner() {
   type FilterStatus = 'all' | 'listed' | 'unlisted' | 'owned';
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
+  // Listings price map (identifier → price_eth) — used to fill prices when
+  // fetching by /collection/{slug}/nfts (which omits price data).
+  const [listingsPriceMap, setListingsPriceMap] = useState<Record<string, number>>({});
+  const LISTINGS_FETCH_LIMIT = 300;
+
+  // ── Tracked NFT state (favoriting + notification config) ────────────────
+  // trackedSet: quick lookup to know whether a given NFT is already tracked
+  // (refreshed from localStorage whenever the store fires a change event so
+  // toggles on one card reflect instantly on every other card).
+  const [trackedSet, setTrackedSet] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const refresh = () => setTrackedSet(new Set(loadTrackedNfts().map(n => n.id)));
+    refresh();
+    const unsub = subscribeTrackedNfts(refresh);
+    return () => { unsub(); };
+  }, []);
+
+  // Multi-select mode (bulk favorite). When active, NFT cards show a checkbox
+  // and the toolbar gains "Track selected" + "Cancel" actions.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTokenIds, setSelectedTokenIds] = useState<Set<string>>(() => new Set());
+
+  // Notification modal state — `target` is either a single already-tracked
+  // NFT being edited, or (for bulk) we seed from DEFAULT_NOTIFICATIONS and
+  // apply to `targetIds`.
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [notifModalTarget, setNotifModalTarget] = useState<TrackedNft | null>(null);
+  const [notifModalIds, setNotifModalIds] = useState<string[] | undefined>(undefined);
+  const [listingsFetchedCount, setListingsFetchedCount] = useState(0);
+
   // Fetch stats + top offer on mount
   useEffect(() => {
     if (!activeSlug) return;
@@ -169,6 +224,55 @@ function MonitorCollectionInner() {
       .catch(err => { setNftsError(typeof err === 'string' ? err : 'Failed to load items'); setLiveNfts([]); })
       .finally(() => setNftsLoading(false));
   }, [tab, activeSlug, filterStatus, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch listings (price data) for the collection — used to fill prices on
+  // "all" / "unlisted" tab views and to show the listed count in the toolbar.
+  //
+  // Pages through /listings/collection/{slug}/best (via the TS openSeaApi
+  // wrapper which supports cursor pagination) up to LISTINGS_FETCH_LIMIT
+  // items. A single 100-item page wasn't enough for collections with >100
+  // active listings — items priced above the first page didn't get merged.
+  useEffect(() => {
+    if (tab !== 'Items' || !activeSlug) return;
+    const slug = activeSlug;
+    setListingsPriceMap({});
+    setListingsFetchedCount(0);
+
+    let cancelled = false;
+    (async () => {
+      const map: Record<string, number> = {};
+      let fetchedCount = 0;
+      let cursor: string | null = null;
+
+      try {
+        for (let page = 0; page < 3 && fetchedCount < LISTINGS_FETCH_LIMIT; page++) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await openSeaApi.fetchNFTsByCollection(slug, {
+            status: 'listed',
+            sort: 'Price low to high',
+            cursor,
+            limit: 100,
+          });
+          if (cancelled) return;
+          for (const l of res.items) {
+            if (l.identifier && l.price_eth != null) map[l.identifier] = l.price_eth;
+          }
+          fetchedCount += res.items.length;
+          cursor = res.next;
+          if (!cursor) break;
+        }
+        if (!cancelled) {
+          setListingsPriceMap(map);
+          setListingsFetchedCount(fetchedCount);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('fetch listings for price map failed:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [tab, activeSlug]);
 
   // Fetch events when Activity tab active or filter changes.
   // Valid OpenSea event_type API values: sale, listing, offer, order, transfer, cancel, redemption
@@ -327,7 +431,11 @@ function MonitorCollectionInner() {
   // Client-side filter + sort applied on top of API results
   const displayNfts = useMemo(() => {
     if (!liveNfts) return null;
-    let items = [...liveNfts];
+    // Merge listing prices into items (the /collection/{slug}/nfts endpoint
+    // doesn't include price; /listings/collection/{slug}/best does).
+    let items = liveNfts.map(n =>
+      n.price_eth != null ? n : { ...n, price_eth: listingsPriceMap[n.identifier] ?? null }
+    );
     const minRank = parseInt(appliedRarityMin);
     const maxRank = parseInt(appliedRarityMax);
     if (!isNaN(minRank) && minRank > 0) items = items.filter(n => n.rarity != null && n.rarity.rank >= minRank);
@@ -366,7 +474,7 @@ function MonitorCollectionInner() {
         break;
     }
     return items;
-  }, [liveNfts, appliedRarityMin, appliedRarityMax, filterPriceMin, filterPriceMax, filterTraitSelected, sortBy]);
+  }, [liveNfts, listingsPriceMap, appliedRarityMin, appliedRarityMax, filterPriceMin, filterPriceMax, filterTraitSelected, sortBy]);
 
   useEffect(() => {
     if (!sortDropdownOpen) return;
@@ -846,17 +954,21 @@ function MonitorCollectionInner() {
 
         {/* Tabs */}
         <div className="flex items-center gap-0">
-          {TABS.map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
-                tab === t ? 'text-[#beff00] border-[#beff00]' : 'text-[#6e6e6e] border-transparent hover:text-[#a1a1aa]'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {TABS.map(t => {
+            const isActive = tab === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2.5 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
+                  isActive ? 'text-[#beff00] border-[#beff00]' : 'text-[#6e6e6e] border-transparent hover:text-[#a1a1aa]'
+                }`}
+                style={{ backgroundColor: isActive ? 'var(--wr-hover-bg)' : 'transparent' }}
+              >
+                {t}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1383,10 +1495,83 @@ function MonitorCollectionInner() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-1">
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
-                    {filterStatus !== 'all' ? filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1) : 'All items'}
+                    {(() => {
+                      const listedSuffix = listingsFetchedCount > 0
+                        ? `${listingsFetchedCount}${listingsFetchedCount >= LISTINGS_FETCH_LIMIT ? '+' : ''} listed`
+                        : '0 listed';
+                      const head = filterStatus === 'all'
+                        ? listedSuffix
+                        : filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1);
+                      return head;
+                    })()}
                     {Object.values(filterTraitSelected).flat().length > 0 && ` · ${Object.values(filterTraitSelected).flat().length} trait${Object.values(filterTraitSelected).flat().length > 1 ? 's' : ''}`}
                   </span>
                 </div>
+                {/* Bulk-track toolbar — appears in select mode. */}
+                {selectMode ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
+                      {selectedTokenIds.size} selected
+                    </span>
+                    <button
+                      disabled={selectedTokenIds.size === 0}
+                      onClick={() => {
+                        if (!displayNfts) return;
+                        const newlyTracked: string[] = [];
+                        displayNfts.forEach(asset => {
+                          if (!selectedTokenIds.has(asset.identifier)) return;
+                          const contract = contractParam || '';
+                          if (!contract) return;
+                          const entry = addTrackedNft({
+                            contract,
+                            tokenId: asset.identifier,
+                            name: asset.name ?? `${col.symbol} #${asset.identifier}`,
+                            collectionSlug: activeSlug,
+                            collectionName: col.name ?? activeSlug,
+                            imageUrl: asset.display_image_url ?? asset.image_url ?? null,
+                            rarity: asset.rarity?.rank ?? null,
+                            lastSaleEth: null,
+                            floorEth: liveStats?.floor_price_eth ?? null,
+                            traitFloorEth: null,
+                          });
+                          newlyTracked.push(entry.id);
+                        });
+                        setNotifModalTarget(null);
+                        setNotifModalIds(newlyTracked);
+                        setNotifModalOpen(true);
+                        setSelectMode(false);
+                        setSelectedTokenIds(new Set());
+                      }}
+                      className="btn-cta"
+                      style={{
+                        fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
+                        color: '#000', backgroundColor: selectedTokenIds.size > 0 ? '#BEFF00' : '#5a6b00',
+                        border: '1px solid', borderColor: selectedTokenIds.size > 0 ? '#BEFF00' : '#5a6b00',
+                        padding: '5px 14px', cursor: selectedTokenIds.size > 0 ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      + Track {selectedTokenIds.size > 0 ? `(${selectedTokenIds.size})` : ''}
+                    </button>
+                    <button
+                      onClick={() => { setSelectMode(false); setSelectedTokenIds(new Set()); }}
+                      style={{
+                        fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
+                        color: 'var(--wr-text-3)', backgroundColor: 'transparent',
+                        border: '1px solid var(--wr-border)', padding: '5px 12px', cursor: 'pointer',
+                      }}
+                    >Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSelectMode(true)}
+                    style={{
+                      fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
+                      color: 'var(--wr-text-3)', backgroundColor: 'transparent',
+                      border: '1px solid var(--wr-border)', padding: '5px 12px', cursor: 'pointer',
+                      marginRight: '8px',
+                    }}
+                  >Select</button>
+                )}
                 <div className="relative" ref={sortDropdownRef}>
                   <button
                     onClick={() => setSortDropdownOpen(o => !o)}
@@ -1441,12 +1626,28 @@ function MonitorCollectionInner() {
                   const price = asset.price_eth != null ? `${asset.price_eth.toFixed(4)} ETH` : '—';
                   const rank = asset.rarity?.rank ?? 0;
                   const mockNftItem = { id: nftId, rank, price, lastSale: '—', owner: '', traits: [] };
+                  const assetTrackId = contractParam ? trackedNftId(contractParam, asset.identifier) : '';
+                  const isAssetTracked = trackedSet.has(assetTrackId);
+                  const isAssetSelected = selectedTokenIds.has(asset.identifier);
+                  const cardBorder = isAssetSelected
+                    ? '#BEFF00'
+                    : isAssetTracked
+                      ? '#fbbf24'
+                      : 'var(--wr-border)';
                   return (
                     <div
                       key={nftId}
-                      style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', cursor: 'pointer', overflow: 'hidden' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--wr-border-hover)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--wr-border)'; }}
+                      onClick={() => {
+                        if (!selectMode) return;
+                        setSelectedTokenIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(asset.identifier)) next.delete(asset.identifier); else next.add(asset.identifier);
+                          return next;
+                        });
+                      }}
+                      style={{ backgroundColor: 'var(--wr-surface)', border: `1px solid ${cardBorder}`, cursor: selectMode ? 'pointer' : 'default', overflow: 'hidden', position: 'relative' }}
+                      onMouseEnter={e => { if (!isAssetSelected && !isAssetTracked) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--wr-border-hover)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = cardBorder; }}
                     >
                       {/* NFT image */}
                       <div style={{ aspectRatio: '1', backgroundColor: `${col.color}22`, position: 'relative', overflow: 'hidden' }}>
@@ -1458,6 +1659,99 @@ function MonitorCollectionInner() {
                             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: col.color, opacity: 0.6 }}>{nftId}</div>
                           </div>
                         )}
+
+                        {/* Favorite star — toggles tracking. In select mode a checkbox
+                            overlay shows instead so the whole card acts as a bulk target. */}
+                        {selectMode ? (
+                          <div style={{
+                            position: 'absolute', top: '6px', left: '6px',
+                            width: '18px', height: '18px', border: '1.5px solid',
+                            borderColor: isAssetSelected ? '#BEFF00' : 'rgba(255,255,255,0.7)',
+                            backgroundColor: isAssetSelected ? '#BEFF00' : 'rgba(0,0,0,0.55)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {isAssetSelected && (
+                              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5l2.2 2.2L9 2.5" stroke="#000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (!contractParam) return;
+                              const id = trackedNftId(contractParam, asset.identifier);
+                              if (isTracked(contractParam, asset.identifier)) {
+                                removeTrackedNft(contractParam, asset.identifier);
+                              } else {
+                                const entry = addTrackedNft({
+                                  contract: contractParam,
+                                  tokenId: asset.identifier,
+                                  name: asset.name ?? `${col.symbol} ${nftId}`,
+                                  collectionSlug: activeSlug,
+                                  collectionName: col.name ?? activeSlug,
+                                  imageUrl: imgUrl ?? null,
+                                  rarity: rank > 0 ? rank : null,
+                                  lastSaleEth: null,
+                                  floorEth: liveStats?.floor_price_eth ?? null,
+                                  traitFloorEth: null,
+                                });
+                                setNotifModalTarget(entry);
+                                setNotifModalIds(undefined);
+                                setNotifModalOpen(true);
+                              }
+                              // Force local state update; subscribe listener will also fire
+                              setTrackedSet(prev => {
+                                const next = new Set(prev);
+                                if (next.has(id)) next.delete(id); else next.add(id);
+                                return next;
+                              });
+                            }}
+                            aria-label={isAssetTracked ? 'Untrack' : 'Track NFT'}
+                            title={isAssetTracked ? 'Tracked — click to remove' : 'Track NFT'}
+                            style={{
+                              position: 'absolute', top: '6px', left: '6px',
+                              width: '24px', height: '24px', padding: 0,
+                              backgroundColor: 'rgba(0,0,0,0.55)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: isAssetTracked ? '#fbbf24' : 'rgba(255,255,255,0.75)',
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill={isAssetTracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round">
+                              <path d="M6 1.2l1.5 3 3.3.5-2.4 2.3.6 3.3L6 8.8 3 10.3l.6-3.3L1.2 4.7l3.3-.5z" />
+                            </svg>
+                          </button>
+                        )}
+                        {/* Edit-notifications bell — only when tracked and not in select mode */}
+                        {!selectMode && isAssetTracked && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              const rec = loadTrackedNfts().find(n => n.id === assetTrackId);
+                              if (!rec) return;
+                              setNotifModalTarget(rec);
+                              setNotifModalIds(undefined);
+                              setNotifModalOpen(true);
+                            }}
+                            aria-label="Notification rules"
+                            title="Notification rules"
+                            style={{
+                              position: 'absolute', top: '6px', left: '36px',
+                              width: '24px', height: '24px', padding: 0,
+                              backgroundColor: 'rgba(0,0,0,0.55)',
+                              border: '1px solid rgba(255,255,255,0.15)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer', color: '#fbbf24',
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 4.7a3 3 0 016 0V7.5l.8 1.3H2.2L3 7.5z" />
+                              <path d="M4.7 10h2.6" />
+                            </svg>
+                          </button>
+                        )}
+
                         {rank > 0 && (
                           <div style={{ position: 'absolute', top: '6px', right: '6px', backgroundColor: 'rgba(0,0,0,0.7)', padding: '2px 6px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#a1a1aa' }}>
                             #{rank}
@@ -1488,12 +1782,15 @@ function MonitorCollectionInner() {
                         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
                           <button
                             onClick={e => { e.stopPropagation(); setBuyWallet(''); setBuyStep('confirm'); setBuyNft(mockNftItem); }}
+                            className="btn-cta"
                             style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: '#000', backgroundColor: '#beff00', border: 'none', padding: '6px 0', cursor: 'pointer' }}>
                             Buy
                           </button>
                           <button
                             onClick={e => { e.stopPropagation(); setOfferConfigs({}); setOfferStep('form'); setOfferNft(mockNftItem); }}
-                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)', border: '1px solid var(--wr-info)', padding: '6px 0', cursor: 'pointer' }}>
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.4)'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none'; }}
+                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)', border: '1px solid var(--wr-info)', padding: '6px 0', cursor: 'pointer', transition: 'filter 0.12s ease' }}>
                             Offer
                           </button>
                         </div>
@@ -1764,8 +2061,8 @@ function MonitorCollectionInner() {
               {/* Table header */}
               <div style={{ display: 'grid', gridTemplateColumns: colBidTraits.length > 0 ? '2fr 1fr 1fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr 1fr', gap: '0', padding: '0 0 8px', borderBottom: '1px solid var(--wr-border)' }}>
                 {(colBidTraits.length > 0
-                  ? ['COLLECTION', 'FLOOR', 'TRAIT FLOOR', 'TOP TRAIT OFFER', 'OFFER TOTAL', 'OFFERED AT']
-                  : ['COLLECTION', 'FLOOR', 'TOP OFFER', 'OFFER TOTAL', 'OFFERED AT']
+                  ? ['COLLECTION', 'FLOOR', 'TRAIT FLOOR', 'TOP TRAIT OFFER', 'OFFERED AT', 'OFFER TOTAL']
+                  : ['COLLECTION', 'FLOOR', 'TOP OFFER', 'OFFERED AT', 'OFFER TOTAL']
                 ).map(h => (
                   <div key={h} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em' }}>{h}</div>
                 ))}
@@ -1814,8 +2111,11 @@ function MonitorCollectionInner() {
                   />
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>WETH</span>
                 </div>
-                {/* Offered at label */}
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>WETH</div>
+                {/* Offer total = offered at × quantity */}
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{((parseFloat(colBidAmount) || 0) * colBidQty).toFixed(4)}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--wr-text-3)' }}>WETH</span>
+                </div>
               </div>
 
               {/* Trait section */}
@@ -2101,7 +2401,7 @@ function MonitorCollectionInner() {
           <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest">Alert Rules — {col.name}</p>
-              <button className="text-[10px] font-semibold px-3 py-1.5 border transition-colors"
+              <button onClick={openAddAlert} className="text-[10px] font-semibold px-3 py-1.5 border transition-colors cursor-pointer"
                 style={{ color: '#000000', backgroundColor: '#beff00', borderColor: '#beff00' }}>
                 + Add Rule
               </button>
@@ -2125,10 +2425,10 @@ function MonitorCollectionInner() {
                     <div className="text-[12px] text-white font-medium">{a.label}</div>
                     <div className="text-[10px] text-[#6e6e6e] mt-0.5">Channel: {a.channel}</div>
                   </div>
-                  <button className="text-[9px] text-[#6e6e6e] hover:text-[#a1a1aa] border border-[#1a1a1a] px-2.5 py-1 transition-colors">
+                  <button onClick={() => openEditAlert(a)} className="text-[9px] text-[#6e6e6e] hover:text-[#a1a1aa] border border-[#1a1a1a] px-2.5 py-1 transition-colors cursor-pointer">
                     Edit
                   </button>
-                  <button className="text-[9px] text-[#f87171] hover:text-[#fca5a5] border border-[#1a1a1a] px-2.5 py-1 transition-colors">
+                  <button onClick={() => deleteAlert(a.id)} className="text-[9px] text-[#f87171] hover:text-[#fca5a5] border border-[#1a1a1a] px-2.5 py-1 transition-colors cursor-pointer">
                     Delete
                   </button>
                 </div>
@@ -2138,10 +2438,68 @@ function MonitorCollectionInner() {
             <p className="text-[10px] text-[#6e6e6e]">
               Alerts fire when conditions are met for this collection. Notifications go to macOS system notifications and/or a Discord webhook configured in Settings.
             </p>
+
+            {alertEditor && (
+              <div
+                onClick={closeAlertEditor}
+                style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <div
+                  onClick={e => e.stopPropagation()}
+                  style={{ background: 'var(--wr-surface)', border: '1px solid var(--wr-border)', width: '420px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 9999 }}
+                >
+                  <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--wr-border)' }}>
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                      {alertEditor.mode === 'add' ? 'New Alert Rule' : 'Edit Alert Rule'}
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Condition</label>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={alertEditor.label}
+                        onChange={e => setAlertEditor(prev => prev ? { ...prev, label: e.target.value } : prev)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveAlertEditor(); if (e.key === 'Escape') closeAlertEditor(); }}
+                        placeholder="e.g. Floor drops below 10 ETH"
+                        style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 10px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Channel</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {ALERT_CHANNELS.map(ch => (
+                          <button
+                            key={ch}
+                            onClick={() => setAlertEditor(prev => prev ? { ...prev, channel: ch } : prev)}
+                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: alertEditor.channel === ch ? '#000' : 'var(--wr-text)', backgroundColor: alertEditor.channel === ch ? '#beff00' : 'transparent', border: '1px solid', borderColor: alertEditor.channel === ch ? '#beff00' : 'var(--wr-border)', padding: '7px 10px', cursor: 'pointer' }}
+                          >
+                            {ch}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button onClick={closeAlertEditor} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={saveAlertEditor} disabled={!alertEditor.label.trim()} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: alertEditor.label.trim() ? '#beff00' : '#5a6b00', border: '1px solid', borderColor: alertEditor.label.trim() ? '#beff00' : '#5a6b00', padding: '7px 14px', cursor: alertEditor.label.trim() ? 'pointer' : 'not-allowed' }}>{alertEditor.mode === 'add' ? 'Add Rule' : 'Save'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
       </div>
+
+      {/* Tracked NFT notification rules modal (single + bulk) */}
+      <TrackedNftNotificationModal
+        open={notifModalOpen}
+        onClose={() => { setNotifModalOpen(false); setNotifModalTarget(null); setNotifModalIds(undefined); }}
+        target={notifModalTarget}
+        targetIds={notifModalIds}
+      />
     </div>
   );
 }

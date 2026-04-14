@@ -4,8 +4,10 @@ import Link from 'next/link';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startBackgroundPolling,
+  realtimeInit, realtimeSetWatchSet,
   type AssetTransfer, type PortfolioSnapshot,
 } from '@/lib/tauri';
+import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
 import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, type StoredWallet } from '@/lib/walletStore';
 import { MOCK_TRANSFERS, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
@@ -797,7 +799,15 @@ export default function Dashboard() {
     setStoredWallets(wallets);
 
     if (inTauri) {
-      loadAlchemyKey().then(k => { if (k) setApiKey(k); }).catch(() => {});
+      // If there are no wallets, nothing to load — clear the loading state.
+      if (wallets.length === 0) setLoadingData(false);
+      loadAlchemyKey()
+        .then(k => {
+          if (k) setApiKey(k);
+          // No API key configured → don't block the UI on a fetch that won't happen.
+          else setLoadingData(false);
+        })
+        .catch(() => { setLoadingData(false); });
     } else {
       // Browser mode — use mock data immediately
       const mockSnaps: Record<string, PortfolioSnapshot> = {};
@@ -810,39 +820,110 @@ export default function Dashboard() {
 
   // Fetch live data once API key is available (Tauri only)
   useEffect(() => {
-    if (!isTauri || !apiKey || storedWallets.length === 0) return;
+    if (!isTauri) return;
+    // If there's nothing we can fetch (no key or no wallets), stop the loading
+    // state — otherwise wallet cards stay stuck in their loading shimmer.
+    if (!apiKey || storedWallets.length === 0) {
+      setLoadingData(false);
+      return;
+    }
     let cancelled = false;
     setLoadingData(true);
 
     (async () => {
-      // Fetch all snapshots in parallel
-      const snapEntries = await Promise.allSettled(
-        storedWallets.map(w => getPortfolioSnapshot(w.address, apiKey).then(s => ({ id: w.id, snap: s })))
-      );
-      if (cancelled) return;
-      const newSnaps: Record<string, PortfolioSnapshot> = {};
-      snapEntries.forEach(r => { if (r.status === 'fulfilled') newSnaps[r.value.id] = r.value.snap; });
-      setSnapshots(newSnaps);
-
-      // Fetch transactions for first wallet (merge later)
-      const primaryWallet = storedWallets[0];
       try {
-        const transfers = await getAssetTransfers(primaryWallet.address, apiKey);
-        if (!cancelled) {
-          setLiveTransactions(transfers.map(t => mapTransfer(t, primaryWallet.address)));
+        // Fetch all snapshots in parallel
+        const snapEntries = await Promise.allSettled(
+          storedWallets.map(w => getPortfolioSnapshot(w.address, apiKey).then(s => ({ id: w.id, snap: s })))
+        );
+        if (cancelled) return;
+        const newSnaps: Record<string, PortfolioSnapshot> = {};
+        snapEntries.forEach(r => { if (r.status === 'fulfilled') newSnaps[r.value.id] = r.value.snap; });
+        setSnapshots(newSnaps);
+
+        // Fetch transactions for first wallet (merge later)
+        const primaryWallet = storedWallets[0];
+        try {
+          const transfers = await getAssetTransfers(primaryWallet.address, apiKey);
+          if (!cancelled) {
+            setLiveTransactions(transfers.map(t => mapTransfer(t, primaryWallet.address)));
+          }
+        } catch {}
+
+        // Start background polling daemon (idempotent — Rust guards against double-start)
+        if (!cancelled && storedWallets.length > 0) {
+          startBackgroundPolling(storedWallets.map(w => w.address), apiKey).catch(() => {});
         }
-      } catch {}
 
-      if (!cancelled) setLoadingData(false);
-
-      // Start background polling daemon (idempotent — Rust guards against double-start)
-      if (!cancelled && storedWallets.length > 0) {
-        startBackgroundPolling(storedWallets.map(w => w.address), apiKey).catch(() => {});
+        // Bootstrap the new real-time bridge — WebSocket subscriptions for
+        // every tracked wallet, so balance refreshes are event-driven instead
+        // of timer-driven. Failure here is non-fatal (REST polling remains).
+        if (!cancelled && storedWallets.length > 0) {
+          try {
+            await realtimeInit(apiKey);
+            await realtimeSetWatchSet({
+              wallets: storedWallets.map(w => w.address),
+              collections: [],
+              priceSymbols: ['ETH', 'USDC', 'USDT', 'WETH'],
+              subscribeBlocks: true,
+            });
+          } catch (e) { /* eslint-disable-next-line no-console */ console.warn('realtime bootstrap:', e); }
+        }
+      } finally {
+        // Always release the loading state — never leave the UI stuck if a
+        // request throws unexpectedly.
+        if (!cancelled) setLoadingData(false);
       }
     })();
 
     return () => { cancelled = true; };
   }, [isTauri, apiKey, storedWallets]);
+
+  // ── Real-time event listeners ─────────────────────────────────────────────
+  // When the WebSocket layer reports a new wallet tx (or a connection-restore
+  // after a drop), refetch snapshots for the affected wallets. This replaces
+  // pure-timer polling for the dashboard's "live" feel.
+  const liveTxEvents = useWalletTxStream();
+  const realtimeConn = useConnectionState();
+  const lastReconcileTs = useRef(0);
+
+  useEffect(() => {
+    if (!isTauri || !apiKey || storedWallets.length === 0) return;
+    const head = liveTxEvents[0];
+    if (!head) return;
+    const matched = storedWallets.find(w =>
+      w.address.toLowerCase() === (head.wallet ?? '').toLowerCase() ||
+      w.address.toLowerCase() === (head.from ?? '').toLowerCase() ||
+      w.address.toLowerCase() === (head.to ?? '').toLowerCase()
+    );
+    if (!matched) return;
+    // Debounce — don't refetch more than once per 800ms regardless of bursts.
+    const now = Date.now();
+    if (now - lastReconcileTs.current < 800) return;
+    lastReconcileTs.current = now;
+    getPortfolioSnapshot(matched.address, apiKey)
+      .then(snap => setSnapshots(prev => ({ ...prev, [matched.id]: snap })))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTxEvents[0]?.hash]);
+
+  // After a reconnect, do a full reconcile pass.
+  const wasConnected = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!realtimeConn) return;
+    const wasDown = wasConnected.current === false;
+    wasConnected.current = realtimeConn.connected;
+    if (wasDown && realtimeConn.connected && isTauri && apiKey && storedWallets.length > 0) {
+      Promise.allSettled(storedWallets.map(w =>
+        getPortfolioSnapshot(w.address, apiKey).then(s => ({ id: w.id, snap: s }))
+      )).then(entries => {
+        const merged: Record<string, PortfolioSnapshot> = {};
+        entries.forEach(r => { if (r.status === 'fulfilled') merged[r.value.id] = r.value.snap; });
+        setSnapshots(prev => ({ ...prev, ...merged }));
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeConn?.connected]);
 
   // Build display wallets from stored + snapshots
   const displayWallets: Wallet[] = storedWallets.length > 0

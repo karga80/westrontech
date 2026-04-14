@@ -1,5 +1,6 @@
 mod alerts;
 mod analytics;
+mod data;
 mod envelope;
 mod marketplace;
 mod stream;
@@ -143,8 +144,102 @@ async fn get_token_metadata(
 
 #[tauri::command]
 async fn get_eth_price_usd(api_key: String) -> Result<f64, String> {
-    let client = rpc::client::AlchemyClient::new(&api_key);
-    client.get_eth_price_usd().await
+    // Now sourced from Alchemy Prices API (CoinGecko removed).
+    let provider = data::default_provider(&api_key);
+    use data::PriceProvider;
+    provider.get_eth_price_usd().await.map_err(|e| e.to_string())
+}
+
+// ── New data-layer commands (Phase 1–3): Prices, Portfolio, NFT enrichment ───
+
+#[tauri::command]
+async fn get_token_prices_by_symbol(
+    symbols: Vec<String>,
+    api_key: String,
+) -> Result<Vec<data::TokenPrice>, String> {
+    let provider = data::default_provider(&api_key);
+    use data::PriceProvider;
+    let refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
+    provider.get_prices_by_symbol(&refs).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_token_prices_by_address(
+    addresses: Vec<String>,
+    api_key: String,
+) -> Result<Vec<data::TokenPrice>, String> {
+    let provider = data::default_provider(&api_key);
+    use data::PriceProvider;
+    let refs: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();
+    provider.get_prices_by_address(&refs).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_wallet_portfolio(
+    wallet: String,
+    api_key: String,
+) -> Result<data::WalletPortfolio, String> {
+    let provider = data::default_provider(&api_key);
+    use data::WalletDataProvider;
+    provider.get_wallet_portfolio(&wallet).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_wallet_tokens(
+    wallet: String,
+    api_key: String,
+) -> Result<Vec<data::types::WalletToken>, String> {
+    let provider = data::default_provider(&api_key);
+    use data::WalletDataProvider;
+    provider.get_wallet_tokens(&wallet).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_collection_metadata(
+    contract: String,
+    api_key: String,
+) -> Result<data::NftCollectionMeta, String> {
+    let provider = data::default_provider(&api_key);
+    use data::NftDataProvider;
+    provider.get_collection_metadata(&contract).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_nft_sales(
+    contract: String,
+    token_id: Option<String>,
+    limit: u32,
+    api_key: String,
+) -> Result<Vec<data::NftSale>, String> {
+    let provider = data::default_provider(&api_key);
+    use data::NftDataProvider;
+    provider.get_nft_sales(&contract, token_id.as_deref(), limit).await.map_err(|e| e.to_string())
+}
+
+// ── Real-time subscription commands (Phase 4–5) ──────────────────────────────
+
+#[tauri::command]
+async fn realtime_init(
+    api_key: String,
+    app: tauri::AppHandle,
+    realtime: tauri::State<'_, std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>>,
+) -> Result<(), String> {
+    let provider = data::default_provider(&api_key);
+    let http = std::sync::Arc::new(data::alchemy::AlchemyHttpClient::new(&api_key));
+    let mgr = std::sync::Arc::new(data::realtime::RealtimeManager::new(provider, http));
+    mgr.start(app);
+    *realtime.lock().unwrap() = Some(mgr);
+    Ok(())
+}
+
+#[tauri::command]
+async fn realtime_set_watch_set(
+    set: data::realtime::WatchSet,
+    realtime: tauri::State<'_, std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>>,
+) -> Result<(), String> {
+    let mgr = realtime.lock().unwrap().as_ref().cloned();
+    let mgr = mgr.ok_or_else(|| "realtime not initialized — call realtime_init first".to_string())?;
+    mgr.apply_watch_set(set).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -577,10 +672,15 @@ async fn get_stream_status(
 pub fn run() {
   let engine = Arc::new(EnvelopeEngine::new());
   let stream_manager = Arc::new(stream::StreamManager::new());
+  // Realtime manager is built lazily by `realtime_init` — store an empty slot
+  // so the Tauri command handler can fill it in once we have the API key.
+  let realtime_slot: std::sync::Mutex<Option<Arc<data::realtime::RealtimeManager>>> =
+      std::sync::Mutex::new(None);
 
   tauri::Builder::default()
     .manage(engine)
     .manage(stream_manager)
+    .manage(realtime_slot)
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -645,6 +745,14 @@ pub fn run() {
         start_stream,
         stop_stream,
         get_stream_status,
+        get_token_prices_by_symbol,
+        get_token_prices_by_address,
+        get_wallet_portfolio,
+        get_wallet_tokens,
+        get_collection_metadata,
+        get_nft_sales,
+        realtime_init,
+        realtime_set_watch_set,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

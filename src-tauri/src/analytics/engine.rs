@@ -304,10 +304,17 @@ pub async fn get_portfolio_snapshot(
 ) -> Result<PortfolioSnapshot, String> {
     let client = AlchemyClient::new(&api_key);
 
+    // ETH price now comes from Alchemy Prices API via the data layer.
+    let eth_price_future = async {
+        use crate::data::PriceProvider;
+        let provider = crate::data::default_provider(&api_key);
+        provider.get_eth_price_usd().await.map_err(|e| e.to_string())
+    };
+
     let (eth_balance_result, eth_price_result, token_balances_result, nfts_result) =
         tokio::try_join!(
             client.get_eth_balance(&wallet_address),
-            client.get_eth_price_usd(),
+            eth_price_future,
             client.get_token_balances(&wallet_address),
             client.get_nfts_for_owner(&wallet_address, None),
         )?;
