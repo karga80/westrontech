@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import ProGate from '@/components/ProGate';
+import { loadAddressBook, type AddressEntry } from '@/lib/addressBook';
 
 // ─── Distribute Funds ─────────────────────────────────────────────────────────
 
@@ -66,14 +67,25 @@ export default function DistributeFundsPage() {
   const [amountEqual, setAmountEqual] = useState('');
   const [amountCustom, setAmountCustom] = useState<Record<string, string>>({});
 
+  const addressBookEntries = loadAddressBook();
+  const [abSelected, setAbSelected] = useState<Set<string>>(new Set());
+  const [abAmounts, setAbAmounts] = useState<Record<string, string>>({});
+
   const toggleWallet = (id: string) =>
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const selectedList = MOCK_WALLETS.filter(w => selected.has(w.id));
+  const toggleAb = (id: string) =>
+    setAbSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const canReview = source && selected.size > 0 && (
-    mode === 'equal' ? !!amountEqual && parseFloat(amountEqual) > 0
-    : selectedList.every(w => !!amountCustom[w.id] && parseFloat(amountCustom[w.id]) > 0)
+  const selectedList = MOCK_WALLETS.filter(w => selected.has(w.id));
+  const abSelectedList = addressBookEntries.filter(e => abSelected.has(e.id));
+  const totalSelected = selected.size + abSelected.size;
+
+  const canReview = !!source && totalSelected > 0 && (
+    mode === 'equal'
+      ? !!amountEqual && parseFloat(amountEqual) > 0
+      : selectedList.every(w => !!amountCustom[w.id] && parseFloat(amountCustom[w.id]) > 0) &&
+        abSelectedList.every(e => !!abAmounts[e.id] && parseFloat(abAmounts[e.id]) > 0)
   );
 
   const TxPanel = () => (
@@ -114,7 +126,7 @@ export default function DistributeFundsPage() {
     <ProGate feature="Distribute Funds">
     <main className="min-h-full" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px' }}>
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
-        <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>← Back to Bulk Actions</Link>
+        <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>← Back to Bulk Actions</Link>
       </div>
 
       <div className="flex gap-6" style={{ maxWidth: '900px' }}>
@@ -122,7 +134,7 @@ export default function DistributeFundsPage() {
         <div style={{ width: '440px', flexShrink: 0, backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '28px' }}>
           <div className="flex items-center justify-between mb-2">
             <h2 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Distribute Funds</h2>
-            <Link href="/build" style={{ color: 'var(--wr-text-3)', fontSize: '18px', textDecoration: 'none', lineHeight: 1 }}>×</Link>
+            <Link href="/bulk" style={{ color: 'var(--wr-text-3)', fontSize: '18px', textDecoration: 'none', lineHeight: 1 }}>×</Link>
           </div>
           <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '24px' }}>
             Send ETH from one wallet to one or more destinations
@@ -225,6 +237,40 @@ export default function DistributeFundsPage() {
                 </div>
               </div>
 
+              {/* Address Book recipients */}
+              {addressBookEntries.length > 0 && (
+                <div>
+                  <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '10px' }}>
+                    Address Book
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {addressBookEntries.map(ab => {
+                      const isSel = abSelected.has(ab.id);
+                      return (
+                        <div
+                          key={ab.id}
+                          onClick={() => toggleAb(ab.id)}
+                          style={{ padding: '10px 12px', border: `1px solid ${isSel ? 'var(--wr-accent)' : 'var(--wr-border)'}`, backgroundColor: isSel ? 'var(--wr-accent-dim)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = isSel ? 'var(--wr-accent-dim)' : 'transparent'; }}
+                        >
+                          <div style={{ width: '14px', height: '14px', flexShrink: 0, border: `1.5px solid ${isSel ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`, backgroundColor: isSel ? 'var(--wr-accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {isSel && <span style={{ color: '#000', fontSize: '9px', fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: isSel ? 'var(--wr-accent)' : 'var(--wr-text)' }}>{ab.name}</span>
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* AMOUNT */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -288,6 +334,28 @@ export default function DistributeFundsPage() {
                         </div>
                       </div>
                     ))}
+                    {abSelectedList.map(ab => (
+                      <div key={ab.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '90px', flexShrink: 0, overflow: 'hidden' }}>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.name}</span>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', border: '1px solid var(--wr-border)' }}>
+                          <input
+                            type="number"
+                            placeholder="0.00"
+                            value={abAmounts[ab.id] ?? ''}
+                            onChange={e => setAbAmounts(prev => ({ ...prev, [ab.id]: e.target.value }))}
+                            min="0"
+                            step="0.01"
+                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: 'none', padding: '8px 10px', outline: 'none' }}
+                          />
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', padding: '8px 10px', borderLeft: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center' }}>
+                            ETH
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -295,7 +363,7 @@ export default function DistributeFundsPage() {
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                 <Link
-                  href="/build"
+                  href="/bulk"
                   style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', textDecoration: 'none', cursor: 'pointer' }}
                 >
                   Cancel
@@ -305,7 +373,7 @@ export default function DistributeFundsPage() {
                   disabled={!canReview}
                   style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: canReview ? '#000000' : 'var(--wr-text-4)', backgroundColor: canReview ? '#BEFF00' : 'var(--wr-overlay)', border: `1px solid ${canReview ? '#BEFF00' : 'var(--wr-border)'}`, padding: '11px 0', cursor: canReview ? 'pointer' : 'not-allowed' }}
                 >
-                  Review ({selected.size} wallet{selected.size !== 1 ? 's' : ''})
+                  Review ({totalSelected} wallet{totalSelected !== 1 ? 's' : ''})
                 </button>
               </div>
             </div>
@@ -323,6 +391,20 @@ export default function DistributeFundsPage() {
                   </div>
                   <span style={{ color: 'var(--wr-accent)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }}>
                     {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
+                  </span>
+                </div>
+              ))}
+              {abSelectedList.map((ab, i) => (
+                <div key={ab.id} className="flex items-center justify-between px-3 py-2.5" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{ab.name}</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                    </div>
+                    <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{ab.address}</div>
+                  </div>
+                  <span style={{ color: 'var(--wr-accent)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }}>
+                    {mode === 'equal' ? amountEqual : (abAmounts[ab.id] ?? '0')} ETH
                   </span>
                 </div>
               ))}
@@ -345,7 +427,7 @@ export default function DistributeFundsPage() {
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Processing</div>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>Transactions are being submitted to the network</div>
               </div>
-              <button onClick={() => { setStep(1); setAmountEqual(''); setAmountCustom({}); setSelected(new Set(['main', 'defi', 'emir1', 'burner'])); }}
+              <button onClick={() => { setStep(1); setAmountEqual(''); setAmountCustom({}); setAbAmounts({}); setAbSelected(new Set()); setSelected(new Set(['main', 'defi', 'emir1', 'burner'])); }}
                 style={{ width: '100%', backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
                 New Distribution
               </button>

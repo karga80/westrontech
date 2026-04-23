@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Tag, TASK_STATUS_VARIANT } from '@/components/Tag';
 import ProGate from '@/components/ProGate';
+import { loadStoredTasks, removeStoredTask } from '@/lib/taskStore';
 
 // ─── Combined Tasks + AI Assistant — replaces both tasks/page & omni/page ─────
 
@@ -387,6 +388,16 @@ export default function TasksPage() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const stored = loadStoredTasks();
+    if (stored.length === 0) return;
+    setTasks(prev => {
+      const existingIds = new Set(prev.map(t => t.id));
+      const fresh = stored.filter(t => !existingIds.has(t.id));
+      return fresh.length > 0 ? [...fresh, ...prev] : prev;
+    });
+  }, []);
+
+  useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
@@ -404,7 +415,10 @@ export default function TasksPage() {
     setActiveTab(task.tab);
   };
 
-  const cancelTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
+  const cancelTask = (id: string) => {
+    removeStoredTask(id);
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
 
   const tabs: { key: FilterTab; label: string; count?: number }[] = [
     { key: 'Pending',   label: 'Pending',   count: pendingCount },

@@ -362,6 +362,10 @@ export async function startBackgroundPolling(walletAddresses: string[], apiKey: 
 }
 
 // Signing
+export async function getPrivateKey(walletAddress: string): Promise<string> {
+  return invoke<string>('get_private_key', { walletAddress });
+}
+
 export async function sendEth(
   walletAddress: string,
   to: string,

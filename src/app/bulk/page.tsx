@@ -30,7 +30,7 @@ const CARDS: ActionCard[] = [
       'Gas optimization',
     ],
     cta: 'Start Listing →',
-    href: '/build/list',
+    href: '/bulk/list',
   },
   {
     accent: '#06B6D4',
@@ -44,7 +44,7 @@ const CARDS: ActionCard[] = [
       'Expiry management',
     ],
     cta: 'Start Bidding →',
-    href: '/build/bulk-bid',
+    href: '/bulk/bulk-bid',
   },
   {
     accent: '#F87171',
@@ -58,7 +58,7 @@ const CARDS: ActionCard[] = [
       'Expiry-based auto-cancel',
     ],
     cta: 'Start Cancelling →',
-    href: '/build/cancel',
+    href: '/bulk/cancel',
   },
 ];
 

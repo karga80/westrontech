@@ -10,7 +10,7 @@ import { loadSubscription, isSubscriptionActive } from '@/lib/subscriptionStore'
 const NAV_LINKS = [
   { label: 'Dashboard', href: '/',        pro: false },
   { label: 'Monitor',   href: '/monitor', pro: true  },
-  { label: 'Bulk',      href: '/build',   pro: true  },
+  { label: 'Bulk',      href: '/bulk',    pro: true  },
   { label: 'Tasks',     href: '/tasks',   pro: true  },
 ];
 

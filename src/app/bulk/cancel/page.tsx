@@ -191,7 +191,7 @@ export default function BulkCancelPage() {
     return (
       <main style={{ backgroundColor: 'var(--wr-bg)', minHeight: '100%', padding: '28px 48px 48px', color: 'var(--wr-text)', fontFamily: 'var(--font-jetbrains)' }}>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', marginBottom: '32px' }}>
-          <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
+          <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
           <span>›</span>
           <span style={{ color: 'var(--wr-accent)', cursor: 'pointer' }} onClick={() => { setTracking(false); setSelected(new Set()); }}>Bulk Cancel</span>
           <span>›</span>
@@ -251,7 +251,7 @@ export default function BulkCancelPage() {
         {/* ── Header ──────────────────────────────────────────────────────────── */}
         <div style={{ padding: '20px 32px 20px', borderBottom: '1px solid #111' }}>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', marginBottom: '16px' }}>
-            <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
+            <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
             <span>›</span>
             <span style={{ color: 'var(--wr-text)' }}>Bulk Cancel</span>
           </div>

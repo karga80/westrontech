@@ -260,7 +260,7 @@ export default function BulkBidPage() {
     return (
       <main style={{ backgroundColor: 'var(--wr-bg)', minHeight: '100%', padding: '28px 48px 48px', color: 'var(--wr-text)', fontFamily: 'var(--font-jetbrains)' }}>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '32px' }}>
-          <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
+          <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
           <span>›</span>
           <span style={{ color: 'var(--wr-accent)', cursor: 'pointer' }} onClick={() => { setTracking(false); setQueue([]); }}>Bulk Bid</span>
           <span>›</span>
@@ -316,7 +316,7 @@ export default function BulkBidPage() {
 
         {/* Breadcrumb */}
         <div style={{ padding: '20px 32px 0', display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)' }}>
-          <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
+          <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
           <span>›</span>
           <span style={{ color: 'var(--wr-text)' }}>Bulk Bid</span>
         </div>

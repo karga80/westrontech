@@ -446,7 +446,7 @@ export default function BulkListPage() {
 
       {/* Breadcrumb */}
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
+        <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
         <span>›</span>
         <span style={{ color: tracking ? 'var(--wr-accent)' : '#FFFFFF', cursor: tracking ? 'pointer' : 'default' }}
           onClick={() => tracking && setTracking(null)}>Bulk List</span>

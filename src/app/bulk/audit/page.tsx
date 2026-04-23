@@ -33,7 +33,7 @@ export default function AuditLogPage() {
     <ProGate feature="Audit Log">
     <main className="min-h-full" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px' }}>
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '12px' }}>
-        <Link href="/build" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>← Back to Bulk Actions</Link>
+        <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>← Back to Bulk Actions</Link>
       </div>
 
       <div className="flex items-start justify-between mb-6">
