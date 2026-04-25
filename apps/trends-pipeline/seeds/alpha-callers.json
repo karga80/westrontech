@@ -1,3 +1,291 @@
 {
-  "callers": []
+  "callers": [
+    {
+      "handle": "blknoiz06",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "ansem",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "gainzy222",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "muradmahmudov",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "inversebrah",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "cobie",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "both"
+    },
+    {
+      "handle": "DegenSpartan",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "notthreadguy",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "CryptoTony__",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "AltcoinGordon",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "CryptoKaleo",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "TheCryptoDog",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "Pentosh1",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "CryptoCred",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "rektcapital",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "0xMert_",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "memecoin",
+      "notes": "Solana ecosystem"
+    },
+    {
+      "handle": "weremeow",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "hsakatrades",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "CryptoHayes",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "both",
+      "notes": "Arthur Hayes"
+    },
+    {
+      "handle": "Lookonchain",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "both",
+      "notes": "on-chain tracker"
+    },
+    {
+      "handle": "zachxbt",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "both",
+      "notes": "scam/rug alerts"
+    },
+    {
+      "handle": "punk6529",
+      "userId": "",
+      "weight": 1,
+      "tier": 1,
+      "category": "nft"
+    },
+    {
+      "handle": "beaniemaxi",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "nft"
+    },
+    {
+      "handle": "seedphrase",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "nft"
+    },
+    {
+      "handle": "farokh",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "pranksy",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "franklinisbored",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "gmoney_nft",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "j1mmyeth",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "Zeneca_33",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "nft"
+    },
+    {
+      "handle": "sassal0x",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both",
+      "notes": "ETH ecosystem"
+    },
+    {
+      "handle": "TaschaLabs",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "glassnode",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "both",
+      "notes": "on-chain data"
+    },
+    {
+      "handle": "nansen_ai",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "both",
+      "notes": "on-chain data"
+    },
+    {
+      "handle": "CryptoPainter",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "both"
+    },
+    {
+      "handle": "dingalingts",
+      "userId": "",
+      "weight": 0.8,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "Autism_Capital",
+      "userId": "",
+      "weight": 0.9,
+      "tier": 1,
+      "category": "memecoin"
+    },
+    {
+      "handle": "SmokeyTheBera",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 2,
+      "category": "memecoin"
+    },
+    {
+      "handle": "solbossJT",
+      "userId": "",
+      "weight": 0.7,
+      "tier": 3,
+      "category": "memecoin"
+    },
+    {
+      "handle": "DegenerateNews",
+      "userId": "",
+      "weight": 0.6,
+      "tier": 3,
+      "category": "memecoin"
+    }
+  ]
 }
