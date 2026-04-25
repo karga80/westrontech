@@ -52,7 +52,7 @@ export async function runAlertRouter(): Promise<void> {
         // Push via Telegram (rate-limited per token)
         if (!isRateLimited(alert.identifier)) {
           const message = formatForTelegram(alert);
-          await sendAlert(message, alert.tier);
+          await sendAlert(message, alert.tier, alert);
           markSent(alert.identifier);
         }
 
