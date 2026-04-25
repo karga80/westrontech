@@ -107,7 +107,7 @@ export async function sendAlert(message: string, tier: AlertTier): Promise<void>
 
 // Bootstrap with owner's chat ID
 export function registerOwner(): void {
-  const chatId = parseInt(env.TELEGRAM_USER_ID, 10);
+  const chatId = parseInt(env.TELEGRAM_USER_ID ?? "", 10);
   if (!isNaN(chatId)) {
     userPrefs.set(String(chatId), { chatId, threshold: "orange", mutedUntil: null });
     log.info({ chatId }, "Owner registered in Telegram bot");

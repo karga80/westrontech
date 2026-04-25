@@ -9,16 +9,15 @@ const envSchema = z.object({
   // TikTok
   SCRAPECREATORS_API_KEY: z.string().min(1, "SCRAPECREATORS_API_KEY required"),
 
-  // NFT
-  RESERVOIR_API_KEY: z.string().min(1, "RESERVOIR_API_KEY required"),
-  OPENSEA_API_KEY: z.string().optional(),
+  // NFT — Reservoir kapandı, OpenSea API kullanılıyor
+  OPENSEA_API_KEY: z.string().min(1, "OPENSEA_API_KEY required"),
 
-  // LLM
-  ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY required"),
+  // LLM — opsiyonel, olmadan çalışır (signal extraction skip)
+  ANTHROPIC_API_KEY: z.string().optional(),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN required"),
-  TELEGRAM_USER_ID: z.string().min(1, "TELEGRAM_USER_ID required"),
+  TELEGRAM_USER_ID: z.string().optional(),
 
   // Storage
   POSTGRES_URL: z.string().url(),

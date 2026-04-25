@@ -11,6 +11,7 @@ import { createTikTokTranscriptWorker } from "@/workers/tiktok-transcript-worker
 import { createPFPPollWorker, schedulePFPPollJob } from "@/workers/pfp-poll-worker";
 import { runSignalRouter } from "@/extraction/signal-router";
 import { runMemecoinEnricher } from "@/enrichment/memecoin-enricher";
+import { runNFTEnricher } from "@/enrichment/nft-enricher";
 import { runAlertRouter } from "@/alerting/alert-router";
 
 const log = createLogger("main");
@@ -47,6 +48,7 @@ async function main() {
   // Start stream processors (blocking loops — run in background)
   runSignalRouter().catch((err) => log.error({ err }, "Signal router crashed"));
   runMemecoinEnricher().catch((err) => log.error({ err }, "Memecoin enricher crashed"));
+  runNFTEnricher().catch((err) => log.error({ err }, "NFT enricher crashed"));
   runAlertRouter().catch((err) => log.error({ err }, "Alert router crashed"));
 
   log.info("All workers and processors started");

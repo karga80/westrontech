@@ -24,7 +24,8 @@ export type LLMSignal = z.infer<typeof SignalSchema>;
 
 let anthropic: Anthropic | null = null;
 
-function getClient(): Anthropic {
+function getClient(): Anthropic | null {
+  if (!env.ANTHROPIC_API_KEY) return null;
   if (!anthropic) anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   return anthropic;
 }
@@ -63,9 +64,13 @@ export async function extractWithLLM(text: string): Promise<LLMSignal | null> {
     return JSON.parse(cached) as LLMSignal;
   }
 
-  await incrementRateLimit();
-
   const client = getClient();
+  if (!client) {
+    log.debug("ANTHROPIC_API_KEY not set — skipping LLM extraction");
+    return null;
+  }
+
+  await incrementRateLimit();
 
   try {
     const response = await client.messages.create({
