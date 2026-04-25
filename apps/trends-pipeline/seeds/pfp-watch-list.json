@@ -1,0 +1,24 @@
+{
+  "handles": [
+    { "handle": "punk6529", "weight": 10, "category": "blue-chip", "notes": "Legendary NFT collector, 6529 collection" },
+    { "handle": "beaniemaxi", "weight": 9, "category": "blue-chip", "notes": "Early NFT OG, large collector" },
+    { "handle": "pranksy", "weight": 9, "category": "blue-chip", "notes": "Top NFT collector/trader" },
+    { "handle": "gmoneyNFT", "weight": 8, "category": "blue-chip", "notes": "Aave founder, NFT collector" },
+    { "handle": "dingalingts", "weight": 8, "category": "blue-chip", "notes": "High-volume NFT trader" },
+    { "handle": "farokh", "weight": 7, "category": "blue-chip", "notes": "Rug Radio founder, NFT host" },
+    { "handle": "snowfro", "weight": 8, "category": "blue-chip", "notes": "Art Blocks founder" },
+    { "handle": "zeneca_33", "weight": 7, "category": "blue-chip", "notes": "NFT analyst/educator" },
+    { "handle": "NFTstatistics", "weight": 6, "category": "data", "notes": "NFT data/analytics" },
+    { "handle": "CozomoMedici", "weight": 8, "category": "blue-chip", "notes": "Large NFT collector" },
+    { "handle": "seedphrase", "weight": 7, "category": "blue-chip", "notes": "NFT collector with large portfolio" },
+    { "handle": "NFTGodXBT", "weight": 7, "category": "blue-chip", "notes": "NFT influencer" },
+    { "handle": "tweetsonchain", "weight": 6, "category": "memecoin", "notes": "Solana memecoin alpha" },
+    { "handle": "ansemofficial", "weight": 8, "category": "memecoin", "notes": "Solana memecoin alpha caller" },
+    { "handle": "notthreadguy", "weight": 7, "category": "memecoin", "notes": "Crypto alpha" },
+    { "handle": "blknoiz06", "weight": 8, "category": "memecoin", "notes": "Memecoin early caller" },
+    { "handle": "inversebrah", "weight": 7, "category": "memecoin", "notes": "Crypto alpha" },
+    { "handle": "degencryptotips", "weight": 5, "category": "memecoin", "notes": "Memecoin tips" },
+    { "handle": "cobie", "weight": 9, "category": "both", "notes": "UpOnly, high-signal crypto takes" },
+    { "handle": "sassal0x", "weight": 7, "category": "both", "notes": "Ethereum analyst" }
+  ]
+}

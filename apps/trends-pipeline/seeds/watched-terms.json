@@ -1,0 +1,40 @@
+{
+  "memecoin_keywords": [
+    "pump.fun",
+    "moonshot",
+    "stealth launch",
+    "just aped",
+    "send it",
+    "fair launch",
+    "bundled launch",
+    "dev doxxed",
+    "100x gem",
+    "low cap"
+  ],
+  "cashtags": [
+    "$SOL",
+    "$BTC",
+    "$ETH",
+    "$BONK",
+    "$WIF",
+    "$PEPE",
+    "$DOGE",
+    "$SHIB",
+    "$PUMP",
+    "$BRETT"
+  ],
+  "nft_keywords": [
+    "just minted",
+    "WL claim",
+    "stealth drop",
+    "swept the floor",
+    "new pfp",
+    "pfp'd",
+    "floor sweep",
+    "bid war",
+    "mint live",
+    "allowlist"
+  ],
+  "contract_patterns_evm": "0x[a-fA-F0-9]{40}",
+  "contract_patterns_sol": "[1-9A-HJ-NP-Za-km-z]{32,44}"
+}
