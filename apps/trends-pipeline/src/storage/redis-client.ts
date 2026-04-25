@@ -9,7 +9,7 @@ let client: Redis | null = null;
 export function getRedis(): Redis {
   if (!client) {
     client = new Redis(env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null, // BullMQ requires null for blocking commands
       enableReadyCheck: true,
       lazyConnect: false,
     });

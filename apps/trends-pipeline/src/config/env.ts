@@ -6,8 +6,8 @@ const envSchema = z.object({
   X_OAUTH_CONSUMER_KEY: z.string().optional(),
   X_OAUTH_CONSUMER_SECRET: z.string().optional(),
 
-  // TikTok
-  SCRAPECREATORS_API_KEY: z.string().min(1, "SCRAPECREATORS_API_KEY required"),
+  // TikTok — opsiyonel, olmadan TikTok worker'lar skip edilir
+  SCRAPECREATORS_API_KEY: z.string().optional(),
 
   // NFT — Reservoir kapandı, OpenSea API kullanılıyor
   OPENSEA_API_KEY: z.string().min(1, "OPENSEA_API_KEY required"),

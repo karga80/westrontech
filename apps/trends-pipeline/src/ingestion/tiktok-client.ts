@@ -16,7 +16,7 @@ export class TikTokClient {
   private constructor() {
     this.http = axios.create({
       baseURL: BASE_URL,
-      headers: { "x-api-key": env.SCRAPECREATORS_API_KEY },
+      headers: { "x-api-key": env.SCRAPECREATORS_API_KEY ?? "" },
       timeout: 15_000,
     });
 

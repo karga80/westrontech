@@ -105,6 +105,10 @@ export async function sendAlert(message: string, tier: AlertTier): Promise<void>
   }
 }
 
+export function startBot(): void {
+  getBot();
+}
+
 // Bootstrap with owner's chat ID
 export function registerOwner(): void {
   const chatId = parseInt(env.TELEGRAM_USER_ID ?? "", 10);

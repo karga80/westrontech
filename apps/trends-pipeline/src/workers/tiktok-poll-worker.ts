@@ -2,6 +2,7 @@ import { Worker, Queue } from "bullmq";
 import { getRedis } from "@/storage/redis-client";
 import { tiktokClient } from "@/ingestion/tiktok-client";
 import { createLogger } from "@/shared/logger";
+import { env } from "@/config/env";
 import watchlist from "../../seeds/tiktok-watchlist.json" with { type: "json" };
 
 const log = createLogger("tiktok-poll-worker");
@@ -26,6 +27,10 @@ export function createTikTokPollWorker(): Worker {
   const worker = new Worker(
     "tiktok-poll",
     async () => {
+      if (!env.SCRAPECREATORS_API_KEY) {
+        log.debug("SCRAPECREATORS_API_KEY not set — skipping TikTok poll");
+        return;
+      }
       const batch = allHashtags.slice(hashtagIndex, hashtagIndex + BATCH_SIZE);
       hashtagIndex = (hashtagIndex + BATCH_SIZE) % allHashtags.length;
 

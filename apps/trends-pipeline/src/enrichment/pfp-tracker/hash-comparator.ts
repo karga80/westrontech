@@ -1,30 +1,33 @@
-import { imageHash } from "image-hash";
-import axios from "axios";
+import Jimp from "jimp";
 import { createLogger } from "@/shared/logger";
 
 const log = createLogger("hash-comparator");
 
-const SAME_THRESHOLD = 8;     // distance < 8 = same image
-const DIFF_THRESHOLD = 12;    // distance > 12 = different image (8-12 = recheck)
+const SAME_THRESHOLD = 8;
+const DIFF_THRESHOLD = 12;
+const HASH_SIZE = 16; // 16x16 = 256-bit hash
 
 export async function hashImage(url: string): Promise<string | null> {
   try {
-    // Download image to buffer
-    const res = await axios.get<ArrayBuffer>(url, { responseType: "arraybuffer", timeout: 10_000 });
-    const buffer = Buffer.from(res.data);
+    const image = await Jimp.read(url);
+    image.resize(HASH_SIZE, HASH_SIZE).grayscale();
 
-    return new Promise((resolve, reject) => {
-      imageHash({ data: buffer }, 16, true, (err: Error | null, hash: string) => {
-        if (err) {
-          log.warn({ url, err: err.message }, "Image hash failed");
-          reject(err);
-        } else {
-          resolve(hash);
-        }
-      });
+    const pixels: number[] = [];
+    image.scan(0, 0, HASH_SIZE, HASH_SIZE, (_x, _y, idx) => {
+      pixels.push(image.bitmap.data[idx] as number);
     });
+
+    const avg = pixels.reduce((a, b) => a + b, 0) / pixels.length;
+    const hash = pixels.map((p) => (p >= avg ? "1" : "0")).join("");
+
+    // Convert binary string to hex
+    const hex = [];
+    for (let i = 0; i < hash.length; i += 4) {
+      hex.push(parseInt(hash.slice(i, i + 4), 2).toString(16));
+    }
+    return hex.join("");
   } catch (err) {
-    log.warn({ url, err }, "Failed to download image for hashing");
+    log.warn({ url, err }, "Image hash failed");
     return null;
   }
 }
@@ -35,7 +38,11 @@ export function hammingDistance(hash1: string, hash2: string): number {
   }
   let distance = 0;
   for (let i = 0; i < hash1.length; i++) {
-    if (hash1[i] !== hash2[i]) distance++;
+    const b1 = parseInt(hash1[i]!, 16).toString(2).padStart(4, "0");
+    const b2 = parseInt(hash2[i]!, 16).toString(2).padStart(4, "0");
+    for (let j = 0; j < 4; j++) {
+      if (b1[j] !== b2[j]) distance++;
+    }
   }
   return distance;
 }

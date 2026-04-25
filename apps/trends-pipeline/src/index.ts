@@ -1,7 +1,7 @@
 import { createLogger } from "@/shared/logger";
 import { env } from "@/config/env";
 import { startWebSocketServer } from "@/alerting/websocket-server";
-import { registerOwner } from "@/alerting/telegram-bot";
+import { startBot, registerOwner } from "@/alerting/telegram-bot";
 import { createXCountsWorker, scheduleXCountsJob } from "@/workers/x-counts-worker";
 import { createXPostsWorker } from "@/workers/x-posts-worker";
 import { createXCallersWorker, scheduleXCallersJob } from "@/workers/x-callers-worker";
@@ -26,7 +26,8 @@ async function main() {
   // Start WebSocket server
   await startWebSocketServer();
 
-  // Register Telegram bot owner
+  // Start Telegram bot polling and register owner
+  startBot();
   registerOwner();
 
   // Start BullMQ workers
