@@ -1,10 +1,16 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  // X API
+  // X API — app-only
   X_BEARER_TOKEN: z.string().min(1, "X_BEARER_TOKEN required"),
   X_OAUTH_CONSUMER_KEY: z.string().optional(),
   X_OAUTH_CONSUMER_SECRET: z.string().optional(),
+
+  // X API — OAuth 2.0 user context (required for timeline + user lookup on Free tier)
+  X_OAUTH2_CLIENT_ID: z.string().optional(),
+  X_OAUTH2_CLIENT_SECRET: z.string().optional(),
+  X_OAUTH2_ACCESS_TOKEN: z.string().optional(),
+  X_OAUTH2_REFRESH_TOKEN: z.string().optional(),
 
   // TikTok — opsiyonel, olmadan TikTok worker'lar skip edilir
   SCRAPECREATORS_API_KEY: z.string().optional(),

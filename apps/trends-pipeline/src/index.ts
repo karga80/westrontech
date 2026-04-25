@@ -13,6 +13,7 @@ import { runSignalRouter } from "@/extraction/signal-router";
 import { runMemecoinEnricher } from "@/enrichment/memecoin-enricher";
 import { runNFTEnricher } from "@/enrichment/nft-enricher";
 import { runAlertRouter } from "@/alerting/alert-router";
+import { xClient } from "@/ingestion/x-client";
 
 const log = createLogger("main");
 
@@ -22,6 +23,9 @@ async function main() {
   if (env.DRY_RUN) {
     log.warn("DRY_RUN=true — alerts will NOT be pushed to WebSocket or Telegram");
   }
+
+  // Load OAuth2 tokens from Redis (overrides env with any previously refreshed tokens)
+  await xClient.loadTokensFromRedis();
 
   // Start WebSocket server
   await startWebSocketServer();
