@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { Worker, Queue } from "bullmq";
 import { getRedis } from "@/storage/redis-client";
 import { tiktokClient } from "@/ingestion/tiktok-client";
 import { createLogger } from "@/shared/logger";
@@ -75,4 +75,11 @@ export function createTikTokTranscriptWorker(): Worker {
   });
 
   return worker;
+}
+
+export async function scheduleTikTokTranscriptJob(): Promise<void> {
+  const redis = getRedis();
+  const queue = new Queue("tiktok-transcript", { connection: redis });
+  await queue.upsertJobScheduler("tiktok-transcript-cron", { pattern: "*/1 * * * *" }, { name: "process-transcripts" });
+  log.info("tiktok-transcript-worker scheduled (every 1 minute)");
 }

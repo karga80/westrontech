@@ -7,7 +7,7 @@ import { createXPostsWorker } from "@/workers/x-posts-worker";
 import { createXCallersWorker, scheduleXCallersJob } from "@/workers/x-callers-worker";
 import { createXTrendsWorker, scheduleXTrendsJob } from "@/workers/x-trends-worker";
 import { createTikTokPollWorker, scheduleTikTokPollJob } from "@/workers/tiktok-poll-worker";
-import { createTikTokTranscriptWorker } from "@/workers/tiktok-transcript-worker";
+import { createTikTokTranscriptWorker, scheduleTikTokTranscriptJob } from "@/workers/tiktok-transcript-worker";
 import { createPFPPollWorker, schedulePFPPollJob } from "@/workers/pfp-poll-worker";
 import { runSignalRouter } from "@/extraction/signal-router";
 import { runMemecoinEnricher } from "@/enrichment/memecoin-enricher";
@@ -48,6 +48,7 @@ async function main() {
   await scheduleXCallersJob();
   await scheduleXTrendsJob();
   await scheduleTikTokPollJob();
+  await scheduleTikTokTranscriptJob();
   await schedulePFPPollJob();
 
   // Start stream processors (blocking loops — run in background)
