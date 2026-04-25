@@ -10,9 +10,9 @@
    --wr-bg           #000000           #F4F4F0   Page background
    --wr-surface      #111111           #FFFFFF   Cards, panels
    --wr-surface-alt  #0A0A0A           #FAFAF7   Section containers
-   --wr-overlay      #161616           #F0F0EC   Hover/active surfaces
-   --wr-border       #1A1A1A           #E2E2DC   Default borders
-   --wr-border-hover #2a2a2a           #C0C0BC   Hovered borders
+   --wr-overlay      #1A1A1A           #F0F0EC   Hover/active surfaces
+   --wr-border       #222222           #E2E2DC   Default borders
+   --wr-border-hover #333333           #C0C0BC   Hovered borders
    --wr-border-focus #BEFF00           #3D6000   Focused inputs
    --wr-input-bg     #1C1C1C           #FFFFFF   Input / textarea background
    --wr-input-border #2E2E2E           #D0D0CC   Input border (resting)
@@ -47,10 +47,10 @@ html[data-theme="night"] {
   --wr-bg:           #000000;
   --wr-surface:      #111111;
   --wr-surface-alt:  #0A0A0A;
-  --wr-modal:        #1C1C1C;
-  --wr-overlay:      #161616;
-  --wr-border:        #1A1A1A;
-  --wr-border-hover:  #2a2a2a;
+  --wr-modal:        #242424;
+  --wr-overlay:      #1A1A1A;
+  --wr-border:        #222222;
+  --wr-border-hover:  #333333;
   --wr-hover-bg:      #012a2a;
   --wr-hover-text:    #E5E5E5;
   --wr-border-focus:  #BEFF00;
@@ -428,4 +428,37 @@ html[data-theme="day"] textarea {
 @keyframes wr-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ── Swap Modal layer tokens — theme-aware panel / divider colors ─────────── */
+:root,
+html[data-theme="night"] {
+  --wr-swap-panel-a: #2E2E2E;          /* sell / allocate panel */
+  --wr-swap-panel-b: #2A2A2A;          /* buy / to-buy panel */
+  --wr-swap-panel-c: #1E1E1E;          /* token picker overlay (deepest) */
+  --wr-swap-body:    #282828;          /* recurring summary expanded body */
+  --wr-swap-sep:     #383838;          /* dividers, card border, separators */
+  --wr-swap-pill:    rgba(255,255,255,0.1);  /* token selector pill bg */
+}
+html[data-theme="day"] {
+  --wr-swap-panel-a: #F2F2EE;
+  --wr-swap-panel-b: #EAEAE6;
+  --wr-swap-panel-c: #F8F8F5;          /* token picker (lighter = feels on-top) */
+  --wr-swap-body:    #E6E6E2;
+  --wr-swap-sep:     #D4D4CE;
+  --wr-swap-pill:    rgba(0,0,0,0.07);
+}
+
+/* ── Swap Modal: fix global input overrides that break transparent inputs ── */
+/* The root rule forces background-color !important; override it for the modal */
+html[data-theme="day"] .wr-swap-modal input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="day"] .wr-swap-modal textarea {
+  background-color: transparent !important;
+  border-color: var(--wr-swap-sep) !important;
+  color: var(--wr-text) !important;
+}
+html[data-theme="day"] .wr-swap-modal input::placeholder,
+html[data-theme="day"] .wr-swap-modal textarea::placeholder {
+  color: var(--wr-text-3) !important;
+  opacity: 1;
 }

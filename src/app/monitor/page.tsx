@@ -56,11 +56,11 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-[300]"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+      style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        style={{ width: '420px', backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '28px' }}
+        style={{ width: '420px', backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', padding: '28px' }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -268,9 +268,9 @@ function WatchCollectionModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[300]"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+      style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: '420px', backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '28px' }}
+      <div style={{ width: '420px', backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', padding: '28px' }}
         onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
           <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Watch Collection</h2>

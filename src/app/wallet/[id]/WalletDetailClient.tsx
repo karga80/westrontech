@@ -327,10 +327,10 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', width: hasMonitor ? '860px' : '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'row', overflow: 'hidden', transition: 'width 0.2s ease' }}>
+      <div style={{ backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', width: hasMonitor ? '860px' : '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'row', overflow: 'hidden', transition: 'width 0.2s ease' }}>
         {/* Left column */}
         <div style={{ width: '560px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: hasMonitor ? '1px solid var(--wr-border)' : 'none', maxHeight: '80vh', overflow: 'hidden' }}>
         {/* Header */}
@@ -346,7 +346,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
               {/* FROM */}
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>From</div>
-                <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)' }}>
                   <div>
                     <div style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{wallet.name}</div>
                     <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '380px' }}>{wallet.address}</div>
@@ -497,7 +497,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
           <>
             <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Confirm Transfer</div>
-              <div style={{ border: '1px solid var(--wr-border)', padding: '14px', marginBottom: '10px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ border: '1px solid var(--wr-border)', padding: '14px', marginBottom: '10px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>From</div>
                 <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{wallet.name}</div>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{wallet.address}</div>
@@ -839,14 +839,22 @@ const STAGE_LABEL: Record<ExecStage, string> = {
   error: '',
 };
 
-function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', sellName = 'Ethereum', walletAddress = '', alchemyKey = '' }: { mode: 'swap' | 'buy'; onClose: () => void; sellTicker?: string; sellColor?: string; sellName?: string; walletAddress?: string; alchemyKey?: string }) {
-  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
-  const sellToken = sellTicker;
+function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', sellName = 'Ethereum', walletAddress = '', alchemyKey = '', walletTokens = [] }: { mode: 'swap' | 'buy'; onClose: () => void; sellTicker?: string; sellColor?: string; sellName?: string; walletAddress?: string; alchemyKey?: string; walletTokens?: { symbol: string; name: string; color: string }[] }) {
+  const [orderType, setOrderType] = useState<'market' | 'limit' | 'recurring'>('market');
+  const [sellToken, setSellToken] = useState(sellTicker);
   const [buyToken, setBuyToken] = useState(sellTicker === 'USDC' ? 'ETH' : 'USDC');
   const [sellAmount, setSellAmount] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [showTokenSearch, setShowTokenSearch] = useState(false);
+  const [showSellPicker, setShowSellPicker] = useState(false);
   const [tokenSearch, setTokenSearch] = useState('');
+  const [recurringAmount, setRecurringAmount] = useState('');
+  const [recurringFrequency, setRecurringFrequency] = useState('1');
+  const [recurringFreqUnit, setRecurringFreqUnit] = useState<'minute' | 'hour' | 'day' | 'week'>('day');
+  const [recurringSuborders, setRecurringSuborders] = useState('2');
+  const [recurringPriceMin, setRecurringPriceMin] = useState('');
+  const [recurringPriceMax, setRecurringPriceMax] = useState('');
+  const [showRecurringSummary, setShowRecurringSummary] = useState(false);
   const [stage, setStage] = useState<ExecStage>('idle');
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteError, setQuoteError] = useState('');
@@ -856,7 +864,7 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
 
   // Debounced quote fetch whenever amount or output token changes
   useEffect(() => {
-    if (!sellAmount || parseFloat(sellAmount) <= 0 || orderType === 'limit') {
+    if (!sellAmount || parseFloat(sellAmount) <= 0 || orderType !== 'market') {
       setQuote(null);
       setStage('idle');
       return;
@@ -886,14 +894,12 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
   const canLimitSubmit = orderType === 'limit' && sellNum > 0 && sellToken !== buyToken && !isDone;
   const isExecuting = ['checking-allowance','approving','waiting-approve','swapping','waiting-swap'].includes(stage as string);
 
-  const panelStyle: React.CSSProperties = { backgroundColor: '#0d0d0d', border: '1px solid var(--wr-border)', padding: '14px 16px' };
-  const tokenBtnStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)', padding: '7px 11px', cursor: 'pointer' };
-
   const filteredTokens = ETH_TOKENS.filter(t =>
     t.symbol !== sellToken &&
     (tokenSearch === '' || t.symbol.toLowerCase().includes(tokenSearch.toLowerCase()) || t.name.toLowerCase().includes(tokenSearch.toLowerCase()))
   );
   const quickTokens = ETH_TOKENS.filter(t => t.symbol !== sellToken).slice(0, 5);
+  const sellTokenList = (walletTokens.length > 0 ? walletTokens : ETH_TOKENS).filter(t => t.symbol !== buyToken);
 
   async function handleExecute() {
     if (!quote || !walletAddress || !alchemyKey) return;
@@ -941,22 +947,52 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
     setTxHash('limit');
   }
 
+  function handleSwapDirection() {
+    const prevBuy = buyToken;
+    setBuyToken(sellToken);
+    setSellToken(prevBuy);
+    setSellAmount('');
+    setQuote(null);
+    setStage('idle');
+    setQuoteError('');
+  }
+
+  const recurAmtNum = parseFloat(recurringAmount) || 0;
+  const recurSubNum = Math.max(1, parseInt(recurringSuborders) || 1);
+  const amountPerSub = recurSubNum > 0 ? recurAmtNum / recurSubNum : 0;
+  const canRecurring = recurAmtNum > 0 && recurSubNum >= 2 && sellToken !== buyToken && !isDone;
+
+  function handleRecurring() {
+    if (!canRecurring) return;
+    persistTask({
+      id: String(Date.now()),
+      iconChar: '↻',
+      iconBg: '#8B5CF6',
+      label: `DCA ${sellToken} → ${buyToken} · ${recurAmtNum} ${sellToken}`,
+      meta: `Every ${recurringFrequency} ${recurringFreqUnit}(s) · ${recurSubNum} orders`,
+      status: 'Scheduled',
+      tab: 'Scheduled',
+    });
+    setStage('confirmed' as ExecStage);
+    setTxHash('recurring');
+  }
+
   return (
     <div
-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
       onClick={e => { if (e.target === e.currentTarget) { onClose(); } }}
     >
-      <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', width: '460px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      <div className="wr-swap-modal" style={{ backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', width: '460px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--wr-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--wr-border-hover)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text)' }}>
               {mode === 'swap' ? 'Swap' : 'Buy'}
             </span>
             <div style={{ display: 'flex' }}>
-              {(['market', 'limit'] as const).map(t => (
-                <button key={t} onClick={() => setOrderType(t)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '4px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: orderType === t ? '#BEFF00' : 'var(--wr-text-3)', borderBottom: orderType === t ? '2px solid #BEFF00' : '2px solid transparent' }}>
+              {(['market', 'limit', 'recurring'] as const).map(t => (
+                <button key={t} onClick={() => setOrderType(t)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '4px 10px', border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', color: orderType === t ? '#BEFF00' : 'var(--wr-text-3)', borderBottom: orderType === t ? '2px solid #BEFF00' : '2px solid transparent' }}>
                   {t}
                 </button>
               ))}
@@ -965,84 +1001,236 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
 
-        <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '0' }}>
+        <div style={{ padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: '0', backgroundColor: 'var(--wr-modal)', maxHeight: '80vh', overflowY: 'auto' }}>
 
-          {/* You Pay */}
-          <div style={panelStyle}>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>You Pay</div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                <TokenIcon symbol={sellTok.symbol} color={sellTok.color} />
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{sellTok.symbol}</span>
+          {/* ── unified swap card (market / limit) ── */}
+          {orderType !== 'recurring' && (
+            <div style={{ border: '1px solid var(--wr-swap-sep)' }}>
+
+              {/* SELL row */}
+              <div style={{ backgroundColor: 'var(--wr-swap-panel-a)', padding: '14px 16px 16px' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Sell</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <button onClick={() => setShowSellPicker(true)} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                    <TokenIcon symbol={sellTok.symbol} color={sellTok.color} size={20} />
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{sellTok.symbol}</span>
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </button>
+                  <input
+                    type="text" inputMode="decimal" placeholder="0.00"
+                    value={sellAmount} onChange={e => setSellAmount(e.target.value)}
+                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', textAlign: 'right', flex: 1, minWidth: 0, padding: 0, lineHeight: '1' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+                    {sellUsd > 0 ? `$${sellUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+                  </span>
+                </div>
               </div>
-              <div style={{ textAlign: 'right', flex: 1, minWidth: 0 }}>
+
+              {/* Divider + swap button */}
+              <div style={{ position: 'relative', height: '1px', backgroundColor: 'var(--wr-swap-sep)' }}>
+                <button
+                  onClick={handleSwapDirection}
+                  style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--wr-swap-panel-a)', border: '1px solid var(--wr-swap-sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 1 }}
+                >
+                  <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+                    <path d="M5 1v10M2 7.5L5 11l3-3.5M2 4.5L5 1l3 3.5" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              {/* BUY row */}
+              <div style={{ backgroundColor: 'var(--wr-swap-panel-b)', padding: '16px 16px 14px' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Buy</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <button onClick={() => { setShowTokenSearch(true); setTokenSearch(''); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                    <TokenIcon symbol={buyTok.symbol} color={buyTok.color} size={20} />
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{buyTok.symbol}</span>
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </button>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, lineHeight: '1', color: quote ? 'var(--wr-text)' : (stage as string) === 'quoting' ? 'var(--wr-text-3)' : 'var(--wr-text-4)', flex: 1, minWidth: 0, textAlign: 'right' }}>
+                    {(stage as string) === 'quoting' ? '...' : quote ? Number(quote.amountOut).toLocaleString('en-US', { maximumFractionDigits: 6 }) : '0.00'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+                    {quote ? `$${(Number(quote.amountOut) * (MOCK_RATES[buyToken] ?? 0)).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ── RECURRING ── */}
+          {orderType === 'recurring' && (<>
+
+            {/* Unified allocate + buy card */}
+            <div style={{ border: '1px solid var(--wr-swap-sep)' }}>
+
+              {/* Allocate row */}
+              <div style={{ backgroundColor: 'var(--wr-swap-panel-a)', padding: '14px 16px 16px' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Allocate</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <button onClick={() => setShowSellPicker(true)} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                    <TokenIcon symbol={sellTok.symbol} color={sellTok.color} size={20} />
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{sellTok.symbol}</span>
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </button>
+                  <input
+                    type="text" inputMode="decimal" placeholder="0.00"
+                    value={recurringAmount} onChange={e => setRecurringAmount(e.target.value)}
+                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', textAlign: 'right', flex: 1, minWidth: 0, padding: 0, lineHeight: '1' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+                    {recurAmtNum > 0 ? `$${(recurAmtNum * (MOCK_RATES[sellToken] ?? 0)).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Divider + swap button */}
+              <div style={{ position: 'relative', height: '1px', backgroundColor: 'var(--wr-swap-sep)' }}>
+                <button onClick={handleSwapDirection} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--wr-swap-panel-a)', border: '1px solid var(--wr-swap-sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 1 }}>
+                  <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+                    <path d="M5 1v10M2 7.5L5 11l3-3.5M2 4.5L5 1l3 3.5" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              {/* To Buy row */}
+              <div style={{ backgroundColor: 'var(--wr-swap-panel-b)', padding: '16px 16px 14px' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>To Buy</div>
+                <button onClick={() => { setShowTokenSearch(true); setTokenSearch(''); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', padding: '6px 10px' }}>
+                    <TokenIcon symbol={buyTok.symbol} color={buyTok.color} size={20} />
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{buyTok.symbol}</span>
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', flex: 1, textAlign: 'right' }}>{buyTok.name}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Frequency + Orders — inline, no boxes */}
+            <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '0', marginTop: '14px', gap: '0' }}>
+              <div style={{ flex: 1, paddingRight: '16px', borderRight: '1px solid var(--wr-swap-sep)' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Frequency</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  <input
+                    type="text" inputMode="numeric" value={recurringFrequency}
+                    onChange={e => setRecurringFrequency(e.target.value.replace(/\D/g, '') || '1')}
+                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', width: '32px', padding: 0 }}
+                  />
+                  <div style={{ position: 'relative' }}>
+                    <select value={recurringFreqUnit} onChange={e => setRecurringFreqUnit(e.target.value as typeof recurringFreqUnit)}
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', appearance: 'none', paddingRight: '14px' }}>
+                      <option value="minute">minute</option>
+                      <option value="hour">hour</option>
+                      <option value="day">day</option>
+                      <option value="week">week</option>
+                    </select>
+                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none" style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                      <path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.2" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div style={{ flex: 1, paddingLeft: '16px' }}>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Total Orders</div>
                 <input
-                  type="text" inputMode="decimal" placeholder="0.00"
-                  value={sellAmount} onChange={e => setSellAmount(e.target.value)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: 'var(--wr-text)', background: '#0d0d0d', border: 'none', outline: 'none', boxShadow: 'none', WebkitAppearance: 'none', textAlign: 'right', width: '100%', padding: 0 }}
+                  type="text" inputMode="numeric" value={recurringSuborders}
+                  onChange={e => setRecurringSuborders(e.target.value.replace(/\D/g, '') || '2')}
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', width: '100%', padding: 0 }}
                 />
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '4px' }}>
-                  {sellUsd > 0 ? `$${sellUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
-                </div>
               </div>
             </div>
-          </div>
 
-          <div style={{ height: '8px' }} />
-
-          {/* You Receive */}
-          <div style={panelStyle}>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>You Receive</div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-              <button style={tokenBtnStyle} onClick={() => { setShowTokenSearch(true); setTokenSearch(''); }}>
-                <TokenIcon symbol={buyTok.symbol} color={buyTok.color} />
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{buyTok.symbol}</span>
-                <svg width="9" height="5" viewBox="0 0 9 5" fill="none"><path d="M1 1L4.5 4L8 1" stroke="var(--wr-text-3)" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              </button>
-              <div style={{ textAlign: 'right', flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: quote ? 'var(--wr-text)' : stage === 'quoting' ? 'var(--wr-text-3)' : '#3f3f3f' }}>
-                  {stage === 'quoting' ? '...' : quote ? Number(quote.amountOut).toLocaleString('en-US', { maximumFractionDigits: 6 }) : '0.00'}
-                </div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '4px' }}>
-                  {quote ? `$${(Number(quote.amountOut) * (MOCK_RATES[buyToken] ?? 0)).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
-                </div>
+            {/* Price Range — inline */}
+            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--wr-swap-sep)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>Price Range <span style={{ color: '#555555', fontWeight: 400 }}>(optional)</span></span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>{buyTok.symbol}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input type="text" inputMode="decimal" placeholder="Min" value={recurringPriceMin} onChange={e => setRecurringPriceMin(e.target.value)}
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', background: 'transparent', border: '1px solid var(--wr-swap-sep)', outline: 'none', padding: '7px 10px', flex: 1 }} />
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>–</span>
+                <input type="text" inputMode="decimal" placeholder="Max" value={recurringPriceMax} onChange={e => setRecurringPriceMax(e.target.value)}
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', background: 'transparent', border: '1px solid var(--wr-swap-sep)', outline: 'none', padding: '7px 10px', flex: 1 }} />
               </div>
             </div>
-          </div>
 
-          {/* Token search overlay */}
+            {/* Summary */}
+            {recurAmtNum > 0 && recurSubNum >= 2 && (
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--wr-swap-sep)' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', lineHeight: 1.7 }}>
+                  Swap <strong style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{amountPerSub.toFixed(4)} {sellToken}</strong> to <strong style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{buyToken}</strong> every <strong style={{ color: '#BEFF00', fontWeight: 600 }}>{recurringFrequency} {recurringFreqUnit}(s)</strong> over <strong style={{ color: '#BEFF00', fontWeight: 600 }}>{recurSubNum} orders</strong> ({recurAmtNum} {sellToken} total).
+                </span>
+              </div>
+            )}
+
+          </>)}
+
+
+          {/* Sell token picker overlay */}
+          {showSellPicker && (
+            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-swap-panel-c)', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--wr-border)' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Select Token to Sell</span>
+                <button onClick={() => setShowSellPicker(false)} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {sellTokenList.map(t => (
+                  <div
+                    key={t.symbol}
+                    onClick={() => { setSellToken(t.symbol); setShowSellPicker(false); setSellAmount(''); setQuote(null); setStage('idle'); setQuoteError(''); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--wr-border)', backgroundColor: sellToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = sellToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent'; }}
+                  >
+                    <TokenIcon symbol={t.symbol} color={t.color} size={36} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{t.symbol}</span>
+                        {sellToken === t.symbol && <span style={{ fontSize: '10px', color: '#BEFF00' }}>✓</span>}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{t.name} · ETH Mainnet</div>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)' }}>
+                      ${MOCK_RATES[t.symbol]?.toLocaleString() ?? '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Buy token search overlay */}
           {showTokenSearch && (
-            <div style={{ position: 'absolute', inset: 0, backgroundColor: '#0d0d0d', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
-              {/* Search bar */}
+            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-swap-panel-c)', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderBottom: '1px solid var(--wr-border)' }}>
                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0 }}>
                   <circle cx="6.5" cy="6.5" r="5" stroke="var(--wr-text-3)" strokeWidth="1.4"/>
                   <path d="M10.5 10.5L13.5 13.5" stroke="var(--wr-text-3)" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>
                 <input
-                  autoFocus
-                  type="text"
+                  autoFocus type="text"
                   placeholder='Search any token. Include " " for exact match.'
                   value={tokenSearch}
                   onChange={e => setTokenSearch(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Escape') setShowTokenSearch(false); }}
                   style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', padding: 0 }}
                 />
-                <button
-                  onClick={() => setShowTokenSearch(false)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--wr-border)', padding: '4px 10px', cursor: 'pointer', letterSpacing: '1px' }}
-                >
-                  ESC
-                </button>
+                <button onClick={() => setShowTokenSearch(false)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--wr-border)', padding: '4px 10px', cursor: 'pointer', letterSpacing: '1px' }}>ESC</button>
               </div>
-
-              {/* Quick access */}
               {tokenSearch === '' && (
                 <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderBottom: '1px solid var(--wr-border)' }}>
                   {quickTokens.map(t => (
-                    <button
-                      key={t.symbol}
-                      onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
+                    <button key={t.symbol} onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
                       style={{ display: 'flex', alignItems: 'center', gap: '6px', background: buyToken === t.symbol ? 'rgba(190,255,0,0.08)' : 'rgba(255,255,255,0.04)', border: buyToken === t.symbol ? '1px solid #BEFF00' : '1px solid var(--wr-border)', padding: '5px 10px', cursor: 'pointer' }}
                     >
                       <TokenIcon symbol={t.symbol} color={t.color} size={18} />
@@ -1051,20 +1239,14 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
                   ))}
                 </div>
               )}
-
-              {/* Top tab label */}
               <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--wr-border)' }}>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '1px', textTransform: 'uppercase', borderBottom: '2px solid #BEFF00', paddingBottom: '8px' }}>Top</span>
               </div>
-
-              {/* Token list */}
               <div style={{ flex: 1, overflowY: 'auto' }}>
                 {filteredTokens.length === 0 ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No tokens found</div>
                 ) : filteredTokens.map(t => (
-                  <div
-                    key={t.symbol}
-                    onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
+                  <div key={t.symbol} onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
                     style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--wr-border)', backgroundColor: buyToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = buyToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent'; }}
@@ -1075,14 +1257,10 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
                         <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{t.symbol}</span>
                         {buyToken === t.symbol && <span style={{ fontSize: '10px', color: '#BEFF00' }}>✓</span>}
                       </div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>
-                        {t.name} · ETH Mainnet
-                      </div>
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{t.name} · ETH Mainnet</div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)' }}>
-                        ${MOCK_RATES[t.symbol]?.toLocaleString() ?? '—'}
-                      </div>
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)' }}>
+                      ${MOCK_RATES[t.symbol]?.toLocaleString() ?? '—'}
                     </div>
                   </div>
                 ))}
@@ -1166,7 +1344,7 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
             >
               {isDone ? '✓ Swap Complete' : isExecuting ? STAGE_LABEL[stage] : mode === 'swap' ? `Swap ${sellTok.symbol} → ${buyTok.symbol}` : `Buy ${buyTok.symbol}`}
             </button>
-          ) : (
+          ) : orderType === 'limit' ? (
             <button
               onClick={handleLimitSubmit}
               disabled={!canLimitSubmit || isDone}
@@ -1181,7 +1359,381 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
             >
               {isDone ? '✓ Limit Order Scheduled' : 'Schedule Limit Order'}
             </button>
+          ) : (
+            <>
+              <button
+                onClick={handleRecurring}
+                disabled={!canRecurring || isDone}
+                style={{
+                  marginTop: '14px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
+                  letterSpacing: '1.5px', textTransform: 'uppercase', padding: '14px', width: '100%', border: 'none',
+                  cursor: canRecurring && !isDone ? 'pointer' : 'default',
+                  color: isDone ? '#BEFF00' : canRecurring ? '#000' : 'var(--wr-text-3)',
+                  backgroundColor: isDone ? 'transparent' : canRecurring ? '#BEFF00' : 'rgba(255,255,255,0.05)',
+                  outline: isDone ? '1px solid #BEFF00' : 'none',
+                }}
+              >
+                {isDone ? '✓ DCA Order Scheduled' : `Start DCA ${sellTok.symbol} → ${buyTok.symbol}`}
+              </button>
+
+              {/* Recurring Summary collapsible */}
+              <div style={{ marginTop: '12px', border: '1px solid var(--wr-swap-sep)' }}>
+                <button
+                  onClick={() => setShowRecurringSummary(v => !v)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--wr-swap-panel-a)', border: 'none', cursor: 'pointer' }}
+                >
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '0.5px' }}>Recurring Summary</span>
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: showRecurringSummary ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                    <path d="M1 1l4 4 4-4" stroke="var(--wr-text-3)" strokeWidth="1.4" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {showRecurringSummary && (
+                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--wr-swap-body)' }}>
+                    {[
+                      { label: 'Sell total',        value: `${recurAmtNum || '—'} ${sellToken}` },
+                      { label: 'Sell per order',    value: `${amountPerSub > 0 ? amountPerSub.toFixed(4) : '—'} ${sellToken}` },
+                      { label: 'To buy',            value: buyToken },
+                      { label: 'Suborder interval', value: `${recurringFrequency} ${recurringFreqUnit}(s)` },
+                      { label: 'Total orders',      value: String(recurSubNum) },
+                    ].map(row => (
+                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{row.label}</span>
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)', fontWeight: 600 }}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NFT Action Modals ─────────────────────────────────────────────────────────
+
+const MODAL_BACKDROP: React.CSSProperties = {
+  position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)',
+  backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center',
+  justifyContent: 'center', zIndex: 1000,
+};
+const MODAL_BOX: React.CSSProperties = {
+  backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)',
+  width: '480px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+  overflow: 'hidden',
+};
+const MODAL_HDR: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: '14px 20px', borderBottom: '1px solid var(--wr-border-hover)',
+};
+const MODAL_TITLE: React.CSSProperties = {
+  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
+  letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text)',
+};
+const LABEL_SM: React.CSSProperties = {
+  fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700,
+  letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)',
+};
+const INPUT_SM: React.CSSProperties = {
+  fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+  color: 'var(--wr-text)', backgroundColor: 'rgba(255,255,255,0.06)',
+  border: '1px solid var(--wr-border-hover)', outline: 'none',
+  padding: '7px 10px', width: '100%',
+};
+const BTN_LIME: React.CSSProperties = {
+  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
+  letterSpacing: '1px', textTransform: 'uppercase', padding: '9px 20px',
+  border: 'none', cursor: 'pointer', backgroundColor: '#BEFF00', color: '#000',
+};
+const BTN_GHOST: React.CSSProperties = {
+  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500,
+  letterSpacing: '1px', textTransform: 'uppercase', padding: '9px 20px',
+  border: '1px solid var(--wr-border-hover)', cursor: 'pointer',
+  backgroundColor: 'transparent', color: 'var(--wr-text)',
+};
+
+function NftThumb({ nft }: { nft: OwnedNft }) {
+  const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
+  return (
+    <div style={{ width: '36px', height: '36px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#1a1a1a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {thumb
+        ? <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+        : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#555' }}>{(nft.name ?? '?')[0]}</span>}
+    </div>
+  );
+}
+
+function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
+  const [prices, setPrices] = React.useState<Record<string, string>>({});
+  const [marketplace, setMarketplace] = React.useState<'opensea' | 'blur'>('opensea');
+  const [expiry, setExpiry] = React.useState('7');
+  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+
+  const nftKey = (n: OwnedNft) => n.contract.address + n.token_id;
+  const canSubmit = nfts.every(n => parseFloat(prices[nftKey(n)] ?? '') > 0) && stage === 'idle';
+
+  function handleSubmit() {
+    setStage('submitting');
+    setTimeout(() => setStage('done'), 1800);
+  }
+
+  return (
+    <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={MODAL_BOX}>
+        <div style={MODAL_HDR}>
+          <span style={MODAL_TITLE}>Edit Listing · {nfts.length} item{nfts.length !== 1 ? 's' : ''}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {nfts.map(n => {
+            const k = nftKey(n);
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--wr-border)' }}>
+                <NftThumb nft={n} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.name ?? `#${n.token_id}`}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{n.contract.opensea_collection_name || n.contract.name || n.contract.address.slice(0, 8)}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <input
+                    type="text" inputMode="decimal" placeholder="0.00"
+                    value={prices[k] ?? ''}
+                    onChange={e => setPrices(prev => ({ ...prev, [k]: e.target.value }))}
+                    style={{ ...INPUT_SM, width: '88px', textAlign: 'right' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>ETH</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', gap: '10px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>Marketplace</div>
+            <select value={marketplace} onChange={e => setMarketplace(e.target.value as typeof marketplace)}
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid var(--wr-border-hover)', padding: '7px 10px', width: '100%', cursor: 'pointer', outline: 'none' }}>
+              <option value="opensea">OpenSea</option>
+              <option value="blur">Blur</option>
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>Expires in</div>
+            <select value={expiry} onChange={e => setExpiry(e.target.value)}
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid var(--wr-border-hover)', padding: '7px 10px', width: '100%', cursor: 'pointer', outline: 'none' }}>
+              <option value="1">1 day</option>
+              <option value="3">3 days</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+          {stage === 'done'
+            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Updated</button>
+            : <>
+                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
+                <button onClick={handleSubmit} disabled={!canSubmit}
+                  style={{ ...BTN_LIME, opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? 'pointer' : 'default' }}>
+                  {stage === 'submitting' ? 'Submitting…' : `Update ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
+                </button>
+              </>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
+  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+
+  function handleCancel() {
+    setStage('submitting');
+    setTimeout(() => setStage('done'), 1500);
+  }
+
+  return (
+    <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={MODAL_BOX}>
+        <div style={MODAL_HDR}>
+          <span style={MODAL_TITLE}>Cancel Listing · {nfts.length} item{nfts.length !== 1 ? 's' : ''}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '4px' }}>
+            The following listings will be cancelled on all connected marketplaces:
+          </p>
+          {nfts.map(n => {
+            const k = n.contract.address + n.token_id;
+            const floor = n.contract.opensea_floor_price;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', backgroundColor: 'rgba(248,113,113,0.04)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                <NftThumb nft={n} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{n.name ?? `#${n.token_id}`}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{n.contract.opensea_collection_name || n.contract.name || n.contract.address.slice(0, 8)}</div>
+                </div>
+                {floor && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', flexShrink: 0 }}>Floor: {floor} ETH</span>}
+              </div>
+            );
+          })}
+          <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.25)', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-warn)' }}>
+            Cancelling on-chain listings requires a gas transaction. Off-chain cancellations are free.
+          </div>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+          {stage === 'done'
+            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Cancelled</button>
+            : <>
+                <button onClick={onClose} style={BTN_GHOST}>Back</button>
+                <button onClick={handleCancel} disabled={stage === 'submitting'}
+                  style={{ ...BTN_LIME, backgroundColor: '#f87171', color: '#fff', opacity: stage === 'submitting' ? 0.7 : 1 }}>
+                  {stage === 'submitting' ? 'Cancelling…' : `Cancel ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
+                </button>
+              </>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
+  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+
+  const offers = nfts.map(n => {
+    const floor = parseFloat(String(n.contract.opensea_floor_price ?? '0')) || 0;
+    const offer = floor > 0 ? (floor * 0.94).toFixed(4) : '—';
+    return { nft: n, offer };
+  });
+  const totalEth = offers.reduce((s, o) => s + (parseFloat(o.offer) || 0), 0);
+
+  function handleAccept() {
+    setStage('submitting');
+    setTimeout(() => setStage('done'), 1800);
+  }
+
+  return (
+    <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={MODAL_BOX}>
+        <div style={MODAL_HDR}>
+          <span style={MODAL_TITLE}>Accept Offer · {nfts.length} item{nfts.length !== 1 ? 's' : ''}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {offers.map(({ nft: n, offer }) => {
+            const k = n.contract.address + n.token_id;
+            const floor = n.contract.opensea_floor_price;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--wr-border)' }}>
+                <NftThumb nft={n} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{n.name ?? `#${n.token_id}`}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{n.contract.opensea_collection_name || n.contract.name || n.contract.address.slice(0, 8)}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#34d399' }}>{offer} <span style={{ color: 'var(--wr-text-3)', fontWeight: 400 }}>ETH</span></div>
+                  {floor && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>Floor: {floor} ETH</div>}
+                </div>
+              </div>
+            );
+          })}
+          {totalEth > 0 && (
+            <div style={{ marginTop: '4px', padding: '10px 14px', backgroundColor: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Total Proceeds</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, color: '#34d399' }}>{totalEth.toFixed(4)} ETH</span>
+            </div>
+          )}
+          <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
+            <span>Estimated gas</span><span>~0.003 ETH</span>
+          </div>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+          {stage === 'done'
+            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Offer Accepted</button>
+            : <>
+                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
+                <button onClick={handleAccept} disabled={stage === 'submitting'}
+                  style={{ ...BTN_LIME, opacity: stage === 'submitting' ? 0.7 : 1 }}>
+                  {stage === 'submitting' ? 'Signing…' : `Accept ${nfts.length > 1 ? `${nfts.length} Offers` : 'Offer'}`}
+                </button>
+              </>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; walletAddress: string; onClose: () => void }) {
+  const [toAddress, setToAddress] = React.useState('');
+  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+  const isValid = /^0x[0-9a-fA-F]{40}$/.test(toAddress.trim());
+  const canSend = isValid && stage === 'idle';
+
+  function handleSend() {
+    setStage('submitting');
+    setTimeout(() => setStage('done'), 2000);
+  }
+
+  return (
+    <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={MODAL_BOX}>
+        <div style={MODAL_HDR}>
+          <span style={MODAL_TITLE}>Send NFT{nfts.length !== 1 ? 's' : ''} · {nfts.length} item{nfts.length !== 1 ? 's' : ''}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: 1 }}>
+          <div style={{ ...LABEL_SM, marginBottom: '2px' }}>Sending</div>
+          {nfts.map(n => {
+            const k = n.contract.address + n.token_id;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--wr-border)' }}>
+                <NftThumb nft={n} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{n.name ?? `#${n.token_id}`}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.contract.address}</div>
+                </div>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)', border: '1px solid var(--wr-border)', padding: '2px 6px', flexShrink: 0 }}>
+                  {n.contract.token_type ?? 'ERC-721'}
+                </span>
+              </div>
+            );
+          })}
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>From</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '9px 10px', backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid var(--wr-border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {walletAddress || '0x…'}
+            </div>
+          </div>
+          <div>
+            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>To Address</div>
+            <input
+              type="text" placeholder="0x…"
+              value={toAddress} onChange={e => setToAddress(e.target.value)}
+              style={{ ...INPUT_SM, borderColor: toAddress && !isValid ? 'rgba(248,113,113,0.6)' : 'var(--wr-border-hover)' }}
+            />
+            {toAddress && !isValid && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#f87171', marginTop: '4px' }}>Invalid Ethereum address</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '4px 0' }}>
+            <span>Estimated gas</span><span>~0.002 ETH</span>
+          </div>
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+          {stage === 'done'
+            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ NFT{nfts.length !== 1 ? 's' : ''} Sent</button>
+            : <>
+                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
+                <button onClick={handleSend} disabled={!canSend}
+                  style={{ ...BTN_LIME, opacity: canSend ? 1 : 0.4, cursor: canSend ? 'pointer' : 'default' }}>
+                  {stage === 'submitting' ? 'Broadcasting…' : `Send ${nfts.length} NFT${nfts.length !== 1 ? 's' : ''}`}
+                </button>
+              </>
+          }
         </div>
       </div>
     </div>
@@ -1278,6 +1830,10 @@ export default function WalletDetailClient({ id }: { id: string }) {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
+  const [showNftEditModal, setShowNftEditModal] = useState(false);
+  const [showNftCancelModal, setShowNftCancelModal] = useState(false);
+  const [showNftAcceptModal, setShowNftAcceptModal] = useState(false);
+  const [showNftSendModal, setShowNftSendModal] = useState(false);
   const [alchemyKey, setAlchemyKey] = useState('');
   const [walletAddr, setWalletAddr] = useState('');
 
@@ -1556,6 +2112,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
             {selectedNfts.size > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
                 <button
+                  onClick={() => setShowNftEditModal(true)}
                   style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
@@ -1563,6 +2120,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                   Edit {selectedNfts.size} listing{selectedNfts.size !== 1 ? 's' : ''}
                 </button>
                 <button
+                  onClick={() => setShowNftCancelModal(true)}
                   style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
@@ -1570,6 +2128,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                   Cancel {selectedNfts.size} listing{selectedNfts.size !== 1 ? 's' : ''}
                 </button>
                 <button
+                  onClick={() => setShowNftAcceptModal(true)}
                   style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
@@ -1577,7 +2136,8 @@ export default function WalletDetailClient({ id }: { id: string }) {
                   Accept {selectedNfts.size} offer{selectedNfts.size !== 1 ? 's' : ''}
                 </button>
                 <button
-                  title="Send"
+                  onClick={() => setShowNftSendModal(true)}
+                  title="Send NFTs"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', cursor: 'pointer', color: 'var(--wr-text)', flexShrink: 0 }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
@@ -1880,8 +2440,18 @@ export default function WalletDetailClient({ id }: { id: string }) {
       {tab === 'Address Book' && <AddressBookTab />}
 
       {showTransferModal && <TransferModal wallet={wallet} onClose={() => setShowTransferModal(false)} />}
-      {showSwapModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); return <SwapModal mode="swap" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} onClose={() => setShowSwapModal(false)} />; })()}
-      {showBuyModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); return <SwapModal mode="buy" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} onClose={() => setShowBuyModal(false)} />; })()}
+      {showSwapModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); const wt = tokens.map(x => ({ symbol: x.ticker, name: x.name, color: x.color })); return <SwapModal mode="swap" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} walletTokens={wt} onClose={() => setShowSwapModal(false)} />; })()}
+      {showBuyModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); const wt = tokens.map(x => ({ symbol: x.ticker, name: x.name, color: x.color })); return <SwapModal mode="buy" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} walletTokens={wt} onClose={() => setShowBuyModal(false)} />; })()}
+      {(() => {
+        const selNfts = (liveNfts ?? []).filter(n => selectedNfts.has(n.contract.address + n.token_id));
+        const close = (setter: (v: boolean) => void) => () => { setter(false); setSelectedNfts(new Set()); };
+        return (<>
+          {showNftEditModal   && <NftEditListingModal  nfts={selNfts} onClose={close(setShowNftEditModal)} />}
+          {showNftCancelModal && <NftCancelListingModal nfts={selNfts} onClose={close(setShowNftCancelModal)} />}
+          {showNftAcceptModal && <NftAcceptOfferModal  nfts={selNfts} onClose={close(setShowNftAcceptModal)} />}
+          {showNftSendModal   && <NftSendModal nfts={selNfts} walletAddress={walletAddr} onClose={close(setShowNftSendModal)} />}
+        </>);
+      })()}
     </main>
   );
 }
