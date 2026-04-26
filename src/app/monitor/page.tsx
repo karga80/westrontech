@@ -168,14 +168,52 @@ const ACTIVITY_TAG_STYLE: Record<ActivityTag, { color: string; bg: string; borde
   'Dormant':         { color: '#6E6E6E', bg: '#1a1a1a', border: '#2a2a2a' },
 };
 
+// Tag thresholds — edit here to change classification rules
+const ACTIVITY_THRESHOLDS = {
+  highFrequency:  50,  // txns/month — 50+
+  frequentTrader: 30,  // txns/month — 30–49
+  active:          5,  // txns/month — 5–29
+  lowActivity:     1,  // txns/month — 1–4
+  dormantMonths:   3,  // months of inactivity → Dormant
+};
+
+const AUTO_TAG_THRESHOLDS = {
+  whaleUsd:        500_000,  // total holdings in USD
+  nftCollectorMin: 200,      // NFT count
+  traderVolumeUsd: 50_000,   // monthly trade volume in USD (requires volume data)
+};
+
+function classifyActivityTag(txsPerMonth: number, monthsInactive: number): ActivityTag {
+  if (monthsInactive >= ACTIVITY_THRESHOLDS.dormantMonths) return 'Dormant';
+  if (txsPerMonth >= ACTIVITY_THRESHOLDS.highFrequency)    return 'High Frequency';
+  if (txsPerMonth >= ACTIVITY_THRESHOLDS.frequentTrader)   return 'Frequent Trader';
+  if (txsPerMonth >= ACTIVITY_THRESHOLDS.active)           return 'Active';
+  if (txsPerMonth >= ACTIVITY_THRESHOLDS.lowActivity)      return 'Low Activity';
+  return 'Dormant';
+}
+
+function computeAutoTags(portfolioUsd: number, nftCount: number): string[] {
+  const tags: string[] = [];
+  // Whale and Trader are mutually exclusive — Whale takes priority
+  if (portfolioUsd >= AUTO_TAG_THRESHOLDS.whaleUsd) {
+    tags.push('Whale');
+  } else if (portfolioUsd >= AUTO_TAG_THRESHOLDS.traderVolumeUsd) {
+    tags.push('Trader');
+  }
+  // NFT Collector stacks with any other tag
+  if (nftCount >= AUTO_TAG_THRESHOLDS.nftCollectorMin) tags.push('NFT Collector');
+  return tags;
+}
+
 const MONITORED_WALLETS = [
   {
     address: '0x8d41…3f8A',
     rawAddress: '0x8d41f8c2a3b4e5d6f7a8b9c0d1e2f3a4b5c6d3f8',
     label: 'Main Wallet',
     activityTag: 'Frequent Trader' as ActivityTag,
+    autoTags: ['Trader'] as string[],
     highlighted: false,
-    txns24h: '24',
+    txnsMonth: '35',
     txLast: 'last: 2 min ago',
     holdings: '2 NFTs · 4 Tokens',
     holdingsUsd: '$53,200',
@@ -189,8 +227,9 @@ const MONITORED_WALLETS = [
     rawAddress: '0xD5b8c3a2e1f4b6d7a8c9e0f1a2b3c4d5e6f7f7ca',
     label: 'DeFi Trader',
     activityTag: 'Low Activity' as ActivityTag,
+    autoTags: [] as string[],
     highlighted: true,
-    txns24h: '4',
+    txnsMonth: '3',
     txLast: 'last: 5 min ago',
     holdings: '5 NFTs · 8 Tokens',
     holdingsUsd: '$92,000',
@@ -204,9 +243,10 @@ const MONITORED_WALLETS = [
     rawAddress: '0xA814b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0c2db',
     label: 'Cold Storage',
     activityTag: 'Dormant' as ActivityTag,
+    autoTags: [] as string[],
     highlighted: false,
-    txns24h: '0',
-    txLast: 'last: 1 hr ago',
+    txnsMonth: '0',
+    txLast: 'last: 4 mo ago',
     holdings: '1 Token',
     holdingsUsd: '$2,762',
     pnl30d: '-$2,100 (-5.8%)',
@@ -219,11 +259,12 @@ const MONITORED_WALLETS = [
     rawAddress: '0x9F2da3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d81eb3',
     label: 'Whale Watcher',
     activityTag: 'High Frequency' as ActivityTag,
+    autoTags: ['Whale'] as string[],
     highlighted: false,
-    txns24h: '42',
+    txnsMonth: '62',
     txLast: 'last: 30 sec ago',
     holdings: '22 NFTs · 11 Tokens',
-    holdingsUsd: '$186,400',
+    holdingsUsd: '$686,400',
     pnl30d: '+$28,600 (+22.1%)',
     pnlUp: true,
     connections: '8 connections',
@@ -320,9 +361,9 @@ function parseEth(s: string): number {
 }
 
 const DEFAULT_REL_RULES = [
-  { id: 'sends', label: 'Wallet sends funds', threshold: 5, unit: 'times', enabled: true },
-  { id: 'receives', label: 'Wallet receives funds', threshold: 3, unit: 'times', enabled: false },
-  { id: 'nft_transfer', label: 'NFT transferred to/from wallet', threshold: 2, unit: 'times', enabled: false },
+  { id: 'sends',        label: 'Wallet sends funds',              threshold: 5, unit: 'times', enabled: true },
+  { id: 'receives',     label: 'Wallet receives funds',           threshold: 3, unit: 'times', enabled: true },
+  { id: 'nft_transfer', label: 'NFT transferred to/from wallet',  threshold: 3, unit: 'times', enabled: true },
 ];
 
 type MonitorWallet = typeof MONITORED_WALLETS[0];
@@ -408,7 +449,7 @@ export default function MonitorPage() {
         address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
         rawAddress: w.address,
         label: w.name,
-        txns24h: '—',
+        txnsMonth: '—',
         holdings: '—',
         holdingsUsd: '',
         pnl30d: '—',
@@ -437,13 +478,19 @@ export default function MonitorPage() {
             address: stored[i].address.slice(0, 6) + '…' + stored[i].address.slice(-4),
             rawAddress: stored[i].address,
             label: stored[i].name,
-            txns24h: '—', holdings: '—', holdingsUsd: '', pnl30d: '—', pnlUp: false,
+            txnsMonth: '—', holdings: '—', holdingsUsd: '', pnl30d: '—', pnlUp: false,
+            activityTag: 'Dormant' as ActivityTag, autoTags: [] as string[],
           };
           const { w, snap, txCount } = r.value;
-          const cutoff = Date.now() - 86_400_000;
-          const txs24h = (r.value as typeof r.value & { txs?: AssetTransfer[] }).txs
-            ?.filter(t => new Date(t.metadata?.block_timestamp ?? 0).getTime() > cutoff).length
+          const cutoff30d = Date.now() - 30 * 86_400_000;
+          const txsMonth = (r.value as typeof r.value & { txs?: AssetTransfer[] }).txs
+            ?.filter(t => new Date(t.metadata?.block_timestamp ?? 0).getTime() > cutoff30d).length
             ?? txCount;
+          const lastTx = (r.value as typeof r.value & { txs?: AssetTransfer[] }).txs?.[0];
+          const lastTxMs = lastTx ? new Date(lastTx.metadata?.block_timestamp ?? 0).getTime() : 0;
+          const monthsInactive = lastTxMs > 0 ? (Date.now() - lastTxMs) / (30 * 86_400_000) : 999;
+          const activityTag = classifyActivityTag(txsMonth, monthsInactive);
+          const autoTags = computeAutoTags(snap.portfolio_value_usd, snap.nft_count);
           const nftPart  = snap.nft_count > 0   ? `${snap.nft_count} NFT${snap.nft_count !== 1 ? 's' : ''}` : '';
           const tokPart  = snap.token_count > 0 ? `${snap.token_count} Token${snap.token_count !== 1 ? 's' : ''}` : '';
           const holdings = [nftPart, tokPart].filter(Boolean).join(' · ') || '—';
@@ -452,7 +499,9 @@ export default function MonitorPage() {
             address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
             rawAddress: w.address,
             label: w.name,
-            txns24h: String(txs24h),
+            txnsMonth: String(txsMonth),
+            activityTag,
+            autoTags,
             holdings,
             holdingsUsd: `$${snap.portfolio_value_usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
             pnl30d: '—',
@@ -520,7 +569,7 @@ export default function MonitorPage() {
             className="grid"
             style={{ gridTemplateColumns: '210px 160px 180px 160px 1fr 28px', padding: '9px 20px', backgroundColor: 'var(--wr-surface-alt)', borderBottom: '1px solid var(--wr-border)' }}
           >
-            {['Wallet', '24h Txns', 'Holdings', '30D P&L'].map(h => (
+            {['Wallet', 'Txns/mo', 'Holdings', '30D P&L'].map(h => (
               <span key={h} style={{ color: 'var(--wr-text-3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{h}</span>
             ))}
             {/* Relationship header with settings */}
@@ -623,20 +672,28 @@ export default function MonitorPage() {
                   </span>
                 </div>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: 10, fontWeight: 400 }}>{w.label}</span>
-                {(() => {
-                  const s = ACTIVITY_TAG_STYLE[w.activityTag];
-                  return (
-                    <span className="self-start inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide border"
-                      style={{ color: s.color, backgroundColor: s.bg, borderColor: s.border }}>
-                      {w.activityTag}
+                <div className="flex flex-wrap items-center" style={{ gap: 4 }}>
+                  {(() => {
+                    const s = ACTIVITY_TAG_STYLE[w.activityTag];
+                    return (
+                      <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide border"
+                        style={{ color: s.color, backgroundColor: s.bg, borderColor: s.border }}>
+                        {w.activityTag}
+                      </span>
+                    );
+                  })()}
+                  {w.autoTags.map(tag => (
+                    <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide border"
+                      style={{ color: '#a78bfa', backgroundColor: '#1a0a2e', borderColor: '#4c1d95' }}>
+                      {tag}
                     </span>
-                  );
-                })()}
+                  ))}
+                </div>
               </div>
 
-              {/* 24h Txns */}
+              {/* Txns/mo */}
               <div className="flex flex-col" style={{ gap: 2 }}>
-                <span style={{ color: 'var(--wr-text)', fontSize: 12, fontWeight: 500 }}>{w.txns24h}</span>
+                <span style={{ color: 'var(--wr-text)', fontSize: 12, fontWeight: 500 }}>{w.txnsMonth}</span>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: 10, fontWeight: 400 }}>{w.txLast}</span>
               </div>
 

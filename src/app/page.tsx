@@ -8,7 +8,7 @@ import {
   type AssetTransfer, type PortfolioSnapshot,
 } from '@/lib/tauri';
 import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
-import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, type StoredWallet } from '@/lib/walletStore';
+import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
 import { MOCK_TRANSFERS, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import { useTheme } from '@/lib/themeContext';
@@ -17,7 +17,7 @@ import EthIcon from '@/components/EthIcon';
 const PREVIEW_COUNT = 5;
 
 interface Wallet {
-  id: string; name: string; address: string; badge: string;
+  id: string; name: string; address: string; rawAddress: string; badge: string;
   usdValue: number; change: number; changePct: number;
   nfts: number; floorPnl: number; coins: number; pnl: number;
 }
@@ -28,9 +28,9 @@ interface Tx {
 }
 
 const WALLETS: Wallet[] = [
-  { id: '0', name: 'Main Wallet',   address: '0x3f4a…A91c', badge: 'ETH',   usdValue: 84201.40,  change: 1204.32,  changePct: 1.45,  nfts: 12, floorPnl: -5420, coins: 4, pnl: 1280 },
-  { id: '1', name: 'DeFi Wallet',   address: '0x1234…5678', badge: 'BNB',   usdValue: 38490.87,  change: -270,     changePct: -0.69, nfts: 5,  floorPnl: -270,  coins: 3, pnl: -340 },
-  { id: '2', name: 'Polygon Cold',  address: '0xabcd…ef12', badge: 'MATIC', usdValue: 20141.65,  change: 3800,     changePct: 2.01,  nfts: 8,  floorPnl: 3800,  coins: 6, pnl: 2490 },
+  { id: '0', name: 'Main Wallet',   address: '0x3f4a…A91c', rawAddress: '0x3f4a…A91c', badge: 'ETH',   usdValue: 84201.40,  change: 1204.32,  changePct: 1.45,  nfts: 12, floorPnl: -5420, coins: 4, pnl: 1280 },
+  { id: '1', name: 'DeFi Wallet',   address: '0x1234…5678', rawAddress: '0x1234…5678', badge: 'BNB',   usdValue: 38490.87,  change: -270,     changePct: -0.69, nfts: 5,  floorPnl: -270,  coins: 3, pnl: -340 },
+  { id: '2', name: 'Polygon Cold',  address: '0xabcd…ef12', rawAddress: '0xabcd…ef12', badge: 'MATIC', usdValue: 20141.65,  change: 3800,     changePct: 2.01,  nfts: 8,  floorPnl: 3800,  coins: 6, pnl: 2490 },
 ];
 
 const TRANSACTIONS: Tx[] = [
@@ -100,6 +100,7 @@ function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: 
     address: stored.address.length > 12
       ? `${stored.address.slice(0, 6)}…${stored.address.slice(-4)}`
       : stored.address,
+    rawAddress: stored.address,
     badge: 'ETH',
     usdValue:   snap?.portfolio_value_usd ?? 0,
     change:     0,   // 24h change not available from Alchemy without extra call
@@ -134,9 +135,110 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ─── Edit Wallet Modal ──────────────────────────────────────────────────────
+
+const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
+  wallet: { id: string; name: string; rawAddress: string };
+  allWallets: StoredWallet[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(wallet.name);
+  const [address, setAddress] = useState(wallet.rawAddress);
+  const [error, setError] = useState('');
+
+  const handleSave = () => {
+    const trimmedName = name.trim();
+    const trimmedAddress = address.trim();
+
+    if (!trimmedName) { setError('Wallet name is required.'); return; }
+
+    const addressChanged = trimmedAddress.toLowerCase() !== wallet.rawAddress.toLowerCase();
+    if (addressChanged && !ETH_ADDRESS_RE.test(trimmedAddress)) {
+      setError('Invalid Ethereum address.'); return;
+    }
+
+    const duplicate = allWallets.some(
+      w => w.id !== wallet.id && w.address.toLowerCase() === trimmedAddress.toLowerCase()
+    );
+    if (duplicate) { setError('This address is already tracked.'); return; }
+
+    updateWalletInStore(wallet.id, { name: trimmedName, address: trimmedAddress });
+    onSaved();
+    onClose();
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px',
+    color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)',
+    border: '1px solid var(--wr-border)', padding: '10px 12px',
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div
+        style={{ width: '400px', backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border)', padding: '28px' }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between" style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Edit Wallet</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '6px' }}>
+            Wallet Name
+          </label>
+          <input
+            value={name}
+            onChange={e => { setName(e.target.value); setError(''); }}
+            placeholder="e.g. Main Wallet"
+            style={inputStyle}
+            autoFocus
+          />
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '6px' }}>
+            Wallet Address
+          </label>
+          <input
+            value={address}
+            onChange={e => { setAddress(e.target.value); setError(''); }}
+            placeholder="0x..."
+            style={{ ...inputStyle, letterSpacing: '0.3px' }}
+          />
+        </div>
+
+        {error && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginBottom: '16px' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{
+            flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
+            color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
+            padding: '11px 0', cursor: 'pointer',
+          }}>Cancel</button>
+          <button onClick={handleSave} style={{
+            flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+            color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+            padding: '11px 0', cursor: 'pointer',
+          }}>Save Changes</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  );
+}
+
 // ─── Wallet Card ───────────────────────────────────────────────────────────
 
-function WalletCard({ w, loading, onDelete }: { w: Wallet; loading?: boolean; onDelete?: () => void }) {
+function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boolean; onDelete?: () => void; onEdit?: () => void }) {
   const chg = pnlColor(w.change);
   return (
     <div
@@ -224,6 +326,7 @@ function WalletCard({ w, loading, onDelete }: { w: Wallet; loading?: boolean; on
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
           onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-border-hover)'; }}
           onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
+          onClick={onEdit}
           style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', borderRight: '1px solid var(--wr-border)', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
         >
           Edit
@@ -782,6 +885,7 @@ export default function Dashboard() {
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showDistribute, setShowDistribute] = useState(false);
   const [txExpanded, setTxExpanded] = useState(false);
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string; rawAddress: string } | null>(null);
 
   // ── Live data state ────────────────────────────────────────────────────────
   const [isTauri, setIsTauri] = useState(false);
@@ -943,6 +1047,14 @@ export default function Dashboard() {
     <main className="min-h-full text-white" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)}  />}
       {showDistribute && <DistributeModal  onClose={() => setShowDistribute(false)} />}
+      {editTarget && (
+        <EditWalletModal
+          wallet={editTarget}
+          allWallets={storedWallets}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => setStoredWallets(loadWallets())}
+        />
+      )}
 
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -1043,6 +1155,7 @@ export default function Dashboard() {
                 deleteWallet(w.id);
                 setStoredWallets(loadWallets());
               }}
+              onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
             />
           ))}
         </div>

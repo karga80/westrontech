@@ -45,3 +45,7 @@ export function removeWallet(id: string): void {
   saveWallets(loadWallets().filter(w => w.id !== id));
 }
 
+export function updateWallet(id: string, patch: Partial<Pick<StoredWallet, 'name' | 'address'>>): void {
+  saveWallets(loadWallets().map(w => w.id === id ? { ...w, ...patch } : w));
+}
+

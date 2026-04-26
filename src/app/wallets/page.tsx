@@ -8,7 +8,7 @@ import {
 } from '@/lib/tauri';
 import {
   loadWallets, saveWallets, addWallet as persistWallet, removeWallet as deleteWalletFromStore,
-  type StoredWallet,
+  updateWallet as updateWalletInStore, type StoredWallet,
 } from '@/lib/walletStore';
 import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
@@ -246,6 +246,107 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
   );
 }
 
+// ─── Edit Wallet Modal ───────────────────────────────────────────────────────
+
+const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
+  wallet: Wallet;
+  allWallets: StoredWallet[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(wallet.name);
+  const [address, setAddress] = useState(wallet.rawAddress);
+  const [error, setError] = useState('');
+
+  const handleSave = () => {
+    const trimmedName = name.trim();
+    const trimmedAddress = address.trim();
+
+    if (!trimmedName) { setError('Wallet name is required.'); return; }
+
+    const addressChanged = trimmedAddress.toLowerCase() !== wallet.rawAddress.toLowerCase();
+    if (addressChanged && !ETH_ADDRESS_RE.test(trimmedAddress)) {
+      setError('Invalid Ethereum address.'); return;
+    }
+
+    const duplicate = allWallets.some(
+      w => w.id !== wallet.id && w.address.toLowerCase() === trimmedAddress.toLowerCase()
+    );
+    if (duplicate) { setError('This address is already tracked.'); return; }
+
+    updateWalletInStore(wallet.id, { name: trimmedName, address: trimmedAddress });
+    onSaved();
+    onClose();
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px',
+    color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)',
+    border: '1px solid var(--wr-border)', padding: '10px 12px',
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <div
+        style={{ width: '400px', backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border)', padding: '28px' }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between" style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Edit Wallet</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '6px' }}>
+            Wallet Name
+          </label>
+          <input
+            value={name}
+            onChange={e => { setName(e.target.value); setError(''); }}
+            placeholder="e.g. Main Wallet"
+            style={inputStyle}
+            autoFocus
+          />
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '6px' }}>
+            Wallet Address
+          </label>
+          <input
+            value={address}
+            onChange={e => { setAddress(e.target.value); setError(''); }}
+            placeholder="0x..."
+            style={{ ...inputStyle, fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.3px' }}
+          />
+        </div>
+
+        {error && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginBottom: '16px' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{
+            flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
+            color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
+            padding: '11px 0', cursor: 'pointer',
+          }}>Cancel</button>
+          <button onClick={handleSave} style={{
+            flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+            color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+            padding: '11px 0', cursor: 'pointer',
+          }}>Save Changes</button>
+        </div>
+      </div>
+    </ModalBackdrop>
+  );
+}
+
 // ─── Distribute Funds Modal ──────────────────────────────────────────────────
 
 type DistStep = 1 | 2 | 3;
@@ -471,7 +572,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
 
 // ─── Wallet Card ─────────────────────────────────────────────────────────────
 
-function WalletCard({ w, loading, onDelete }: { w: Wallet; loading?: boolean; onDelete: () => void }) {
+function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boolean; onDelete: () => void; onEdit: () => void }) {
   const chg = pnlColor(w.change);
   return (
     <div
@@ -556,6 +657,15 @@ function WalletCard({ w, loading, onDelete }: { w: Wallet; loading?: boolean; on
         </Link>
         <button
           className="flex-1 h-full cursor-pointer"
+          onClick={e => { e.preventDefault(); onEdit(); }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', borderRight: '1px solid var(--wr-border)', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
+        >
+          Edit
+        </button>
+        <button
+          className="flex-1 h-full cursor-pointer"
           onClick={e => { e.preventDefault(); onDelete(); }}
           onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
@@ -574,6 +684,7 @@ export default function WalletsPage() {
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showDistribute, setShowDistribute] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Wallet | null>(null);
+  const [editTarget, setEditTarget] = useState<Wallet | null>(null);
 
   const [storedWallets, setStoredWallets] = useState<StoredWallet[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, PortfolioSnapshot>>({});
@@ -622,6 +733,7 @@ export default function WalletsPage() {
   const totalCoins = wallets.reduce((acc, w) => acc + w.coins, 0);
 
   const handleDelete = (w: Wallet) => setDeleteTarget(w);
+  const handleEdit = (w: Wallet) => setEditTarget(w);
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -691,7 +803,7 @@ export default function WalletsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
             {wallets.map(w => (
-              <WalletCard key={w.id} w={w} loading={loadingData} onDelete={() => handleDelete(w)} />
+              <WalletCard key={w.id} w={w} loading={loadingData} onDelete={() => handleDelete(w)} onEdit={() => handleEdit(w)} />
             ))}
             {/* Add wallet card */}
             <button
@@ -717,6 +829,14 @@ export default function WalletsPage() {
       )}
       {deleteTarget && (
         <DeleteModal wallet={deleteTarget} onConfirm={confirmDelete} onClose={() => setDeleteTarget(null)} />
+      )}
+      {editTarget && (
+        <EditWalletModal
+          wallet={editTarget}
+          allWallets={storedWallets}
+          onClose={() => setEditTarget(null)}
+          onSaved={refresh}
+        />
       )}
     </div>
   );
