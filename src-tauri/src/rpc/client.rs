@@ -75,22 +75,34 @@ impl AlchemyClient {
         Ok(result.token_balances)
     }
 
-    /// Transaction geçmişi (Alchemy enhanced API)
+    /// Transaction geçmişi — both incoming (toAddress) and outgoing (fromAddress)
+    /// are fetched in parallel, merged, deduplicated by hash, and sorted newest-first.
     pub async fn get_asset_transfers(
         &self,
         address: &str,
         from_block: &str,
     ) -> Result<Vec<AssetTransfer>, String> {
-        let req = RpcRequest::new(
+        let req_in = RpcRequest::new(
             "alchemy_getAssetTransfers",
-            serde_json::json!({
+            serde_json::json!([{
                 "fromBlock": from_block,
                 "toAddress": address,
                 "category": ["external", "erc20", "erc721", "erc1155"],
-                "withMetadata": false,
-                "excludeZeroValue": true,
+                "withMetadata": true,
+                "excludeZeroValue": false,
                 "maxCount": "0x64"
-            }),
+            }]),
+        );
+        let req_out = RpcRequest::new(
+            "alchemy_getAssetTransfers",
+            serde_json::json!([{
+                "fromBlock": from_block,
+                "fromAddress": address,
+                "category": ["external", "erc20", "erc721", "erc1155"],
+                "withMetadata": true,
+                "excludeZeroValue": false,
+                "maxCount": "0x64"
+            }]),
         );
 
         #[derive(serde::Deserialize)]
@@ -98,8 +110,31 @@ impl AlchemyClient {
             transfers: Vec<AssetTransfer>,
         }
 
-        let result: TransferResult = self.call(&req).await?;
-        Ok(result.transfers)
+        let (res_in, res_out) = tokio::join!(
+            self.call::<TransferResult>(&req_in),
+            self.call::<TransferResult>(&req_out),
+        );
+
+        let mut all: Vec<AssetTransfer> = res_in.map(|r| r.transfers).unwrap_or_default();
+        let outgoing: Vec<AssetTransfer> = res_out.map(|r| r.transfers).unwrap_or_default();
+
+        // Deduplicate by hash (self-transfers appear on both sides)
+        let mut seen: std::collections::HashSet<String> =
+            all.iter().map(|t| t.hash.clone()).collect();
+        for tx in outgoing {
+            if seen.insert(tx.hash.clone()) {
+                all.push(tx);
+            }
+        }
+
+        // Sort newest-first by block number
+        all.sort_by(|a, b| {
+            let a_n = u64::from_str_radix(a.block_num.trim_start_matches("0x"), 16).unwrap_or(0);
+            let b_n = u64::from_str_radix(b.block_num.trim_start_matches("0x"), 16).unwrap_or(0);
+            b_n.cmp(&a_n)
+        });
+
+        Ok(all)
     }
 
     /// Outgoing NFT transfer geçmişi (fromAddress bazlı)
@@ -110,14 +145,14 @@ impl AlchemyClient {
     ) -> Result<Vec<AssetTransfer>, String> {
         let req = RpcRequest::new(
             "alchemy_getAssetTransfers",
-            serde_json::json!({
+            serde_json::json!([{
                 "fromBlock": from_block,
                 "fromAddress": address,
                 "category": ["erc721", "erc1155"],
                 "withMetadata": true,
                 "excludeZeroValue": false,
                 "maxCount": "0x64"
-            }),
+            }]),
         );
 
         #[derive(serde::Deserialize)]
@@ -137,14 +172,14 @@ impl AlchemyClient {
     ) -> Result<Vec<AssetTransfer>, String> {
         let req = RpcRequest::new(
             "alchemy_getAssetTransfers",
-            serde_json::json!({
+            serde_json::json!([{
                 "fromBlock": from_block,
                 "toAddress": address,
                 "category": ["erc721", "erc1155"],
                 "withMetadata": true,
                 "excludeZeroValue": false,
                 "maxCount": "0x64"
-            }),
+            }]),
         );
 
         #[derive(serde::Deserialize)]

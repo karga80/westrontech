@@ -4,16 +4,32 @@ import Link from 'next/link';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startBackgroundPolling,
-  realtimeInit, realtimeSetWatchSet,
-  type AssetTransfer, type PortfolioSnapshot,
+  realtimeInit, realtimeSetWatchSet, getPnlSummary,
+  type AssetTransfer, type PortfolioSnapshot, type PnlSummary,
 } from '@/lib/tauri';
 import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
-import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
-import { MOCK_TRANSFERS, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { loadWallets, loadOwnedWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import { useTheme } from '@/lib/themeContext';
 import EthIcon from '@/components/EthIcon';
+import { MOCK_TRANSFERS } from '@/lib/mockData';
+import { formatBlockNum, parseHexBlock, formatChangePct } from '@/lib/formatters';
 
+// ─── Daily snapshot helpers (24h change) ──────────────────────────────────────
+
+const DAILY_SNAP_KEY = 'westron_daily_snap';
+interface DailySnap { date: string; values: Record<string, number> }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function loadDailySnap(): DailySnap | null {
+  if (typeof window === 'undefined') return null;
+  try { return JSON.parse(localStorage.getItem(DAILY_SNAP_KEY) ?? 'null'); } catch { return null; }
+}
+function writeDailySnap(snap: DailySnap) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DAILY_SNAP_KEY, JSON.stringify(snap));
+}
+
+/** Number of transactions shown in the collapsed preview before "Show all". */
 const PREVIEW_COUNT = 5;
 
 interface Wallet {
@@ -27,35 +43,12 @@ interface Tx {
   age: string; from: string; to: string; token: string; amount: string; gas: string;
 }
 
-const WALLETS: Wallet[] = [
-  { id: '0', name: 'Main Wallet',   address: '0x3f4a…A91c', rawAddress: '0x3f4a…A91c', badge: 'ETH',   usdValue: 84201.40,  change: 1204.32,  changePct: 1.45,  nfts: 12, floorPnl: -5420, coins: 4, pnl: 1280 },
-  { id: '1', name: 'DeFi Wallet',   address: '0x1234…5678', rawAddress: '0x1234…5678', badge: 'BNB',   usdValue: 38490.87,  change: -270,     changePct: -0.69, nfts: 5,  floorPnl: -270,  coins: 3, pnl: -340 },
-  { id: '2', name: 'Polygon Cold',  address: '0xabcd…ef12', rawAddress: '0xabcd…ef12', badge: 'MATIC', usdValue: 20141.65,  change: 3800,     changePct: 2.01,  nfts: 8,  floorPnl: 3800,  coins: 6, pnl: 2490 },
-];
-
-const TRANSACTIONS: Tx[] = [
-  { hash: '0x8aDf73c1a4…', type: 'Receive',              block: '1847343', age: '1 hr ago',    from: '0x6a4b…2sd8', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.5 ETH',   gas: '0.00003157' },
-  { hash: '0x9aB2cd4f88…', type: 'NFT Buy',              block: '1847217', age: '2 hrs ago',   from: '0xbc4c…f13d', to: '0x1234…5678', token: 'NFT',  amount: '1 NFT',     gas: '0.00000892' },
-  { hash: '0x3fc81dAe22…', type: 'Sent',                 block: '1846891', age: '3 hrs ago',   from: '0x3f4a…A91c', to: '0x7f2e…B3c1', token: 'ETH',  amount: '0.1 ETH',   gas: '0.00002841' },
-  { hash: '0x5c29a31234…', type: 'Swap Buy',             block: '1845430', age: '14 hrs ago',  from: '0xabcd…ef12', to: '0xabcd…ef12', token: 'ETH',  amount: '1.5 ETH',   gas: '0.00004213' },
-  { hash: '0x1a8c9b7e55…', type: 'Contract Interaction', block: '1844210', age: '1 day ago',   from: '0x3f4a…A91c', to: '0x1234…5678', token: 'ETH',  amount: '1.5 ETH',   gas: '0.00001764' },
-  { hash: '0xf4E2a1b9cc…', type: 'NFT Sell',             block: '1843902', age: '1 day ago',   from: '0x92ab…4F1e', to: '0xabcd…ef12', token: 'NFT',  amount: '1 NFT',     gas: '0.00002100' },
-  { hash: '0xc3D7e48f21…', type: 'Sent',                 block: '1843488', age: '2 days ago',  from: '0x1234…5678', to: '0x5d3a…C8f2', token: 'USDC', amount: '500 USDC',  gas: '0.00003880' },
-  { hash: '0xa1B9f2c7d4…', type: 'NFT Mint',             block: '1842711', age: '2 days ago',  from: '0x3f4a…A91c', to: '0xe4b1…9A3d', token: 'NFT',  amount: '1 NFT',     gas: '0.00007241' },
-  { hash: '0x7dC4b39e01…', type: 'Sweep',                block: '1841990', age: '3 days ago',  from: '0x1234…5678', to: '0x1234…5678', token: 'NFT',  amount: '3 NFTs',    gas: '0.00005512' },
-  { hash: '0x2eF8a17c90…', type: 'Receive',              block: '1841203', age: '3 days ago',  from: '0x3b7f…D2c9', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.75 ETH',  gas: '0.00001943' },
-  { hash: '0xb5A3d92f44…', type: 'NFT Sent',             block: '1840517', age: '4 days ago',  from: '0xabcd…ef12', to: '0x8c2e…5B7a', token: 'NFT',  amount: '1 NFT',     gas: '0.00002610' },
-  { hash: '0x9cE1f74b38…', type: 'Approve',              block: '1839844', age: '5 days ago',  from: '0x1234…5678', to: '0xabcd…ef12', token: 'USDC', amount: '—',         gas: '0.00001320' },
-  { hash: '0x4aF6c28d55…', type: 'NFT Offer',            block: '1839120', age: '5 days ago',  from: '0xd19a…7F4b', to: '0xabcd…ef12', token: 'NFT',  amount: '2.1 ETH',   gas: '0.00009870' },
-  { hash: '0x6bD0e31a77…', type: 'Swap Buy',             block: '1838401', age: '6 days ago',  from: '0x3f4a…A91c', to: '0x3f4a…A91c', token: 'DAI',  amount: '1200 DAI',  gas: '0.00004455' },
-  { hash: '0x1dA5b84c62…', type: 'Sent',                 block: '1837688', age: '7 days ago',  from: '0x3f4a…A91c', to: '0x1234…5678', token: 'ETH',  amount: '2.0 ETH',   gas: '0.00002987' },
-];
 
 // ─── Live data helpers ──────────────────────────────────────────────────────
 
 // Map Alchemy AssetTransfer → internal Tx shape
 function mapTransfer(t: AssetTransfer, walletAddress: string): Tx {
-  const blockDec = parseInt(t.block_num, 16);
+  const blockDec = parseHexBlock(t.block_num);
   const isOutgoing = t.from.toLowerCase() === walletAddress.toLowerCase();
   const typeMap: Record<string, keyof typeof TX_TYPE_VARIANT> = {
     external: isOutgoing ? 'Sent' : 'Receive',
@@ -93,7 +86,10 @@ function mapTransfer(t: AssetTransfer, walletAddress: string): Tx {
 }
 
 // Build a Wallet display object from stored wallet + live snapshot
-function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: number): Wallet {
+function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, baselineUsd: number | null): Wallet {
+  const currentUsd = snap?.portfolio_value_usd ?? 0;
+  const change = baselineUsd != null ? currentUsd - baselineUsd : 0;
+  const changePct = baselineUsd != null && baselineUsd > 0 ? (change / baselineUsd) * 100 : 0;
   return {
     id: stored.id,
     name: stored.name,
@@ -102,13 +98,13 @@ function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: 
       : stored.address,
     rawAddress: stored.address,
     badge: 'ETH',
-    usdValue:   snap?.portfolio_value_usd ?? 0,
-    change:     0,   // 24h change not available from Alchemy without extra call
-    changePct:  0,
-    nfts:       snap?.nft_count ?? 0,
-    floorPnl:   0,
-    coins:      snap?.token_count ?? 0,
-    pnl:        0,
+    usdValue:  currentUsd,
+    change,
+    changePct,
+    nfts:      snap?.nft_count ?? 0,
+    floorPnl:  0,
+    coins:     snap?.token_count ?? 0,
+    pnl:       0,
   };
 }
 
@@ -286,7 +282,7 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
         <div className="flex items-center" style={{ gap: '4px' }}>
           <span style={{ color: chg, fontSize: '10px' }}>{w.change >= 0 ? '↑' : '↓'}</span>
           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: chg, fontVariantNumeric: 'tabular-nums' }}>
-            {w.change >= 0 ? '+' : ''}${Math.abs(w.change).toLocaleString()} ({w.change >= 0 ? '+' : ''}{w.changePct.toFixed(2)}%)
+            {w.change >= 0 ? '+' : ''}${Math.abs(w.change).toLocaleString()} ({formatChangePct(w.changePct)})
           </span>
         </div>
       </div>
@@ -371,11 +367,13 @@ function ModalBackdrop({ onClose, children }: { onClose: () => void; children: R
 
 type AddWalletTab = 'import' | 'watch';
 
-function AddWalletModal({ onClose }: { onClose: () => void }) {
+function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded?: () => void }) {
   const [tab, setTab] = useState<AddWalletTab>('import');
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const FIELD = {
     fontFamily: 'var(--font-jetbrains)',
@@ -456,8 +454,14 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
                 className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
-                Watch-only wallets are read-only — no signing.
+                Watch-only — no signing. Appears in <strong style={{ color: 'var(--wr-text-2)' }}>Monitor → Wallets</strong> only, not in your dashboard wallet list.
               </div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff4444', padding: '8px 12px', border: '1px solid #ff444433', backgroundColor: '#ff44440d' }}>
+              {error}
             </div>
           )}
 
@@ -469,10 +473,31 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
             }}>Cancel</button>
             <button
               className="btn-cta"
-              onClick={() => {
-                const addr = tab === 'import' ? key : address;
-                if (!addr.trim() || !name.trim()) return;
-                persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr.trim() });
+              disabled={saving}
+              onClick={async () => {
+                setError('');
+                if (!name.trim()) { setError('Enter a wallet name.'); return; }
+                let finalAddress = '';
+                if (tab === 'import') {
+                  const rawKey = key.trim();
+                  if (!rawKey) { setError('Enter a private key.'); return; }
+                  try {
+                    const { privateKeyToAddress } = await import('viem/accounts');
+                    const hex = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`;
+                    finalAddress = privateKeyToAddress(hex as `0x${string}`);
+                  } catch {
+                    setError('Invalid private key.');
+                    return;
+                  }
+                } else {
+                  finalAddress = address.trim();
+                  if (!finalAddress) { setError('Enter a wallet address.'); return; }
+                  if (!/^0x[0-9a-fA-F]{40}$/.test(finalAddress)) { setError('Invalid Ethereum address.'); return; }
+                }
+                setSaving(true);
+                // 'import' tab = private key wallet (owned). 'watch' tab = monitor-only (watched).
+                persistWallet({ id: Date.now().toString(), name: name.trim(), address: finalAddress, kind: tab === 'import' ? 'owned' : 'watched' });
+                onAdded?.();
                 onClose();
               }}
               style={{
@@ -523,7 +548,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [sourceOpen]);
 
-  const allWallets = loadWallets();
+  const allWallets = loadOwnedWallets();
   const source = allWallets.find(w => w.id === sourceId);
   // Destinations = all wallets minus the source
   const destWallets = allWallets.filter(w => w.id !== sourceId);
@@ -550,6 +575,10 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
       ? parseFloat(equalAmount) > 0
       : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
 
+  // TODO(launch): replace simulation with real tx broadcasting + receipt polling.
+  // DEV_DELAYS simulate per-item stagger (STAGGER_MS) and block confirmation (CONFIRM_MS).
+  const DEV_DELAYS = { STAGGER_MS: 1800, CONFIRM_MS: 2000 } as const;
+
   // Simulate tx processing when step 3 is reached
   useEffect(() => {
     if (step !== 3) return;
@@ -561,8 +590,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
         setTxStatuses(prev => { const n = [...prev]; n[i] = 'Processing'; return n; });
         timers.push(setTimeout(() => {
           setTxStatuses(prev => { const n = [...prev]; n[i] = 'Confirmed'; return n; });
-        }, 2000));
-      }, i * 1800));
+        }, DEV_DELAYS.CONFIRM_MS));
+      }, i * DEV_DELAYS.STAGGER_MS));
     });
     return () => timers.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -865,9 +894,9 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
 // ─── Address Cell ──────────────────────────────────────────────────────────
 
 function AddrCell({ addr }: { addr: string }) {
-  const wallet = WALLETS.find(w => w.address === addr);
-  if (wallet) {
-    return <Tag variant={WALLET_TOKEN_VARIANT[wallet.badge] ?? 'neutral'}>{wallet.name}</Tag>;
+  const match = loadWallets().find(w => w.address.toLowerCase() === addr.toLowerCase());
+  if (match) {
+    return <Tag variant="neutral">{match.name}</Tag>;
   }
   return (
     <div className="flex items-center min-w-0" style={{ gap: '4px' }}>
@@ -894,13 +923,18 @@ export default function Dashboard() {
   const [snapshots, setSnapshots] = useState<Record<string, PortfolioSnapshot>>({});
   const [liveTransactions, setLiveTransactions] = useState<Tx[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [dailyBaseline, setDailyBaseline] = useState<Record<string, number>>({});
+  const [pnlSummaries, setPnlSummaries] = useState<Record<string, PnlSummary>>({});
 
   // Detect Tauri + bootstrap wallets + API key
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     setIsTauri(inTauri);
-    const wallets = loadWallets();
+    const wallets = loadOwnedWallets();
     setStoredWallets(wallets);
+    const storedSnap = loadDailySnap();
+    if (storedSnap) setDailyBaseline(storedSnap.values);
 
     if (inTauri) {
       // If there are no wallets, nothing to load — clear the loading state.
@@ -911,13 +945,10 @@ export default function Dashboard() {
           // No API key configured → don't block the UI on a fetch that won't happen.
           else setLoadingData(false);
         })
-        .catch(() => { setLoadingData(false); });
+        .catch(() => { setDataError('Failed to load API key'); setLoadingData(false); });
     } else {
-      // Browser mode — use mock data immediately
-      const mockSnaps: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { mockSnaps[w.id] = MOCK_PORTFOLIO_SNAPSHOT; });
-      setSnapshots(mockSnaps);
-      setLiveTransactions(MOCK_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
+      // Browser / dev mode — use mock data so the UI is never blank
+      setLiveTransactions(MOCK_TRANSFERS.map(t => mapTransfer(t, MOCK_TRANSFERS[0]?.to ?? '')));
       setLoadingData(false);
     }
   }, []);
@@ -945,14 +976,55 @@ export default function Dashboard() {
         snapEntries.forEach(r => { if (r.status === 'fulfilled') newSnaps[r.value.id] = r.value.snap; });
         setSnapshots(newSnaps);
 
-        // Fetch transactions for first wallet (merge later)
-        const primaryWallet = storedWallets[0];
-        try {
-          const transfers = await getAssetTransfers(primaryWallet.address, apiKey);
-          if (!cancelled) {
-            setLiveTransactions(transfers.map(t => mapTransfer(t, primaryWallet.address)));
-          }
-        } catch {}
+        // Update daily baseline — only writes when the date changes
+        const today = todayStr();
+        const existingSnap = loadDailySnap();
+        if (!existingSnap || existingSnap.date !== today) {
+          const baseline: Record<string, number> = {};
+          Object.entries(newSnaps).forEach(([id, s]) => { baseline[id] = s.portfolio_value_usd; });
+          writeDailySnap({ date: today, values: baseline });
+          if (!cancelled) setDailyBaseline(baseline);
+        }
+
+        // Fetch PnL for all wallets in background
+        Promise.allSettled(
+          storedWallets.map(w => getPnlSummary(w.address, apiKey).then(p => ({ id: w.id, pnl: p })))
+        ).then(results => {
+          if (cancelled) return;
+          const map: Record<string, PnlSummary> = {};
+          results.forEach(r => { if (r.status === 'fulfilled') map[r.value.id] = r.value.pnl; });
+          setPnlSummaries(map);
+        }).catch((e: unknown) => { if (!cancelled) setDataError(e instanceof Error ? e.message : 'Failed to load PnL data'); });
+
+        // Fetch transactions for ALL wallets, merge newest-first
+        const txResults = await Promise.allSettled(
+          storedWallets.map(w =>
+            getAssetTransfers(w.address, apiKey).then(transfers =>
+              transfers.map(t => mapTransfer(t, w.address))
+            )
+          )
+        );
+        if (!cancelled) {
+          const seen = new Set<string>();
+          const merged: Tx[] = [];
+          txResults.forEach(r => {
+            if (r.status === 'fulfilled') {
+              r.value.forEach(tx => {
+                if (!seen.has(tx.hash)) {
+                  seen.add(tx.hash);
+                  merged.push(tx);
+                }
+              });
+            }
+          });
+          // Sort by block number descending (Rust already sorted per-wallet; re-sort after merge)
+          merged.sort((a, b) => {
+            const an = formatBlockNum(a.block);
+            const bn = formatBlockNum(b.block);
+            return bn - an;
+          });
+          setLiveTransactions(merged);
+        }
 
         // Start background polling daemon (idempotent — Rust guards against double-start)
         if (!cancelled && storedWallets.length > 0) {
@@ -971,7 +1043,7 @@ export default function Dashboard() {
               priceSymbols: ['ETH', 'USDC', 'USDT', 'WETH'],
               subscribeBlocks: true,
             });
-          } catch (e) { /* eslint-disable-next-line no-console */ console.warn('realtime bootstrap:', e); }
+          } catch (_e) { /* realtime is best-effort — silent failure is acceptable */ }
         }
       } finally {
         // Always release the loading state — never leave the UI stuck if a
@@ -1030,29 +1102,32 @@ export default function Dashboard() {
   }, [realtimeConn?.connected]);
 
   // Build display wallets from stored + snapshots
-  const displayWallets: Wallet[] = storedWallets.length > 0
-    ? storedWallets.map((w, i) => buildWallet(w, snapshots[w.id] ?? null, i))
-    : WALLETS;
+  const displayWallets: Wallet[] = storedWallets.map(
+    w => buildWallet(w, snapshots[w.id] ?? null, dailyBaseline[w.id] ?? null)
+  );
 
-  const displayTransactions = liveTransactions.length > 0 ? liveTransactions : TRANSACTIONS;
+  const displayTransactions = liveTransactions;
 
   const totalPortfolioUsd = Object.values(snapshots).reduce((s, snap) => s + snap.portfolio_value_usd, 0);
   const totalNfts = Object.values(snapshots).reduce((s, snap) => s + snap.nft_count, 0);
   const totalCoins = Object.values(snapshots).reduce((s, snap) => s + snap.token_count, 0);
   const totalAssets = totalNfts + totalCoins;
 
-  const pnl7d = 8204.15; // Placeholder until 7d PnL endpoint is added
+  const ethPriceUsd = Object.values(snapshots)[0]?.eth_price_usd ?? 0;
+  const allPnlEntries = Object.entries(pnlSummaries);
+  const totalPnlEth = allPnlEntries.reduce((s, [, p]) => s + p.realized_pnl_eth + p.unrealized_pnl_eth, 0);
+  const pnl7dUsd = allPnlEntries.length > 0 && ethPriceUsd > 0 ? totalPnlEth * ethPriceUsd : null;
 
   return (
     <main className="min-h-full text-white" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)}  />}
+      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)} onAdded={() => setStoredWallets(loadOwnedWallets())} />}
       {showDistribute && <DistributeModal  onClose={() => setShowDistribute(false)} />}
       {editTarget && (
         <EditWalletModal
           wallet={editTarget}
           allWallets={storedWallets}
           onClose={() => setEditTarget(null)}
-          onSaved={() => setStoredWallets(loadWallets())}
+          onSaved={() => setStoredWallets(loadOwnedWallets())}
         />
       )}
 
@@ -1071,13 +1146,18 @@ export default function Dashboard() {
         {[
           {
             label: 'Total Portfolio',
-            value: loadingData ? '—' : `$${(totalPortfolioUsd || 142834.92).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: loadingData ? '—' : `$${totalPortfolioUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             valueColor: 'var(--wr-text)', subUp: true, subColor: 'var(--wr-accent)', sub: loadingData ? 'Loading…' : 'Across all wallets',
           },
           {
-            label: '7D PnL',
-            value: pnl7d >= 0 ? `+$${pnl7d.toLocaleString()}` : `-$${Math.abs(pnl7d).toLocaleString()}`,
-            valueColor: pnl7d >= 0 ? 'var(--wr-accent)' : '#f87171', subUp: pnl7d >= 0, subColor: pnl7d >= 0 ? 'var(--wr-accent)' : '#f87171', sub: '+6.10% vs last week',
+            label: 'Total PnL',
+            value: pnl7dUsd != null
+              ? (pnl7dUsd >= 0 ? `+$${Math.abs(pnl7dUsd).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : `-$${Math.abs(pnl7dUsd).toLocaleString('en-US', { maximumFractionDigits: 0 })}`)
+              : loadingData ? '—' : '$0',
+            valueColor: pnl7dUsd == null || pnl7dUsd >= 0 ? 'var(--wr-accent)' : '#f87171',
+            subUp: pnl7dUsd == null || pnl7dUsd >= 0,
+            subColor: pnl7dUsd == null || pnl7dUsd >= 0 ? 'var(--wr-accent)' : '#f87171',
+            sub: pnl7dUsd != null ? `${totalPnlEth >= 0 ? '+' : ''}${totalPnlEth.toFixed(4)} ETH` : loadingData ? 'Loading…' : 'No trades found',
           },
           {
             label: 'Wallets',
@@ -1086,8 +1166,8 @@ export default function Dashboard() {
           },
           {
             label: 'Assets',
-            value: loadingData ? '—' : String(totalAssets || 23),
-            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: `${totalNfts || '—'} NFTs · ${totalCoins || '—'} tokens`,
+            value: loadingData ? '—' : String(totalAssets),
+            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: `${totalNfts} NFTs · ${totalCoins} tokens`,
           },
         ].map((card, i) => (
           <div key={i} style={{ backgroundColor: 'var(--wr-surface)', padding: '24px' }}>
@@ -1148,17 +1228,32 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-3" style={{ gap: '16px' }}>
-          {displayWallets.map(w => (
-            <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
-              onDelete={() => {
-                deleteWallet(w.id);
-                setStoredWallets(loadWallets());
-              }}
-              onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
-            />
-          ))}
-        </div>
+        {displayWallets.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '12px' }}>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text-3)', letterSpacing: '1px' }}>
+              No wallets added yet
+            </div>
+            <button
+              onClick={() => setShowAddWallet(true)}
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.05em' }}
+            >
+              + ADD YOUR FIRST WALLET
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3" style={{ gap: '16px' }}>
+            {displayWallets.map(w => (
+              <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
+                onDelete={() => {
+                  deleteWallet(w.id);
+                  setStoredWallets(prev => prev.filter(sw => sw.id !== w.id));
+                  setSnapshots(prev => { const next = { ...prev }; delete next[w.id]; return next; });
+                }}
+                onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Transactions section container */}
@@ -1187,6 +1282,11 @@ export default function Dashboard() {
           </div>
 
           {/* Rows */}
+          {displayTransactions.length === 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px' }}>
+              {loadingData ? 'Loading transactions…' : dataError ? dataError : 'No transactions yet — add a wallet to get started'}
+            </div>
+          )}
           <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#3a3a3a #0A0A0A' } : {}}>
           {(txExpanded ? displayTransactions : displayTransactions.slice(0, PREVIEW_COUNT)).map((tx, i) => (
             <div

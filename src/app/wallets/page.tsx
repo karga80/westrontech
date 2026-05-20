@@ -219,7 +219,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                     const cleanKey = key.trim().startsWith('0x') ? key.trim().slice(2) : key.trim();
                     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
                     if (inTauri) await importWallet({ address: addr, private_key_hex: cleanKey });
-                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr, kind: 'owned' });
                     onAdded();
                     onClose();
                   } catch (e) {
@@ -228,7 +228,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                     setImporting(false);
                   }
                 } else {
-                  persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+                  persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr, kind: 'watched' });
                   onAdded();
                   onClose();
                 }

@@ -51,7 +51,11 @@ export default function PortfolioAnalyticsPage() {
   }, []);
 
   const totalReturn  = pnl ? `${(pnl.realized_pnl_eth >= 0 ? '+' : '')}${pnl.realized_pnl_eth.toFixed(3)} ETH` : '$12,847.32';
-  const returnSub    = pnl && snap ? `${pnl.realized_pnl_eth >= 0 ? '+' : ''}${((pnl.realized_pnl_eth / (snap.eth_balance || 1)) * 100).toFixed(1)}%` : '+28.4%';
+  // Use eth_balance > 0 guard instead of || 1 — a zero balance is valid and || 1
+  // would silently fabricate a meaningless percentage.
+  const returnSub    = pnl && snap && snap.eth_balance > 0
+    ? `${pnl.realized_pnl_eth >= 0 ? '+' : ''}${((pnl.realized_pnl_eth / snap.eth_balance) * 100).toFixed(1)}%`
+    : pnl && snap ? '—' : '+28.4%';
   const totalTrades  = pnl ? String(pnl.trade_count) : '1,434';
   const winRate      = pnl && pnl.trade_count > 0 ? ((pnl.win_count / pnl.trade_count) * 100).toFixed(2) + '%' : '49.45%';
   const portfolioUsd = snap ? `$${snap.portfolio_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$284,521.40';

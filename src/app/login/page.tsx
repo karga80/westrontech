@@ -161,7 +161,7 @@ function ImportStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
     const key  = privateKey.trim().startsWith('0x') ? privateKey.trim().slice(2) : privateKey.trim();
     try {
       if (isTauri) await importWallet({ address: addr, private_key_hex: key });
-      addWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+      addWallet({ id: Date.now().toString(), name: name.trim(), address: addr, kind: 'owned' });
       onDone();
     } catch (e) {
       setError(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -275,7 +275,7 @@ function WatchStep({ onBack, onDone }: { onBack: () => void; onDone: () => void 
     if (!isValidAddress(address)) { setError('Invalid Ethereum address (0x + 40 hex characters).'); return; }
 
     setSaving(true);
-    addWallet({ id: Date.now().toString(), name: name.trim(), address: address.trim().toLowerCase() });
+    addWallet({ id: Date.now().toString(), name: name.trim(), address: address.trim().toLowerCase(), kind: 'watched' });
     onDone();
   };
 

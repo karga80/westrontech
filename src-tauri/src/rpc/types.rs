@@ -53,10 +53,18 @@ pub struct AssetTransfer {
     pub value: Option<f64>,
     pub asset: Option<String>,
     pub category: String,
+    #[serde(rename = "blockNum")]
     pub block_num: String,
     #[serde(rename = "tokenId")]
     pub token_id: Option<String>,
     pub metadata: Option<AssetTransferMetadata>,
+    #[serde(rename = "rawContract")]
+    pub raw_contract: Option<RawContract>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RawContract {
+    pub address: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

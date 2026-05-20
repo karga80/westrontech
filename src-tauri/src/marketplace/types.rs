@@ -193,3 +193,11 @@ pub struct CollectionTrait {
     pub category: String,
     pub values: Vec<TraitValue>,
 }
+
+/// Per-token enrichment data fetched from OpenSea
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NftDetail {
+    pub rarity_rank: Option<u64>,
+    pub listing_price_eth: Option<f64>,
+    pub top_offer_eth: Option<f64>,
+}

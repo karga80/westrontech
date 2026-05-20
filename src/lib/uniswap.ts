@@ -102,7 +102,8 @@ export async function getSwapQuote(params: {
     calldata: mp.calldata as `0x${string}`,
     value: BigInt(mp.value ?? '0x0'),
     routerAddress: (mp.to ?? UNIVERSAL_ROUTER) as `0x${string}`,
-    priceImpact: q.priceImpact != null ? `${Number(q.priceImpact).toFixed(2)}%` : '<0.01%',
+    // The API may return non-numeric strings like "<0.01" or "N/A" — guard with isFinite.
+    priceImpact: (() => { const pi = Number(q.priceImpact); return Number.isFinite(pi) ? `${pi.toFixed(2)}%` : '<0.01%'; })(),
     isNativeIn: tokenIn === 'ETH',
   };
 }

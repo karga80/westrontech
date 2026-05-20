@@ -633,6 +633,17 @@ async fn fetch_collection_traits(collection_slug: String, total_supply: u64) -> 
     marketplace::fetch_collection_traits(&collection_slug, total_supply, &opensea_key).await
 }
 
+#[tauri::command]
+async fn fetch_nft_detail(contract_address: String, token_id: String) -> Result<marketplace::NftDetail, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key()
+        .map_err(|e| format!("Could not read OpenSea key: {e}"))?;
+    if opensea_key.is_empty() {
+        return Err("OpenSea API key not set".to_string());
+    }
+    let client = marketplace::client::MarketplaceClient::new("", &opensea_key);
+    client.fetch_nft_detail(&contract_address, &token_id).await
+}
+
 // ── Stream API ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -740,6 +751,7 @@ pub fn run() {
         fetch_collection_holders,
         fetch_collection_offers,
         fetch_collection_traits,
+        fetch_nft_detail,
         open_external_url,
         check_subscription,
         start_stream,

@@ -3,14 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startStream, stopStream, openExternalUrl, type PortfolioSnapshot, type AssetTransfer, type StreamEvent, type StreamStatus } from '@/lib/tauri';
+import { getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startStream, stopStream, openExternalUrl, getPnlSummary, fetchCollectionStats, type PortfolioSnapshot, type AssetTransfer, type StreamEvent, type StreamStatus, type PnlSummary, type CollectionStats } from '@/lib/tauri';
 import { useTrackedNfts } from '@/hooks/useTrackedNfts';
 import { removeTrackedNft, loadTrackedNfts, type TrackedNft } from '@/lib/trackedNftStore';
 import { TrackedNftNotificationModal } from '@/components/TrackedNftNotificationModal';
-import { loadWallets, removeWallet } from '@/lib/walletStore';
+import { loadWatchedWallets, addWallet as addWatchedWallet, removeWallet } from '@/lib/walletStore';
 import { loadCollections, saveCollection, removeCollection, type WatchedCollection } from '@/lib/collectionStore';
 import { fetchCollectionByContract } from '@/lib/tauri';
-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
 import { useTheme } from '@/lib/themeContext';
 import ProGate from '@/components/ProGate';
 
@@ -18,7 +17,7 @@ import ProGate from '@/components/ProGate';
 
 const TAGS = ['Whale', 'Trader', 'Sniper', 'Dev', 'Team', 'MEV'];
 
-function WatchAddressModal({ onClose }: { onClose: () => void }) {
+function WatchAddressModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [address, setAddress] = useState('');
   const [label, setLabel] = useState('');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
@@ -51,7 +50,20 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
     marginBottom: '6px',
   };
 
-  const canSubmit = address.trim().length > 0;
+  const canSubmit = /^0x[0-9a-fA-F]{40}$/.test(address.trim());
+
+  const handleAdd = () => {
+    if (!canSubmit) return;
+    addWatchedWallet({
+      id: Date.now().toString(),
+      name: label.trim() || `${address.slice(0, 6)}…${address.slice(-4)}`,
+      address: address.trim(),
+      kind: 'watched',
+      tags: selectedTags.size > 0 ? Array.from(selectedTags) : undefined,
+    });
+    onAdded();
+    onClose();
+  };
 
   return (
     <div
@@ -140,6 +152,8 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
               }}
             >Cancel</button>
             <button
+              onClick={handleAdd}
+              disabled={!canSubmit}
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
                 color: canSubmit ? '#000000' : 'var(--wr-text-3)',
@@ -205,72 +219,21 @@ function computeAutoTags(portfolioUsd: number, nftCount: number): string[] {
   return tags;
 }
 
-const MONITORED_WALLETS = [
-  {
-    address: '0x8d41…3f8A',
-    rawAddress: '0x8d41f8c2a3b4e5d6f7a8b9c0d1e2f3a4b5c6d3f8',
-    label: 'Main Wallet',
-    activityTag: 'Frequent Trader' as ActivityTag,
-    autoTags: ['Trader'] as string[],
-    highlighted: false,
-    txnsMonth: '35',
-    txLast: 'last: 2 min ago',
-    holdings: '2 NFTs · 4 Tokens',
-    holdingsUsd: '$53,200',
-    pnl30d: '+$12,400 (+18.2%)',
-    pnlUp: true,
-    connections: '3 connections',
-    multiplier: '5x',
-  },
-  {
-    address: '0xD5b8…F7cA',
-    rawAddress: '0xD5b8c3a2e1f4b6d7a8c9e0f1a2b3c4d5e6f7f7ca',
-    label: 'DeFi Trader',
-    activityTag: 'Low Activity' as ActivityTag,
-    autoTags: [] as string[],
-    highlighted: true,
-    txnsMonth: '3',
-    txLast: 'last: 5 min ago',
-    holdings: '5 NFTs · 8 Tokens',
-    holdingsUsd: '$92,000',
-    pnl30d: '+$44,000 (+91.4%)',
-    pnlUp: true,
-    connections: '7 connections',
-    multiplier: '12x',
-  },
-  {
-    address: '0xA814…c2dB',
-    rawAddress: '0xA814b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0c2db',
-    label: 'Cold Storage',
-    activityTag: 'Dormant' as ActivityTag,
-    autoTags: [] as string[],
-    highlighted: false,
-    txnsMonth: '0',
-    txLast: 'last: 4 mo ago',
-    holdings: '1 Token',
-    holdingsUsd: '$2,762',
-    pnl30d: '-$2,100 (-5.8%)',
-    pnlUp: false,
-    connections: '2 connections',
-    multiplier: '1x',
-  },
-  {
-    address: '0x9F2d…1EB3',
-    rawAddress: '0x9F2da3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d81eb3',
-    label: 'Whale Watcher',
-    activityTag: 'High Frequency' as ActivityTag,
-    autoTags: ['Whale'] as string[],
-    highlighted: false,
-    txnsMonth: '62',
-    txLast: 'last: 30 sec ago',
-    holdings: '22 NFTs · 11 Tokens',
-    holdingsUsd: '$686,400',
-    pnl30d: '+$28,600 (+22.1%)',
-    pnlUp: true,
-    connections: '8 connections',
-    multiplier: '6x',
-  },
-];
+interface MonitorWallet {
+  address: string;
+  rawAddress: string;
+  label: string;
+  activityTag: ActivityTag;
+  autoTags: string[];
+  highlighted: boolean;
+  txnsMonth: string;
+  txLast: string;
+  holdings: string;
+  holdingsUsd: string;
+  pnl30d: string;
+  pnlUp: boolean;
+  connections: string;
+}
 
 // ─── Watch Collection Modal ───────────────────────────────────────────────────
 function WatchCollectionModal({ onClose, onAdd }: { onClose: () => void; onAdd: (col: WatchedCollection) => void }) {
@@ -366,7 +329,6 @@ const DEFAULT_REL_RULES = [
   { id: 'nft_transfer', label: 'NFT transferred to/from wallet',  threshold: 3, unit: 'times', enabled: true },
 ];
 
-type MonitorWallet = typeof MONITORED_WALLETS[0];
 
 export default function MonitorPage() {
   const { theme } = useTheme();
@@ -381,6 +343,7 @@ export default function MonitorPage() {
   const [collections, setCollections] = useState<WatchedCollection[]>([]);
   const [streamConnected, setStreamConnected] = useState(false);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
+  const [collectionStats, setCollectionStats] = useState<Record<string, CollectionStats>>({});
   const relSettingsRef = useRef<HTMLDivElement>(null);
 
   // ── Tracked NFTs state ───────────────────────────────────────────────────
@@ -397,6 +360,17 @@ export default function MonitorPage() {
     if (!inTauri || cols.length === 0) return;
 
     startStream(cols.map(c => c.slug)).catch(() => {});
+
+    if (cols.length > 0) {
+      Promise.allSettled(cols.map(c =>
+        fetchCollectionStats(c.slug).then(s => ({ slug: c.slug, stats: s }))
+      )).then(results => {
+        const map: Record<string, CollectionStats> = {};
+        results.forEach(r => { if (r.status === 'fulfilled') map[r.value.slug] = r.value.stats; });
+        setCollectionStats(map);
+      }).catch(() => {});
+    }
+
     return () => { stopStream().catch(() => {}); };
   }, []);
 
@@ -423,8 +397,10 @@ export default function MonitorPage() {
       unlistenEvent?.();
     };
   }, []);
-  const [displayWallets, setDisplayWallets] = useState<MonitorWallet[]>(MONITORED_WALLETS);
+  const [displayWallets, setDisplayWallets] = useState<MonitorWallet[]>([]);
   const [walletIds, setWalletIds] = useState<string[]>([]);
+  /** Bump to force wallet list to reload after adding a new watched wallet. */
+  const [walletRefreshKey, setWalletRefreshKey] = useState(0);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -438,22 +414,26 @@ export default function MonitorPage() {
 
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    const stored = loadWallets();
+    const stored = loadWatchedWallets();
     if (stored.length === 0) return;
 
     if (!inTauri) {
-      // Browser: show walletStore names + mock numbers
+      // Browser / dev mode — show wallet names, no live data available
       setWalletIds(stored.map(w => w.id));
-      setDisplayWallets(stored.map((w, i) => ({
-        ...MONITORED_WALLETS[i % MONITORED_WALLETS.length],
+      setDisplayWallets(stored.map(w => ({
         address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
         rawAddress: w.address,
         label: w.name,
+        activityTag: 'Dormant' as ActivityTag,
+        autoTags: [] as string[],
+        highlighted: false,
         txnsMonth: '—',
+        txLast: 'last: —',
         holdings: '—',
         holdingsUsd: '',
         pnl30d: '—',
         pnlUp: false,
+        connections: '—',
       })));
       return;
     }
@@ -463,54 +443,72 @@ export default function MonitorPage() {
       if (!key) return;
       const results = await Promise.allSettled(
         stored.map(async (w) => {
-          const [snap, txs] = await Promise.all([
-            getPortfolioSnapshot(w.address, key).catch(() => MOCK_PORTFOLIO_SNAPSHOT),
+          const [snap, txsRaw, pnl] = await Promise.all([
+            getPortfolioSnapshot(w.address, key).catch(() => ({ eth_balance: 0, eth_price_usd: 0, portfolio_value_usd: 0, token_count: 0, nft_count: 0 } as PortfolioSnapshot)),
             getAssetTransfers(w.address, key).catch(() => [] as AssetTransfer[]),
+            getPnlSummary(w.address, key).catch(() => null),
           ]);
-          return { w, snap: snap as PortfolioSnapshot, txCount: (txs as AssetTransfer[]).length };
+          const txsArr = txsRaw as AssetTransfer[];
+          return { w, snap: snap as PortfolioSnapshot, txCount: txsArr.length, txs: txsArr, pnl: pnl as PnlSummary | null };
         })
       );
       setWalletIds(stored.map(w => w.id));
       setDisplayWallets(
         results.map((r, i) => {
           if (r.status === 'rejected') return {
-            ...MONITORED_WALLETS[i % MONITORED_WALLETS.length],
             address: stored[i].address.slice(0, 6) + '…' + stored[i].address.slice(-4),
             rawAddress: stored[i].address,
             label: stored[i].name,
-            txnsMonth: '—', holdings: '—', holdingsUsd: '', pnl30d: '—', pnlUp: false,
-            activityTag: 'Dormant' as ActivityTag, autoTags: [] as string[],
+            activityTag: 'Dormant' as ActivityTag,
+            autoTags: [] as string[],
+            highlighted: false,
+            txnsMonth: '—',
+            txLast: 'last: —',
+            holdings: '—',
+            holdingsUsd: '',
+            pnl30d: '—',
+            pnlUp: false,
+            connections: '—',
           };
-          const { w, snap, txCount } = r.value;
+          const { w, snap, txs: walletTxs, pnl: walletPnl } = r.value;
           const cutoff30d = Date.now() - 30 * 86_400_000;
-          const txsMonth = (r.value as typeof r.value & { txs?: AssetTransfer[] }).txs
-            ?.filter(t => new Date(t.metadata?.block_timestamp ?? 0).getTime() > cutoff30d).length
-            ?? txCount;
-          const lastTx = (r.value as typeof r.value & { txs?: AssetTransfer[] }).txs?.[0];
+          const txsMonth = walletTxs
+            .filter(t => new Date(t.metadata?.block_timestamp ?? 0).getTime() > cutoff30d).length;
+          const lastTx = walletTxs[0];
           const lastTxMs = lastTx ? new Date(lastTx.metadata?.block_timestamp ?? 0).getTime() : 0;
           const monthsInactive = lastTxMs > 0 ? (Date.now() - lastTxMs) / (30 * 86_400_000) : 999;
+          const txLastStr = lastTx && lastTxMs > 0 ? (() => {
+            const s = Math.floor((Date.now() - lastTxMs) / 1000);
+            if (s < 60) return `last: ${s}s ago`;
+            if (s < 3600) return `last: ${Math.floor(s / 60)}m ago`;
+            if (s < 86400) return `last: ${Math.floor(s / 3600)}h ago`;
+            return `last: ${Math.floor(s / 86400)}d ago`;
+          })() : 'last: —';
           const activityTag = classifyActivityTag(txsMonth, monthsInactive);
           const autoTags = computeAutoTags(snap.portfolio_value_usd, snap.nft_count);
           const nftPart  = snap.nft_count > 0   ? `${snap.nft_count} NFT${snap.nft_count !== 1 ? 's' : ''}` : '';
           const tokPart  = snap.token_count > 0 ? `${snap.token_count} Token${snap.token_count !== 1 ? 's' : ''}` : '';
           const holdings = [nftPart, tokPart].filter(Boolean).join(' · ') || '—';
+          const totalPnlEth = walletPnl ? walletPnl.realized_pnl_eth + walletPnl.unrealized_pnl_eth : null;
           return {
-            ...MONITORED_WALLETS[i % MONITORED_WALLETS.length],
             address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
             rawAddress: w.address,
             label: w.name,
-            txnsMonth: String(txsMonth),
             activityTag,
             autoTags,
+            highlighted: false,
+            txnsMonth: String(txsMonth),
+            txLast: txLastStr,
             holdings,
             holdingsUsd: `$${snap.portfolio_value_usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
-            pnl30d: '—',
-            pnlUp: false,
+            pnl30d: totalPnlEth != null ? `${totalPnlEth >= 0 ? '+' : ''}${totalPnlEth.toFixed(4)} ETH` : '—',
+            pnlUp: totalPnlEth != null && totalPnlEth >= 0,
+            connections: '—',
           };
         })
       );
     })();
-  }, []);
+  }, [walletRefreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) {
@@ -529,7 +527,7 @@ export default function MonitorPage() {
 
   const content = (
     <main className="min-h-full px-12 py-8" style={{ backgroundColor: 'var(--wr-bg)', color: 'var(--wr-text)' }}>
-      {showWatchModal && <WatchAddressModal onClose={() => setShowWatchModal(false)} />}
+      {showWatchModal && <WatchAddressModal onClose={() => setShowWatchModal(false)} onAdded={() => { setWalletRefreshKey(k => k + 1); setShowWatchModal(false); }} />}
       {showWatchColModal && (
         <WatchCollectionModal
           onClose={() => setShowWatchColModal(false)}
@@ -640,6 +638,19 @@ export default function MonitorPage() {
             </div>
             <span />
           </div>
+
+          {/* Empty state */}
+          {displayWallets.length === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '12px' }}>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', letterSpacing: '1px' }}>No wallets tracked yet</div>
+              <button
+                onClick={() => setShowWatchModal(true)}
+                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.05em' }}
+              >
+                + WATCH A WALLET
+              </button>
+            </div>
+          )}
 
           {/* Rows */}
           {displayWallets.map((w, i) => (
@@ -862,7 +873,13 @@ export default function MonitorPage() {
               <div style={{ color: 'var(--wr-text-2)', fontSize: 11, fontFamily: 'monospace' }}>
                 {col.floor_price_eth != null ? `${col.floor_price_eth} ETH` : '—'}
               </div>
-              <div style={{ color: 'var(--wr-text-3)', fontSize: 11 }}>—</div>
+              {(() => {
+                const stats = collectionStats[col.slug];
+                if (stats?.vol_1d_change == null) return <div style={{ color: 'var(--wr-text-3)', fontSize: 11 }}>—</div>;
+                const pct = (stats.vol_1d_change * 100).toFixed(1);
+                const up = stats.vol_1d_change >= 0;
+                return <div style={{ color: up ? '#34d399' : '#f87171', fontSize: 11 }}>{up ? '+' : ''}{pct}%</div>;
+              })()}
               <div style={{ color: 'var(--wr-text-2)', fontSize: 11 }}>
                 {col.vol_24h_eth != null ? `${col.vol_24h_eth.toFixed(1)} ETH` : '—'}
               </div>

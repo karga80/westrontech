@@ -111,6 +111,16 @@ function EmailVerificationModal({ email, onClose }: { email: string; onClose: ()
   );
 }
 
+const PROFILE_KEY = 'westron_profile';
+function loadProfile(): { displayName?: string; email?: string; country?: string } {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveProfileData(data: { displayName: string; email: string; country: string }) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
+}
+
 function ProfileSection() {
   const [displayName, setDisplayName] = useState('gthu_dba.eth');
   const [email, setEmail] = useState('john@example.com');
@@ -119,9 +129,20 @@ function ProfileSection() {
   const [country, setCountry] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
   const [sub, setSub] = useState(() => loadSubscription());
+  const [saved, setSaved] = useState(false);
   const isPro = isSubscriptionActive(sub);
 
+  function handleSaveProfile() {
+    saveProfileData({ displayName, email, country });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
   useEffect(() => {
+    const saved = loadProfile();
+    if (saved.displayName) setDisplayName(saved.displayName);
+    if (saved.email) setEmail(saved.email);
+    if (saved.country) setCountry(saved.country);
     const wallets = loadWallets();
     if (wallets[0]) setWalletAddress(wallets[0].address);
     setSub(loadSubscription());
@@ -212,8 +233,9 @@ function ProfileSection() {
       </div>
 
       {/* Save */}
-      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="hover:opacity-90 transition-opacity" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveProfile} className="hover:opacity-90 transition-opacity" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>
@@ -272,7 +294,7 @@ function ImportWalletModal({ onClose, onImported }: { onClose: () => void; onImp
 
     try {
       if (isTauri) await importWallet({ address: addr, private_key_hex: key });
-      addWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+      addWallet({ id: Date.now().toString(), name: name.trim(), address: addr, kind: 'owned' });
       onImported();
       onClose();
     } catch (e) {
@@ -335,6 +357,12 @@ function SecuritySection() {
   const [osKey, setOsKey] = useState('');
   const [osKeyInput, setOsKeyInput] = useState('');
   const [osKeySaving, setOsKeySaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  function handleSaveSecurity() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
   const [osKeyMsg, setOsKeyMsg] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [connectedWallets, setConnectedWallets] = useState<{ id: string; short: string; rawAddress: string; chain: string; name: string; }[]>([]);
@@ -578,8 +606,9 @@ function SecuritySection() {
       </div>
 
       {/* Save */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveSecurity} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>
@@ -606,6 +635,7 @@ function NotificationsSection() {
   const [quietOn, setQuietOn] = useState(true);
   const [quietFrom, setQuietFrom] = useState('22:00');
   const [quietTo, setQuietTo] = useState('08:00');
+  const [saved, setSaved] = useState(false);
 
   // Load persisted prefs on mount
   useEffect(() => {
@@ -613,10 +643,30 @@ function NotificationsSection() {
     if (prefs.discordWebhook) { setDiscordUrl(prefs.discordWebhook); setDiscordOn(true); }
     setQuietFrom(prefs.quietFrom);
     setQuietTo(prefs.quietTo);
+    try {
+      const saved = JSON.parse(localStorage.getItem('westron_notif_toggles') ?? 'null');
+      if (saved) {
+        if (saved.trading) setTrading(s => ({ ...s, ...saved.trading }));
+        if (saved.portfolio) setPortfolio(s => ({ ...s, ...saved.portfolio }));
+        if (saved.inApp !== undefined) setInApp(saved.inApp);
+        if (saved.emailOn !== undefined) setEmailOn(saved.emailOn);
+        if (saved.email) setEmail(saved.email);
+        if (saved.telegramOn !== undefined) setTelegramOn(saved.telegramOn);
+      }
+    } catch {}
   }, []);
 
   function handleDiscordBlur() {
     saveNotificationPrefs({ discordWebhook: discordUrl, quietFrom, quietTo });
+  }
+
+  function handleSaveNotifications() {
+    saveNotificationPrefs({ discordWebhook: discordUrl, quietFrom, quietTo });
+    localStorage.setItem('westron_notif_toggles', JSON.stringify({
+      trading, portfolio, inApp, emailOn, email: emailOn ? email : '', telegramOn,
+    }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   function handleQuietChange(field: 'quietFrom' | 'quietTo', value: string) {
@@ -758,7 +808,8 @@ function NotificationsSection() {
 
       {/* Save */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveNotifications} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>

@@ -3,7 +3,7 @@
 /// Phase 3: real EIP-712 order signing and OpenSea API submission.
 /// Blur support is stubbed — different protocol, planned for v2.
 use super::seaport::{self, ListingParams, OfferParams};
-use super::types::{BidInput, CancelInput, CollectionEvent, CollectionHolder, CollectionInfo, CollectionOffer, CollectionStats, CollectionTrait, ListingInput, Marketplace, NftAsset, NftPage, NftTrait, OrderResult, OrderStatus, TraitValue};
+use super::types::{BidInput, CancelInput, CollectionEvent, CollectionHolder, CollectionInfo, CollectionOffer, CollectionStats, CollectionTrait, ListingInput, Marketplace, NftAsset, NftDetail, NftPage, NftTrait, OrderResult, OrderStatus, TraitValue};
 use crate::wallet::keychain::fetch_key;
 
 const OPENSEA_API_BASE: &str = "https://api.opensea.io/api/v2";
@@ -761,13 +761,11 @@ impl MarketplaceClient {
         Ok(owners)
     }
 
-    /// Fetch active collection offers from OpenSea /api/v2/orders/ethereum/seaport/offers
-    /// Returns orders sorted by price descending (best offers first).
-    /// Note: OpenSea only supports `order_by=eth_price` for single-token queries, so we
-    /// fetch by created_date and sort client-side to keep "best offers first" semantics.
+    /// Fetch active collection offers from OpenSea v2 /api/v2/offers/collection/{slug}/all
+    /// Returns offers sorted by price descending (best offers first).
     pub async fn fetch_collection_offers(&self, slug: &str, limit: u32) -> Result<Vec<CollectionOffer>, String> {
         let url = format!(
-            "{}/orders/ethereum/seaport/offers?collection_slug={}&order_by=created_date&order_direction=desc&limit={}",
+            "{}/offers/collection/{}/all?limit={}",
             OPENSEA_API_BASE, slug, limit.min(50)
         );
 
@@ -788,24 +786,50 @@ impl MarketplaceClient {
         }
 
         let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-        let offers = body.get("orders").and_then(|o| o.as_array())
+        let offers = body.get("offers").and_then(|o| o.as_array())
             .map(|arr| arr.iter().filter_map(|order| {
-                let price_wei = order.get("current_price").and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .unwrap_or(0.0);
-                let price_eth = price_wei / 1e18;
+                // v2 price: { "value": "123456789", "decimals": 18 }
+                // For ERC-1155 sweep offers the price is the TOTAL for all tokens;
+                // divide by the NFT quantity (consideration[0].startAmount) to get per-token price.
+                let price_eth = {
+                    let price = order.get("price")?;
+                    let value = price.get("value")?.as_str()?.parse::<f64>().ok()?;
+                    let decimals = price.get("decimals")?.as_u64().unwrap_or(18) as i32;
+                    let total_eth = value / 10f64.powi(decimals);
+                    let nft_qty = order
+                        .get("protocol_data").and_then(|p| p.get("parameters"))
+                        .and_then(|p| p.get("consideration"))
+                        .and_then(|c| c.as_array())
+                        .and_then(|arr| arr.first())
+                        .and_then(|c| c.get("startAmount"))
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse::<f64>().ok())
+                        .unwrap_or(1.0)
+                        .max(1.0);
+                    total_eth / nft_qty
+                };
                 if price_eth <= 0.0 { return None; }
 
                 // Collection/item offers are always paid in WETH on OpenSea
                 let payment_symbol = "WETH".to_string();
 
-                let maker = order.get("maker");
-                let maker_address = maker.and_then(|m| m.get("address")).and_then(|v| v.as_str())
+                // v2: offerer is at protocol_data.parameters.offerer (no top-level "maker" field)
+                let maker_address = order
+                    .get("protocol_data").and_then(|p| p.get("parameters"))
+                    .and_then(|p| p.get("offerer"))
+                    .and_then(|v| v.as_str())
                     .unwrap_or("").to_string();
-                let maker_username = maker.and_then(|m| m.get("user")).and_then(|u| u.get("username")).and_then(|v| v.as_str()).map(|s| s.to_string());
-                let maker_image_url = maker.and_then(|m| m.get("profile_img_url")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                // v2 does not include username/image in basic offer response
+                let maker_username: Option<String> = None;
+                let maker_image_url: Option<String> = None;
 
-                let expiration = order.get("expiration_time").and_then(|v| v.as_i64());
+                // v2 expiration: protocol_data.parameters.endTime (unix timestamp string)
+                let expiration = order
+                    .get("protocol_data").and_then(|p| p.get("parameters"))
+                    .and_then(|p| p.get("endTime"))
+                    .and_then(|v| v.as_str().and_then(|s| s.parse::<i64>().ok())
+                        .or_else(|| v.as_i64()));
+
                 let order_hash = order.get("order_hash").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let quantity = order.get("remaining_quantity").and_then(|v| v.as_u64()).unwrap_or(1);
 
@@ -906,6 +930,74 @@ impl MarketplaceClient {
         };
 
         Ok(traits)
+    }
+
+    /// Fetch per-token enrichment data from OpenSea v2:
+    /// - rarity rank + collection slug from `/api/v2/chain/ethereum/contract/{contract}/nfts/{token_id}`
+    /// - best listing price from `/api/v2/listings/collection/{slug}/nfts/{token_id}/best`
+    /// - best item offer from `/api/v2/offers/collection/{slug}/nfts/{token_id}/best`
+    pub async fn fetch_nft_detail(&self, contract_address: &str, token_id: &str) -> Result<NftDetail, String> {
+        // Step 1: get NFT metadata to extract collection slug + rarity
+        let nft_url = format!(
+            "{}/chain/ethereum/contract/{}/nfts/{}",
+            OPENSEA_API_BASE, contract_address, token_id
+        );
+        let nft_body = self.get_json(&nft_url).await.unwrap_or_else(|_| serde_json::json!({}));
+        let empty = serde_json::json!({});
+        let nft = nft_body.get("nft").unwrap_or(&empty);
+
+        let rarity_rank = nft
+            .get("rarity")
+            .and_then(|r| r.get("rank"))
+            .and_then(|v| v.as_u64());
+
+        let collection_slug = nft
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if collection_slug.is_empty() {
+            return Ok(NftDetail { rarity_rank, listing_price_eth: None, top_offer_eth: None });
+        }
+
+        // Step 2: best active listing via v2 listings endpoint
+        let listing_url = format!(
+            "{}/listings/collection/{}/nfts/{}/best",
+            OPENSEA_API_BASE, collection_slug, token_id
+        );
+        let listing_price_eth = self.get_json(&listing_url).await.ok().and_then(|body| {
+            let current = body.get("price")?.get("current")?;
+            let value = current.get("value")?.as_str()?.parse::<f64>().ok()?;
+            let decimals = current.get("decimals")?.as_u64().unwrap_or(18) as i32;
+            Some(value / 10f64.powi(decimals))
+        });
+
+        // Step 3: best item offer via v2 offers endpoint
+        let offer_url = format!(
+            "{}/offers/collection/{}/nfts/{}/best",
+            OPENSEA_API_BASE, collection_slug, token_id
+        );
+        let top_offer_eth = self.get_json(&offer_url).await.ok().and_then(|body| {
+            let price = body.get("price")?;
+            let value = price.get("value")?.as_str()?.parse::<f64>().ok()?;
+            let decimals = price.get("decimals")?.as_u64().unwrap_or(18) as i32;
+            let total_eth = value / 10f64.powi(decimals);
+            // For ERC-1155 sweep offers the price covers multiple tokens; divide to get per-token
+            let nft_qty = body
+                .get("protocol_data").and_then(|p| p.get("parameters"))
+                .and_then(|p| p.get("consideration"))
+                .and_then(|c| c.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|c| c.get("startAmount"))
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(1.0)
+                .max(1.0);
+            Some(total_eth / nft_qty)
+        });
+
+        Ok(NftDetail { rarity_rank, listing_price_eth, top_offer_eth })
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────

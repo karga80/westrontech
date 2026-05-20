@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, loadAlchemyKey, getPrivateKey,
-  type PortfolioSnapshot, type OwnedNft, type AssetTransfer,
+  fetchNftDetail,
+  type PortfolioSnapshot, type OwnedNft, type AssetTransfer, type NftDetail,
 } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
 import { persistTask } from '@/lib/taskStore';
@@ -21,6 +22,7 @@ type Tab = 'Holdings' | 'Transactions' | 'Analytics' | 'Address Book';
 const TIME_FILTERS = ['24h', '1W', '1M', 'ALL'] as const;
 
 // ── Per-wallet configs ────────────────────────────────────────────────────────
+// TODO(launch): remove WALLET_CONFIGS mock data — wallet details should come entirely from walletStore + live API.
 
 const WALLET_CONFIGS = [
   {
@@ -958,7 +960,7 @@ function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', s
   }
 
   const recurAmtNum = parseFloat(recurringAmount) || 0;
-  const recurSubNum = Math.max(1, parseInt(recurringSuborders) || 1);
+  const recurSubNum = Math.max(1, parseInt(recurringSuborders, 10) || 1);
   const amountPerSub = recurSubNum > 0 ? recurAmtNum / recurSubNum : 0;
   const canRecurring = recurAmtNum > 0 && recurSubNum >= 2 && sellToken !== buyToken && !isDone;
 
@@ -1454,6 +1456,15 @@ const BTN_GHOST: React.CSSProperties = {
   backgroundColor: 'transparent', color: 'var(--wr-text)',
 };
 
+// Auto-closes a modal after success — call once per modal at the top level.
+function useSuccessClose(stage: 'idle' | 'submitting' | 'done', onClose: () => void, delay = 1400) {
+  React.useEffect(() => {
+    if (stage !== 'done') return;
+    const t = setTimeout(onClose, delay);
+    return () => clearTimeout(t);
+  }, [stage, onClose, delay]);
+}
+
 function NftThumb({ nft }: { nft: OwnedNft }) {
   const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
   return (
@@ -1470,6 +1481,7 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
   const [marketplace, setMarketplace] = React.useState<'opensea' | 'blur'>('opensea');
   const [expiry, setExpiry] = React.useState('7');
   const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+  useSuccessClose(stage, onClose);
 
   const nftKey = (n: OwnedNft) => n.contract.address + n.token_id;
   const canSubmit = nfts.every(n => parseFloat(prices[nftKey(n)] ?? '') > 0) && stage === 'idle';
@@ -1529,14 +1541,14 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
             </select>
           </div>
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
           {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Updated</button>
+            ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#BEFF00', letterSpacing: '0.5px' }}>✓ Listings submitted — closing…</span>
             : <>
                 <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
                 <button onClick={handleSubmit} disabled={!canSubmit}
                   style={{ ...BTN_LIME, opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? 'pointer' : 'default' }}>
-                  {stage === 'submitting' ? 'Submitting…' : `Update ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
+                  {stage === 'submitting' ? 'Submitting…' : `List ${nfts.length} item${nfts.length !== 1 ? 's' : ''}`}
                 </button>
               </>
           }
@@ -1548,6 +1560,7 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
 
 function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
   const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+  useSuccessClose(stage, onClose);
 
   function handleCancel() {
     setStage('submitting');
@@ -1583,9 +1596,9 @@ function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: (
             Cancelling on-chain listings requires a gas transaction. Off-chain cancellations are free.
           </div>
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
           {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Cancelled</button>
+            ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#BEFF00', letterSpacing: '0.5px' }}>✓ Listings cancelled — closing…</span>
             : <>
                 <button onClick={onClose} style={BTN_GHOST}>Back</button>
                 <button onClick={handleCancel} disabled={stage === 'submitting'}
@@ -1600,13 +1613,19 @@ function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: (
   );
 }
 
-function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
+function NftAcceptOfferModal({ nfts, nftDetails, onClose }: { nfts: OwnedNft[]; nftDetails: Record<string, NftDetail>; onClose: () => void }) {
   const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+  useSuccessClose(stage, onClose);
 
   const offers = nfts.map(n => {
+    const detailKey = n.contract.address.toLowerCase() + n.token_id;
+    const topOffer = nftDetails[detailKey]?.top_offer_eth;
     const floor = parseFloat(String(n.contract.opensea_floor_price ?? '0')) || 0;
-    const offer = floor > 0 ? (floor * 0.94).toFixed(4) : '—';
-    return { nft: n, offer };
+    // Use real top offer from OpenSea if available; fall back to floor estimate
+    const offer = topOffer != null
+      ? topOffer.toFixed(4)
+      : floor > 0 ? (floor * 0.94).toFixed(4) : '—';
+    return { nft: n, offer, isReal: topOffer != null };
   });
   const totalEth = offers.reduce((s, o) => s + (parseFloat(o.offer) || 0), 0);
 
@@ -1623,7 +1642,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
         <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {offers.map(({ nft: n, offer }) => {
+          {offers.map(({ nft: n, offer, isReal }) => {
             const k = n.contract.address + n.token_id;
             const floor = n.contract.opensea_floor_price;
             return (
@@ -1635,6 +1654,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#34d399' }}>{offer} <span style={{ color: 'var(--wr-text-3)', fontWeight: 400 }}>ETH</span></div>
+                  {!isReal && offer !== '—' && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#6e6e6e', marginTop: '2px' }}>est.</div>}
                   {floor && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>Floor: {floor} ETH</div>}
                 </div>
               </div>
@@ -1652,7 +1672,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
           {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Offer Accepted</button>
+            ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#BEFF00', letterSpacing: '0.5px' }}>✓ Offer accepted — closing…</span>
             : <>
                 <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
                 <button onClick={handleAccept} disabled={stage === 'submitting'}
@@ -1670,6 +1690,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
 function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; walletAddress: string; onClose: () => void }) {
   const [toAddress, setToAddress] = React.useState('');
   const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
+  useSuccessClose(stage, onClose);
   const isValid = /^0x[0-9a-fA-F]{40}$/.test(toAddress.trim());
   const canSend = isValid && stage === 'idle';
 
@@ -1725,7 +1746,7 @@ function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; wall
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
           {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ NFT{nfts.length !== 1 ? 's' : ''} Sent</button>
+            ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#BEFF00', letterSpacing: '0.5px' }}>✓ NFT{nfts.length !== 1 ? 's' : ''} sent — closing…</span>
             : <>
                 <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
                 <button onClick={handleSend} disabled={!canSend}
@@ -1773,7 +1794,7 @@ function mapTransfer(t: AssetTransfer, walletAddress: string) {
   return {
     hash: t.hash,
     type,
-    block: String(parseInt(t.block_num, 16)),
+    block: (() => { const n = parseInt(t.block_num, 16); return Number.isFinite(n) ? String(n) : '—'; })(),
     age,
     from: t.from,
     to: t.to ?? '—',
@@ -1842,6 +1863,9 @@ export default function WalletDetailClient({ id }: { id: string }) {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [liveNfts, setLiveNfts] = useState<OwnedNft[] | null>(null);
   const [liveTxs, setLiveTxs] = useState<ReturnType<typeof mapTransfer>[] | null>(null);
+  const [nftDetails, setNftDetails] = useState<Record<string, NftDetail>>({});
+  const [nftReceived, setNftReceived] = useState<Record<string, string>>({});
+  const [nftLoadError, setNftLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1863,7 +1887,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
       try {
         const apiKey = await loadAlchemyKey().catch(() => '');
         setAlchemyKey(apiKey);
-        if (!apiKey) { setLoading(false); return; }
+        if (!apiKey) { setNftLoadError('Alchemy API key not set. Add it in Settings → Security to view live data.'); setLoading(false); return; }
 
         const stored = loadWallets();
         const walletRecord = stored.find(w => w.id === id);
@@ -1877,7 +1901,60 @@ export default function WalletDetailClient({ id }: { id: string }) {
         ]);
 
         if (snap.status === 'fulfilled') setSnapshot(snap.value);
-        if (nftRes.status === 'fulfilled') setLiveNfts(nftRes.value.owned_nfts);
+        if (nftRes.status === 'rejected') {
+          const reason = nftRes.reason instanceof Error ? nftRes.reason.message : String(nftRes.reason);
+          setNftLoadError(`Failed to load NFTs: ${reason}`);
+        }
+        if (nftRes.status === 'fulfilled') {
+          const owned = nftRes.value.owned_nfts;
+          setNftLoadError(null);
+          setLiveNfts(owned);
+
+          // Build received-date map from incoming NFT transfers.
+          // Alchemy returns token_id as hex (e.g. "0x1a4") in transfers but
+          // decimal (e.g. "420") in getNFTsForOwner — normalise to decimal.
+          if (transfers.status === 'fulfilled') {
+            const normaliseTokenId = (raw: string): string => {
+              if (raw.startsWith('0x') || raw.startsWith('0X')) {
+                const n = BigInt(raw);
+                return n.toString(10);
+              }
+              return raw;
+            };
+            const receivedMap: Record<string, string> = {};
+            for (const tx of transfers.value) {
+              if ((tx.category === 'erc721' || tx.category === 'erc1155') &&
+                  tx.to?.toLowerCase() === address.toLowerCase() &&
+                  tx.rawContract?.address && tx.token_id) {
+                const tokenIdNorm = normaliseTokenId(tx.token_id);
+                const key = tx.rawContract.address.toLowerCase() + tokenIdNorm;
+                if (!receivedMap[key] && tx.metadata?.block_timestamp) {
+                  receivedMap[key] = tx.metadata.block_timestamp;
+                }
+              }
+            }
+            setNftReceived(receivedMap);
+          }
+
+          // Fetch OpenSea enrichment (rarity, listing, top offer) per NFT — limit concurrency
+          const inTauriEnrich = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+          if (inTauriEnrich && owned.length > 0) {
+            const BATCH = 5;
+            const details: Record<string, NftDetail> = {};
+            for (let i = 0; i < owned.length; i += BATCH) {
+              const slice = owned.slice(i, i + BATCH);
+              const results = await Promise.allSettled(
+                slice.map(n => fetchNftDetail(n.contract.address, n.token_id))
+              );
+              results.forEach((r, j) => {
+                if (r.status === 'fulfilled') {
+                  details[slice[j].contract.address.toLowerCase() + slice[j].token_id] = r.value;
+                }
+              });
+              setNftDetails({ ...details });
+            }
+          }
+        }
         if (transfers.status === 'fulfilled') setLiveTxs(transfers.value.map(t => mapTransfer(t, address)));
       } catch {}
       setLoading(false);
@@ -2008,7 +2085,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', overflow: 'hidden' }}>
               {/* Header row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 88px 130px 90px 120px 140px 120px 80px', alignItems: 'center', padding: '0 16px', height: '40px', borderBottom: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 130px 90px 120px 140px 120px 80px', alignItems: 'center', padding: '0 16px', height: '40px', borderBottom: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <input
                     type="checkbox"
@@ -2020,7 +2097,6 @@ export default function WalletDetailClient({ id }: { id: string }) {
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>
                   {liveNfts?.length ?? 0} Items
                 </div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>Wallet</div>
                 {(['LISTING PRICE', 'RARITY', 'FLOOR PRICE', 'TOP OFFER', 'COST', 'RECEIVED'] as const).map(col => (
                   <button
                     key={col}
@@ -2038,6 +2114,12 @@ export default function WalletDetailClient({ id }: { id: string }) {
               {/* NFT rows */}
               {(liveNfts ?? []).map(nft => {
                 const key = nft.contract.address + nft.token_id;
+                const detailKey = nft.contract.address.toLowerCase() + nft.token_id;
+                const detail = nftDetails[detailKey];
+                const receivedTs = nftReceived[detailKey];
+                const receivedStr = receivedTs
+                  ? new Date(receivedTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+                  : null;
                 const isSelected = selectedNfts.has(key);
                 const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
                 const collectionName = nft.contract.opensea_collection_name || nft.contract.name || nft.contract.address.slice(0, 8);
@@ -2045,7 +2127,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                 return (
                   <div
                     key={key}
-                    style={{ display: 'grid', gridTemplateColumns: '40px 1fr 88px 130px 90px 120px 140px 120px 80px', alignItems: 'center', padding: '0 16px', height: '56px', borderBottom: '1px solid var(--wr-border)', backgroundColor: isSelected ? 'rgba(190,255,0,0.04)' : 'transparent', transition: 'background 0.1s' }}
+                    style={{ display: 'grid', gridTemplateColumns: '40px 1fr 130px 90px 120px 140px 120px 80px', alignItems: 'center', padding: '0 16px', height: '56px', borderBottom: '1px solid var(--wr-border)', backgroundColor: isSelected ? 'rgba(190,255,0,0.04)' : 'transparent', transition: 'background 0.1s' }}
                     onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--wr-overlay)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = isSelected ? 'rgba(190,255,0,0.04)' : 'transparent'; }}
                   >
@@ -2073,7 +2155,10 @@ export default function WalletDetailClient({ id }: { id: string }) {
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nft.name ?? `#${nft.token_id}`}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{collectionName}</span>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>{collectionName}</span>
+                          {detail?.listing_price_eth != null && (
+                            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', color: '#BEFF00', border: '1px solid #BEFF0066', padding: '1px 5px', flexShrink: 0 }}>LISTED</span>
+                          )}
                           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                             <circle cx="7" cy="7" r="7" fill="#2563eb"/>
                             <path d="M4 7L6 9L10 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2081,81 +2166,127 @@ export default function WalletDetailClient({ id }: { id: string }) {
                         </div>
                       </div>
                     </div>
-                    {/* Wallet */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: wallet.badge === 'ETH' ? '#627eea' : wallet.badge === 'BNB' ? '#f3ba2f' : '#8247e5', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: '#fff' }}>{wallet.name.slice(0, 2).toUpperCase()}</span>
-                      </div>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52px' }}>{wallet.name.split(' ')[0]}</span>
-                    </div>
                     {/* Listing Price */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>
+                      {detail?.listing_price_eth != null
+                        ? <>{detail.listing_price_eth.toFixed(4)} <span style={{ color: 'var(--wr-text-3)' }}>ETH</span></>
+                        : <span style={{ color: '#a1a1aa' }}>–</span>}
+                    </div>
                     {/* Rarity */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>
+                      {detail?.rarity_rank != null
+                        ? <span style={{ color: '#a78bfa' }}>#{detail.rarity_rank}</span>
+                        : <span style={{ color: '#a1a1aa' }}>–</span>}
+                    </div>
                     {/* Floor Price */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>
-                      {floorPrice ? <>{floorPrice} <span style={{ color: 'var(--wr-text-3)' }}>ETH</span></> : '–'}
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>
+                      {floorPrice != null
+                        ? <>{floorPrice.toFixed(4)} <span style={{ color: 'var(--wr-text-3)' }}>ETH</span></>
+                        : <span style={{ color: '#a1a1aa' }}>–</span>}
                     </div>
                     {/* Top Offer */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', border: '1px solid var(--wr-border)', padding: '2px 8px', whiteSpace: 'nowrap' }}>–</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: detail?.top_offer_eth != null ? 'var(--wr-text)' : '#a1a1aa', border: '1px solid var(--wr-border)', padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                        {detail?.top_offer_eth != null ? `${detail.top_offer_eth.toFixed(4)} ETH` : '–'}
+                      </span>
                     </div>
-                    {/* Cost */}
+                    {/* Cost — not available from Alchemy; show placeholder */}
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
                     {/* Received */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: receivedStr ? 'var(--wr-text-3)' : '#a1a1aa' }}>
+                      {receivedStr ?? '–'}
+                    </div>
                   </div>
                 );
               })}
+              {/* Empty state */}
+              {(liveNfts === null || liveNfts.length === 0) && (
+                <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+                  {loading
+                    ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>Loading NFTs…</span>
+                    : nftLoadError
+                      ? <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#f87171' }}>{nftLoadError}</span>
+                      : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No NFTs found for this wallet.</span>
+                  }
+                </div>
+              )}
             </div>
             {/* Selection action bar */}
-            {selectedNfts.size > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
-                <button
-                  onClick={() => setShowNftEditModal(true)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
-                >
-                  Edit {selectedNfts.size} listing{selectedNfts.size !== 1 ? 's' : ''}
-                </button>
-                <button
-                  onClick={() => setShowNftCancelModal(true)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
-                >
-                  Cancel {selectedNfts.size} listing{selectedNfts.size !== 1 ? 's' : ''}
-                </button>
-                <button
-                  onClick={() => setShowNftAcceptModal(true)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
-                >
-                  Accept {selectedNfts.size} offer{selectedNfts.size !== 1 ? 's' : ''}
-                </button>
-                <button
-                  onClick={() => setShowNftSendModal(true)}
-                  title="Send NFTs"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', cursor: 'pointer', color: 'var(--wr-text)', flexShrink: 0 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M1.5 6.5h10M7.5 2.5l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setSelectedNfts(new Set())}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '7px 4px', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text-3)'; }}
-                >
-                  Clear
-                </button>
-              </div>
-            )}
+            {selectedNfts.size > 0 && (() => {
+              const selArr = (liveNfts ?? []).filter(n => selectedNfts.has(n.contract.address + n.token_id));
+              const listedNfts   = selArr.filter(n => nftDetails[n.contract.address.toLowerCase() + n.token_id]?.listing_price_eth != null);
+              const unlistedNfts = selArr.filter(n => nftDetails[n.contract.address.toLowerCase() + n.token_id]?.listing_price_eth == null);
+              const hasListed   = listedNfts.length > 0;
+              const hasUnlisted = unlistedNfts.length > 0;
+              const BTN_GHOST: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' };
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
+                  {/* LIST — only when unlisted NFTs selected */}
+                  {hasUnlisted && (
+                    <button
+                      onClick={() => setShowNftEditModal(true)}
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
+                    >
+                      List {unlistedNfts.length} item{unlistedNfts.length !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {/* EDIT LISTING — only when listed NFTs selected */}
+                  {hasListed && (
+                    <button
+                      onClick={() => setShowNftEditModal(true)}
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
+                    >
+                      Edit {listedNfts.length} listing{listedNfts.length !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {/* CANCEL LISTING — only when listed NFTs selected */}
+                  {hasListed && (
+                    <button
+                      onClick={() => setShowNftCancelModal(true)}
+                      style={BTN_GHOST}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+                    >
+                      Cancel {listedNfts.length} listing{listedNfts.length !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {/* ACCEPT OFFER — always visible */}
+                  <button
+                    onClick={() => setShowNftAcceptModal(true)}
+                    style={BTN_GHOST}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+                  >
+                    Accept {selectedNfts.size} offer{selectedNfts.size !== 1 ? 's' : ''}
+                  </button>
+                  {/* SEND icon */}
+                  <button
+                    onClick={() => setShowNftSendModal(true)}
+                    title="Send NFTs"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', cursor: 'pointer', color: 'var(--wr-text)', flexShrink: 0 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <path d="M1.5 6.5h10M7.5 2.5l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  {/* CLEAR */}
+                  <button
+                    onClick={() => setSelectedNfts(new Set())}
+                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '7px 4px', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text-3)'; }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Token Holdings */}
@@ -2448,7 +2579,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
         return (<>
           {showNftEditModal   && <NftEditListingModal  nfts={selNfts} onClose={close(setShowNftEditModal)} />}
           {showNftCancelModal && <NftCancelListingModal nfts={selNfts} onClose={close(setShowNftCancelModal)} />}
-          {showNftAcceptModal && <NftAcceptOfferModal  nfts={selNfts} onClose={close(setShowNftAcceptModal)} />}
+          {showNftAcceptModal && <NftAcceptOfferModal  nfts={selNfts} nftDetails={nftDetails} onClose={close(setShowNftAcceptModal)} />}
           {showNftSendModal   && <NftSendModal nfts={selNfts} walletAddress={walletAddr} onClose={close(setShowNftSendModal)} />}
         </>);
       })()}

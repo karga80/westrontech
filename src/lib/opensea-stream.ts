@@ -8,7 +8,7 @@ export const streamClient = new OpenSeaStreamClient({
   token: process.env.OPENSEA_API_KEY,
   network: Network.MAINNET,
   logLevel: LogLevel.INFO,
-  onError: (error) => console.error('[OpenSea stream error]', error),
+  onError: () => { /* stream errors are best-effort */ },
 });
 
 streamClient.connect();
