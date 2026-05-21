@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { WatchlistItem, AnalysisDays, UpdateInterval } from '@/lib/sentiment/types';
 import { useSentimentStore } from '@/store/sentimentStore';
+import { resolveTokenMeta } from '@/lib/sentiment/metadata';
 
 interface AddTokenFormProps {
   onClose: () => void;
@@ -47,13 +48,34 @@ const UPDATE_INTERVALS: { label: string; value: UpdateInterval }[] = [
 
 export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
   const [contractAddress, setContractAddress] = useState('');
-  const [symbol, setSymbol] = useState('');
   const [twitterUrl, setTwitterUrl] = useState('');
   const [extraLinks, setExtraLinks] = useState<string[]>([]);
   const [analysisDays, setAnalysisDays] = useState<AnalysisDays>(7);
   const [updateInterval, setUpdateInterval] = useState<UpdateInterval>('1h');
+  const [meta, setMeta] = useState<{ name: string; symbol: string } | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
 
   const addItem = useSentimentStore(s => s.addItem);
+
+  // Debounced metadata resolution — triggers when address is >= 32 chars (Solana base58)
+  useEffect(() => {
+    const trimmed = contractAddress.trim();
+    if (trimmed.length < 32) {
+      setMeta(null);
+      return;
+    }
+
+    setMetaLoading(true);
+    const timer = setTimeout(async () => {
+      const result = await resolveTokenMeta(trimmed);
+      setMeta(result);
+      setMetaLoading(false);
+    }, 600);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [contractAddress]);
 
   const canSubmit =
     contractAddress.trim().length > 0 &&
@@ -75,7 +97,7 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
     if (!canSubmit) return;
 
     const addr = contractAddress.trim();
-    const name = symbol.trim() || `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    const name = meta?.name ?? `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 
     const item: WatchlistItem = {
       id: Date.now().toString(),
@@ -170,23 +192,42 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
               className="placeholder-[#3a3a3a] focus:border-[#BEFF00] transition-colors"
               style={FIELD}
             />
-          </div>
-
-          {/* Name / Symbol */}
-          <div>
-            <label style={LABEL_STYLE}>
-              Name / Symbol{' '}
-              <span style={{ color: 'var(--wr-text-4)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                (opsiyonel)
-              </span>
-            </label>
-            <input
-              value={symbol}
-              onChange={e => setSymbol(e.target.value)}
-              placeholder="$BONK"
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00] transition-colors"
-              style={FIELD}
-            />
+            {/* Resolved chip */}
+            {metaLoading && (
+              <div style={{
+                marginTop: '6px',
+                border: '1px solid var(--wr-border)',
+                background: 'var(--wr-surface-alt)',
+                padding: '6px 10px',
+                fontFamily: 'var(--font-jetbrains)',
+                fontSize: '11px',
+                color: 'var(--wr-text-3)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', border: '2px solid var(--wr-text-3)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+                resolving…
+              </div>
+            )}
+            {!metaLoading && meta !== null && (
+              <div style={{
+                marginTop: '6px',
+                border: '1px solid var(--wr-success)',
+                background: 'var(--wr-success-bg)',
+                padding: '6px 10px',
+                fontFamily: 'var(--font-jetbrains)',
+                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+                <span style={{ color: 'var(--wr-success)' }}>✓</span>
+                <span style={{ fontWeight: 700, color: 'var(--wr-text)' }}>{meta.symbol}</span>
+                <span style={{ color: 'var(--wr-text-3)' }}>·</span>
+                <span style={{ color: 'var(--wr-text-3)' }}>{meta.name}</span>
+              </div>
+            )}
           </div>
 
           {/* Twitter URL */}

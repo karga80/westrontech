@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { WatchlistItem, AnalysisDays, UpdateInterval } from '@/lib/sentiment/types';
 import { useSentimentStore } from '@/store/sentimentStore';
+import { resolveNFTMeta } from '@/lib/sentiment/metadata';
 
 interface AddNFTFormProps {
   onClose: () => void;
@@ -49,17 +50,39 @@ const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
   const [contractAddress, setContractAddress] = useState('');
-  const [collectionName, setCollectionName] = useState('');
   const [twitterUrl, setTwitterUrl] = useState('');
   const [discordUrl, setDiscordUrl] = useState('');
   const [openSeaUrl, setOpenSeaUrl] = useState('');
   const [extraLinks, setExtraLinks] = useState<string[]>([]);
   const [analysisDays, setAnalysisDays] = useState<AnalysisDays>(7);
   const [updateInterval, setUpdateInterval] = useState<UpdateInterval>('1h');
+  const [meta, setMeta] = useState<{ name: string; symbol: string } | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
 
   const addItem = useSentimentStore(s => s.addItem);
 
   const addressValid = ETH_ADDRESS_RE.test(contractAddress.trim());
+
+  // Debounced metadata resolution — triggers when address passes ETH regex
+  useEffect(() => {
+    const trimmed = contractAddress.trim();
+    if (!ETH_ADDRESS_RE.test(trimmed)) {
+      setMeta(null);
+      return;
+    }
+
+    setMetaLoading(true);
+    const timer = setTimeout(async () => {
+      const result = await resolveNFTMeta(trimmed);
+      setMeta(result);
+      setMetaLoading(false);
+    }, 600);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [contractAddress]);
+
   const canSubmit =
     addressValid &&
     twitterUrl.trim().length > 0 &&
@@ -81,7 +104,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
     if (!canSubmit) return;
 
     const addr = contractAddress.trim();
-    const name = collectionName.trim() || `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    const name = meta?.name ?? `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 
     const item: WatchlistItem = {
       id: Date.now().toString(),
@@ -189,23 +212,42 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
                 Enter a valid Ethereum address (0x...)
               </span>
             )}
-          </div>
-
-          {/* Collection Name */}
-          <div>
-            <label style={LABEL_STYLE}>
-              Collection Name{' '}
-              <span style={{ color: 'var(--wr-text-4)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                (opsiyonel)
-              </span>
-            </label>
-            <input
-              value={collectionName}
-              onChange={e => setCollectionName(e.target.value)}
-              placeholder="Bored Ape Yacht Club"
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00] transition-colors"
-              style={FIELD}
-            />
+            {/* Resolved chip */}
+            {metaLoading && (
+              <div style={{
+                marginTop: '6px',
+                border: '1px solid var(--wr-border)',
+                background: 'var(--wr-surface-alt)',
+                padding: '6px 10px',
+                fontFamily: 'var(--font-jetbrains)',
+                fontSize: '11px',
+                color: 'var(--wr-text-3)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', border: '2px solid var(--wr-text-3)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+                resolving…
+              </div>
+            )}
+            {!metaLoading && meta !== null && (
+              <div style={{
+                marginTop: '6px',
+                border: '1px solid var(--wr-success)',
+                background: 'var(--wr-success-bg)',
+                padding: '6px 10px',
+                fontFamily: 'var(--font-jetbrains)',
+                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+                <span style={{ color: 'var(--wr-success)' }}>✓</span>
+                <span style={{ fontWeight: 700, color: 'var(--wr-text)' }}>{meta.symbol}</span>
+                <span style={{ color: 'var(--wr-text-3)' }}>·</span>
+                <span style={{ color: 'var(--wr-text-3)' }}>{meta.name}</span>
+              </div>
+            )}
           </div>
 
           {/* Twitter URL */}
