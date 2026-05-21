@@ -357,6 +357,16 @@ function SecuritySection() {
   const [osKey, setOsKey] = useState('');
   const [osKeyInput, setOsKeyInput] = useState('');
   const [osKeySaving, setOsKeySaving] = useState(false);
+  // ── Sentiment API Keys (localStorage) ──────────────────────────────────────
+  const [twitterRapidKey,      setTwitterRapidKey]      = useState('');
+  const [twitterRapidInput,    setTwitterRapidInput]    = useState('');
+  const [twitterRapidMsg,      setTwitterRapidMsg]      = useState('');
+  const [heliusKey,            setHeliusKey]            = useState('');
+  const [heliusInput,          setHeliusInput]          = useState('');
+  const [heliusMsg,            setHeliusMsg]            = useState('');
+  const [birdeyeKey,           setBirdeyeKey]           = useState('');
+  const [birdeyeInput,         setBirdeyeInput]         = useState('');
+  const [birdeyeMsg,           setBirdeyeMsg]           = useState('');
   const [saved, setSaved] = useState(false);
 
   function handleSaveSecurity() {
@@ -383,6 +393,13 @@ function SecuritySection() {
       loadAlchemyKey().then(k => { if (k) { setApiKey(k); setApiKeyInput(k); } }).catch(() => {});
       loadOpenSeaKey().then(k => { if (k) { setOsKey(k); setOsKeyInput(k); } }).catch(() => {});
     }
+    // Load sentiment keys from localStorage
+    const tr = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-twitter-rapid') ?? '' : '';
+    const he = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-helius') ?? '' : '';
+    const be = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-birdeye') ?? '' : '';
+    setTwitterRapidKey(tr); setTwitterRapidInput(tr);
+    setHeliusKey(he);       setHeliusInput(he);
+    setBirdeyeKey(be);      setBirdeyeInput(be);
     reloadWallets();
   }, []);
 
@@ -429,6 +446,31 @@ function SecuritySection() {
     } catch { setOsKeyMsg('Error removing key.'); }
     setTimeout(() => setOsKeyMsg(''), 2000);
   };
+
+  // ── Sentiment key handlers ──────────────────────────────────────────────────
+  const makeLsHandlers = (
+    lsKey: string,
+    setValue: (v: string) => void,
+    setInput: (v: string) => void,
+    setMsg: (v: string) => void,
+  ) => ({
+    save: (input: string) => {
+      localStorage.setItem(lsKey, input.trim());
+      setValue(input.trim());
+      setMsg('Saved.');
+      setTimeout(() => setMsg(''), 2000);
+    },
+    remove: () => {
+      localStorage.removeItem(lsKey);
+      setValue(''); setInput('');
+      setMsg('Removed.');
+      setTimeout(() => setMsg(''), 2000);
+    },
+  });
+
+  const twitterRapidHandlers = makeLsHandlers('wr-apikey-twitter-rapid', setTwitterRapidKey, setTwitterRapidInput, setTwitterRapidMsg);
+  const heliusHandlers        = makeLsHandlers('wr-apikey-helius',        setHeliusKey,       setHeliusInput,       setHeliusMsg);
+  const birdeyeHandlers       = makeLsHandlers('wr-apikey-birdeye',       setBirdeyeKey,      setBirdeyeInput,      setBirdeyeMsg);
 
   const handleRemoveWallet = (id: string) => {
     removeWallet(id);
@@ -551,8 +593,8 @@ function SecuritySection() {
           )}
         </div>
         {/* OpenSea row */}
-        <div>
-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
             <span style={labelStyle}>OpenSea Key</span>
             <input
               type="password"
@@ -571,6 +613,36 @@ function SecuritySection() {
           {osKeyMsg && (
             <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: osKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{osKeyMsg}</div>
           )}
+        </div>
+        {/* Twitter RapidAPI row */}
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Twitter Rapid</span>
+            <input type="password" value={twitterRapidInput} onChange={e => setTwitterRapidInput(e.target.value)} placeholder="RapidAPI key (twitter241)…" style={inputStyle} />
+            <button onClick={() => twitterRapidHandlers.save(twitterRapidInput)} disabled={!twitterRapidInput.trim()} style={{ ...inlineBtn, opacity: !twitterRapidInput.trim() ? 0.4 : 1, cursor: !twitterRapidInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {twitterRapidKey && <button onClick={twitterRapidHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {twitterRapidMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: twitterRapidMsg.includes('Removed') || twitterRapidMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{twitterRapidMsg}</div>}
+        </div>
+        {/* Helius row */}
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Helius Key</span>
+            <input type="password" value={heliusInput} onChange={e => setHeliusInput(e.target.value)} placeholder="Helius API key (Solana)…" style={inputStyle} />
+            <button onClick={() => heliusHandlers.save(heliusInput)} disabled={!heliusInput.trim()} style={{ ...inlineBtn, opacity: !heliusInput.trim() ? 0.4 : 1, cursor: !heliusInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {heliusKey && <button onClick={heliusHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {heliusMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: heliusMsg.includes('Removed') || heliusMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{heliusMsg}</div>}
+        </div>
+        {/* Birdeye row */}
+        <div>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <span style={labelStyle}>Birdeye Key</span>
+            <input type="password" value={birdeyeInput} onChange={e => setBirdeyeInput(e.target.value)} placeholder="Birdeye API key (Solana price)…" style={inputStyle} />
+            <button onClick={() => birdeyeHandlers.save(birdeyeInput)} disabled={!birdeyeInput.trim()} style={{ ...inlineBtn, opacity: !birdeyeInput.trim() ? 0.4 : 1, cursor: !birdeyeInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {birdeyeKey && <button onClick={birdeyeHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {birdeyeMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: birdeyeMsg.includes('Removed') || birdeyeMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{birdeyeMsg}</div>}
         </div>
       </div>
 
