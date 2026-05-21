@@ -16,6 +16,7 @@ export interface WatchlistItem {
   discordUrl?: string;
   openSeaUrl?: string;
   extraLinks?: string[];
+  imageUrl?: string;
   analysisDays: AnalysisDays;
   updateInterval: UpdateInterval;
   createdAt: string;

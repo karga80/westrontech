@@ -17,10 +17,11 @@ function shortenAddress(address: string): string {
 interface MetaResult {
   name: string;
   symbol: string;
+  imageUrl: string;
 }
 
 export async function resolveTokenMeta(contractAddress: string): Promise<MetaResult> {
-  const fallback: MetaResult = { name: shortenAddress(contractAddress), symbol: '?' };
+  const fallback: MetaResult = { name: shortenAddress(contractAddress), symbol: '?', imageUrl: '' };
 
   try {
     const key = loadApiKey('helius');
@@ -55,7 +56,16 @@ export async function resolveTokenMeta(contractAddress: string): Promise<MetaRes
     const name = typeof metadata['name'] === 'string' && metadata['name'] ? metadata['name'] : shortenAddress(contractAddress);
     const symbol = typeof metadata['symbol'] === 'string' && metadata['symbol'] ? metadata['symbol'] : '?';
 
-    return { name, symbol };
+    const links = content['links'] as Record<string, unknown> | undefined;
+    const files = content['files'] as Array<Record<string, unknown>> | undefined;
+    const imageUrl =
+      (typeof links?.['image'] === 'string' && links['image'])
+        ? links['image']
+        : (typeof files?.[0]?.['uri'] === 'string' && files[0]['uri'])
+          ? files[0]['uri']
+          : '';
+
+    return { name, symbol, imageUrl };
   } catch {
     return fallback;
   }
@@ -65,11 +75,15 @@ interface AlchemyContractMetadataBody {
   contractMetadata?: {
     name?: string;
     symbol?: string;
+    openSea?: {
+      imageUrl?: string;
+      bannerImageUrl?: string;
+    };
   };
 }
 
 export async function resolveNFTMeta(contractAddress: string): Promise<MetaResult> {
-  const fallback: MetaResult = { name: shortenAddress(contractAddress), symbol: '?' };
+  const fallback: MetaResult = { name: shortenAddress(contractAddress), symbol: '?', imageUrl: '' };
 
   try {
     const key = loadApiKey('alchemy');
@@ -87,8 +101,9 @@ export async function resolveNFTMeta(contractAddress: string): Promise<MetaResul
 
     const name = cm?.name && cm.name.trim() ? cm.name.trim() : shortenAddress(contractAddress);
     const symbol = cm?.symbol && cm.symbol.trim() ? cm.symbol.trim() : '?';
+    const imageUrl = cm?.openSea?.imageUrl ?? cm?.openSea?.bannerImageUrl ?? '';
 
-    return { name, symbol };
+    return { name, symbol, imageUrl };
   } catch {
     return fallback;
   }

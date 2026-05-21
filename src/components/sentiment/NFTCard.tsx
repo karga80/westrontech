@@ -59,20 +59,45 @@ export default function NFTCard({ item, score, history, floorPrice, loading, onC
         boxSizing: 'border-box',
       }}
     >
-      {/* Top: name + type badge */}
+      {/* Top: avatar + name + type badge */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-        <span style={{
-          fontFamily: 'var(--font-jetbrains)',
-          fontSize: '13px',
-          fontWeight: 600,
-          color: 'var(--wr-text)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          flex: 1,
-        }}>
-          {item.name || truncateAddress(item.contractAddress)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+          {item.imageUrl ? (
+            <img
+              src={item.imageUrl}
+              alt=""
+              onError={e => {
+                const el = e.currentTarget;
+                el.style.display = 'none';
+                const fallback = el.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--wr-border)', flexShrink: 0 }}
+            />
+          ) : null}
+          <div style={{
+            display: item.imageUrl ? 'none' : 'flex',
+            width: '36px', height: '36px', borderRadius: '50%',
+            backgroundColor: 'var(--wr-accent-dim)',
+            border: '1px solid var(--wr-accent)',
+            alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-accent)',
+            flexShrink: 0,
+          }}>
+            {item.name.slice(0, 2).toUpperCase()}
+          </div>
+          <span style={{
+            fontFamily: 'var(--font-jetbrains)',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: 'var(--wr-text)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {item.name || truncateAddress(item.contractAddress)}
+          </span>
+        </div>
         <span style={{
           fontFamily: 'var(--font-jetbrains)',
           fontSize: '9px',

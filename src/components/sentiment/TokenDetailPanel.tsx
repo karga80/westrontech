@@ -202,6 +202,30 @@ export function TokenDetailPanel({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+              {item.imageUrl ? (
+                <img
+                  src={item.imageUrl}
+                  alt=""
+                  onError={e => {
+                    const el = e.currentTarget;
+                    el.style.display = 'none';
+                    const fallback = el.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--wr-border)', flexShrink: 0 }}
+                />
+              ) : null}
+              <div style={{
+                display: item.imageUrl ? 'none' : 'flex',
+                width: '40px', height: '40px', borderRadius: '50%',
+                backgroundColor: 'var(--wr-accent-dim)',
+                border: '1px solid var(--wr-accent)',
+                alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-accent)',
+                flexShrink: 0,
+              }}>
+                {item.name.slice(0, 2).toUpperCase()}
+              </div>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)', whiteSpace: 'nowrap' }}>
                 {item.name}
               </span>

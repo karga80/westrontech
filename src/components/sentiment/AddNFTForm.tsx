@@ -56,7 +56,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
   const [extraLinks, setExtraLinks] = useState<string[]>([]);
   const [analysisDays, setAnalysisDays] = useState<AnalysisDays>(7);
   const [updateInterval, setUpdateInterval] = useState<UpdateInterval>('1h');
-  const [meta, setMeta] = useState<{ name: string; symbol: string } | null>(null);
+  const [meta, setMeta] = useState<{ name: string; symbol: string; imageUrl: string } | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
 
   const addItem = useSentimentStore(s => s.addItem);
@@ -115,6 +115,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
       discordUrl: discordUrl.trim() || undefined,
       openSeaUrl: openSeaUrl.trim(),
       extraLinks: extraLinks.filter(l => l.trim().length > 0),
+      imageUrl: meta?.imageUrl ?? '',
       analysisDays,
       updateInterval,
       createdAt: new Date().toISOString(),
@@ -242,6 +243,30 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
                 alignItems: 'center',
                 gap: '6px',
               }}>
+                {meta.imageUrl ? (
+                  <img
+                    src={meta.imageUrl}
+                    alt=""
+                    onError={e => {
+                      const el = e.currentTarget;
+                      el.style.display = 'none';
+                      const fallback = el.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                    style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--wr-border)', flexShrink: 0 }}
+                  />
+                ) : null}
+                <div style={{
+                  display: meta.imageUrl ? 'none' : 'flex',
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  backgroundColor: 'var(--wr-accent-dim)',
+                  border: '1px solid var(--wr-accent)',
+                  alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-accent)',
+                  flexShrink: 0,
+                }}>
+                  {meta.symbol.slice(0, 2).toUpperCase()}
+                </div>
                 <span style={{ color: 'var(--wr-success)' }}>✓</span>
                 <span style={{ fontWeight: 700, color: 'var(--wr-text)' }}>{meta.symbol}</span>
                 <span style={{ color: 'var(--wr-text-3)' }}>·</span>
