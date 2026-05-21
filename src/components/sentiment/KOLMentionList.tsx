@@ -39,7 +39,7 @@ export function KOLMentionList({ mentions, maxVisible = 5 }: KOLMentionListProps
   if (sorted.length === 0) {
     return (
       <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', margin: 0 }}>
-        Henüz KOL mention yok
+        No KOL mentions yet
       </p>
     );
   }
@@ -67,8 +67,8 @@ export function KOLMentionList({ mentions, maxVisible = 5 }: KOLMentionListProps
           }}
         >
           {showAll
-            ? '▲ Daha az göster'
-            : `▼ ${sorted.length - maxVisible} daha göster`}
+            ? '▲ Show less'
+            : `▼ Show ${sorted.length - maxVisible} more`}
         </button>
       )}
     </div>
@@ -142,7 +142,7 @@ function KOLMentionRow({ kol }: { kol: KOLMention }) {
             </span>
           </div>
           <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
-            {formatFollowers(kol.followerCount)} takipçi
+            {formatFollowers(kol.followerCount)} followers
           </div>
         </div>
 

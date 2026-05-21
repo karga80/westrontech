@@ -34,7 +34,7 @@ const INTERVAL_LABELS: Record<UpdateInterval, string> = {
 function formatTime(iso: string | undefined): string {
   if (!iso) return '--';
   try {
-    return new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '--';
   }
@@ -53,7 +53,7 @@ function formatPct(value: number | undefined, showSign = true): string {
 
 function formatCount(value: number | undefined): string {
   if (value == null) return '--';
-  return value.toLocaleString('tr-TR');
+  return value.toLocaleString('en-US');
 }
 
 function shortenAddress(address: string): string {
@@ -219,7 +219,7 @@ export function NFTDetailPanel({
                 {scoreLabel}
               </span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                Son: {lastUpdated}
+                Last: {lastUpdated}
               </span>
             </div>
             <button
@@ -251,7 +251,7 @@ export function NFTDetailPanel({
                 )}
               </div>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
-                <span style={{ color: 'var(--wr-text-3)' }}>Volume 24s: </span>
+                <span style={{ color: 'var(--wr-text-3)' }}>Volume 24h: </span>
                 {formatEth(openSea.volume24h)}
                 {openSea.volumeChange24h !== 0 && (
                   <span style={{
@@ -262,7 +262,7 @@ export function NFTDetailPanel({
                   </span>
                 )}
                 <span style={{ color: 'var(--wr-text-3)', margin: '0 6px' }}>|</span>
-                <span style={{ color: 'var(--wr-text-3)' }}>Satış: </span>
+                <span style={{ color: 'var(--wr-text-3)' }}>Sales: </span>
                 {formatCount(openSea.salesCount24h)}
               </div>
             </div>
@@ -277,7 +277,7 @@ export function NFTDetailPanel({
           {twitter ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '4px' }}>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
-                <span style={{ color: 'var(--wr-text-3)' }}>Mention: </span>
+                <span style={{ color: 'var(--wr-text-3)' }}>Mentions: </span>
                 {formatCount(twitter.mentionCount)}
                 {twitter.mentionVelocity > 1 && (
                   <span style={{ color: 'var(--wr-success)', marginLeft: '6px' }}>
@@ -329,14 +329,14 @@ export function NFTDetailPanel({
             {whale ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
-                  <span style={{ color: 'var(--wr-text-3)' }}>Top 10 konsantrasyon: </span>
+                  <span style={{ color: 'var(--wr-text-3)' }}>Top 10 concentration: </span>
                   <span style={{ fontWeight: 700 }}>%{whale.whaleConcentration.toFixed(1)}</span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
-                  <span style={{ color: 'var(--wr-text-3)' }}>Son 7 gün: </span>
-                  <span style={{ color: 'var(--wr-success)' }}>+{whale.whaleMovement7d.entering} giriş</span>
+                  <span style={{ color: 'var(--wr-text-3)' }}>Last 7 days: </span>
+                  <span style={{ color: 'var(--wr-success)' }}>+{whale.whaleMovement7d.entering} in</span>
                   {', '}
-                  <span style={{ color: 'var(--wr-danger)' }}>-{whale.whaleMovement7d.exiting} çıkış</span>
+                  <span style={{ color: 'var(--wr-danger)' }}>-{whale.whaleMovement7d.exiting} out</span>
                 </div>
 
                 {/* Top holders list */}
@@ -418,7 +418,7 @@ export function NFTDetailPanel({
               transition: 'background-color 0.15s',
             }}
           >
-            {loading ? 'Yenileniyor…' : 'Yenile'}
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
           <span
             style={{

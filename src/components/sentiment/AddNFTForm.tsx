@@ -33,9 +33,9 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 const ANALYSIS_DAYS: { label: string; value: AnalysisDays }[] = [
-  { label: '1 gün', value: 1 },
-  { label: '3 gün', value: 3 },
-  { label: '7 gün', value: 7 },
+  { label: '1 day', value: 1 },
+  { label: '3 days', value: 3 },
+  { label: '7 days', value: 7 },
 ];
 
 const UPDATE_INTERVALS: { label: string; value: UpdateInterval }[] = [
@@ -154,7 +154,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
           <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)', margin: 0 }}>
-            NFT Koleksiyonu Ekle
+            Add NFT Collection
           </h2>
           <button
             onClick={onClose}
@@ -164,7 +164,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
           </button>
         </div>
         <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
-          Sentiment takip listesine yeni NFT koleksiyonu ekle
+          Add an NFT collection to your sentiment watchlist
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -186,7 +186,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
             />
             {contractAddress.length > 0 && !addressValid && (
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-danger)', marginTop: '4px', display: 'block' }}>
-                Geçerli bir Ethereum adresi girin (0x...)
+                Enter a valid Ethereum address (0x...)
               </span>
             )}
           </div>
@@ -194,7 +194,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
           {/* Collection Name */}
           <div>
             <label style={LABEL_STYLE}>
-              Koleksiyon Adı{' '}
+              Collection Name{' '}
               <span style={{ color: 'var(--wr-text-4)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
                 (opsiyonel)
               </span>
@@ -299,14 +299,14 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
                   width: '100%',
                 }}
               >
-                + Link Ekle
+                + Add Link
               </button>
             </div>
           </div>
 
-          {/* Analiz Süresi */}
+          {/* Analysis Window */}
           <div>
-            <label style={LABEL_STYLE}>Analiz Süresi</label>
+            <label style={LABEL_STYLE}>Analysis Window</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               {ANALYSIS_DAYS.map(({ label, value }) =>
                 toggleButton(analysisDays === value, () => setAnalysisDays(value), label),
@@ -314,9 +314,9 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
             </div>
           </div>
 
-          {/* Update Aralığı */}
+          {/* Update Interval */}
           <div>
-            <label style={LABEL_STYLE}>Update Aralığı</label>
+            <label style={LABEL_STYLE}>Update Interval</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               {UPDATE_INTERVALS.map(({ label, value }) =>
                 toggleButton(updateInterval === value, () => setUpdateInterval(value), label),
@@ -340,7 +340,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
                 cursor: 'pointer',
               }}
             >
-              İptal
+              Cancel
             </button>
             <button
               onClick={handleSubmit}
@@ -358,7 +358,7 @@ export function AddNFTForm({ onClose, onAdded }: AddNFTFormProps) {
                 transition: 'background-color 0.15s',
               }}
             >
-              + Koleksiyon Ekle
+              + Add Collection
             </button>
           </div>
         </div>

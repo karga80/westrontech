@@ -33,9 +33,9 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 const ANALYSIS_DAYS: { label: string; value: AnalysisDays }[] = [
-  { label: '1 gün', value: 1 },
-  { label: '3 gün', value: 3 },
-  { label: '7 gün', value: 7 },
+  { label: '1 day', value: 1 },
+  { label: '3 days', value: 3 },
+  { label: '7 days', value: 7 },
 ];
 
 const UPDATE_INTERVALS: { label: string; value: UpdateInterval }[] = [
@@ -146,7 +146,7 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
           <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)', margin: 0 }}>
-            Token Ekle
+            Add Token
           </h2>
           <button
             onClick={onClose}
@@ -156,7 +156,7 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
           </button>
         </div>
         <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
-          Sentiment takip listesine yeni token ekle
+          Add a token to your sentiment watchlist
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -251,14 +251,14 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
                   width: '100%',
                 }}
               >
-                + Link Ekle
+                + Add Link
               </button>
             </div>
           </div>
 
-          {/* Analiz Süresi */}
+          {/* Analysis Window */}
           <div>
-            <label style={LABEL_STYLE}>Analiz Süresi</label>
+            <label style={LABEL_STYLE}>Analysis Window</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               {ANALYSIS_DAYS.map(({ label, value }) =>
                 toggleButton(analysisDays === value, () => setAnalysisDays(value), label),
@@ -266,9 +266,9 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
             </div>
           </div>
 
-          {/* Update Aralığı */}
+          {/* Update Interval */}
           <div>
-            <label style={LABEL_STYLE}>Update Aralığı</label>
+            <label style={LABEL_STYLE}>Update Interval</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               {UPDATE_INTERVALS.map(({ label, value }) =>
                 toggleButton(updateInterval === value, () => setUpdateInterval(value), label),
@@ -292,7 +292,7 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
                 cursor: 'pointer',
               }}
             >
-              İptal
+              Cancel
             </button>
             <button
               onClick={handleSubmit}
@@ -310,7 +310,7 @@ export function AddTokenForm({ onClose, onAdded }: AddTokenFormProps) {
                 transition: 'background-color 0.15s',
               }}
             >
-              + Token Ekle
+              + Add Token
             </button>
           </div>
         </div>

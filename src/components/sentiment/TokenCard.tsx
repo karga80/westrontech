@@ -15,12 +15,12 @@ interface TokenCardProps {
 function formatRelativeTime(isoString: string): string {
   const diffMs = Date.now() - new Date(isoString).getTime();
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'az önce';
-  if (diffMin < 60) return `${diffMin} dk önce`;
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} sa önce`;
+  if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay} gün önce`;
+  return `${diffDay}d ago`;
 }
 
 function truncateAddress(address: string): string {
@@ -103,7 +103,7 @@ export default function TokenCard({ item, score, history, loading, onClick }: To
               backgroundColor: 'var(--wr-accent)',
               animation: 'pulse 1s infinite',
             }} />
-            {' '}yükleniyor…
+            {' '}loading…
           </span>
         ) : score ? (
           <ScoreBadge score={score.score} />
@@ -136,11 +136,11 @@ export default function TokenCard({ item, score, history, loading, onClick }: To
         color: 'var(--wr-text-3)',
       }}>
         {loading ? (
-          'güncelleniyor…'
+          'refreshing…'
         ) : item.lastUpdated ? (
           formatRelativeTime(item.lastUpdated)
         ) : (
-          'henüz güncellenmedi'
+          'never updated'
         )}
       </div>
     </div>

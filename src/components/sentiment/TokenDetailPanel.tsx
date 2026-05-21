@@ -34,7 +34,7 @@ const INTERVAL_LABELS: Record<UpdateInterval, string> = {
 function formatTime(iso: string | undefined): string {
   if (!iso) return '--';
   try {
-    return new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '--';
   }
@@ -65,7 +65,7 @@ function formatCount(value: number | undefined): string {
   if (value == null) return '--';
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000)     return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString('tr-TR');
+  return value.toLocaleString('en-US');
 }
 
 function HR() {
@@ -223,7 +223,7 @@ export function TokenDetailPanel({
                 {scoreLabel}
               </span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap' }}>
-                Son: {lastUpdated}
+                Last: {lastUpdated}
               </span>
             </div>
             <button
@@ -243,7 +243,7 @@ export function TokenDetailPanel({
           {twitter ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '4px' }}>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
-                <span style={{ color: 'var(--wr-text-3)' }}>Mention: </span>
+                <span style={{ color: 'var(--wr-text-3)' }}>Mentions: </span>
                 {formatCount(twitter.mentionCount)}
                 {twitter.mentionVelocity > 1 && (
                   <span style={{ color: 'var(--wr-success)', marginLeft: '6px' }}>
@@ -253,11 +253,11 @@ export function TokenDetailPanel({
               </div>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>
                 <span style={{ color: 'var(--wr-text-3)' }}>Sentiment: </span>
-                <span style={{ color: 'var(--wr-success)' }}>%{twitter.sentimentBreakdown.positive} pozitif</span>
+                <span style={{ color: 'var(--wr-success)' }}>{twitter.sentimentBreakdown.positive}% positive</span>
                 {' · '}
-                <span style={{ color: 'var(--wr-danger)' }}>%{twitter.sentimentBreakdown.negative} negatif</span>
+                <span style={{ color: 'var(--wr-danger)' }}>{twitter.sentimentBreakdown.negative}% negative</span>
                 {' · '}
-                <span style={{ color: 'var(--wr-text-3)' }}>%{twitter.sentimentBreakdown.neutral} nötr</span>
+                <span style={{ color: 'var(--wr-text-3)' }}>{twitter.sentimentBreakdown.neutral}% neutral</span>
               </div>
               <div style={{ marginTop: '6px' }}>
                 <div style={{
@@ -317,7 +317,7 @@ export function TokenDetailPanel({
                   </span>
                   {' '}
                   <span style={{ color: 'var(--wr-text-3)' }}>
-                    {onchain.buySellRatio >= 1 ? 'alım ağırlıklı' : 'satım ağırlıklı'}
+                    {onchain.buySellRatio >= 1 ? 'buy-heavy' : 'sell-heavy'}
                   </span>
                 </div>
               </div>
@@ -329,7 +329,7 @@ export function TokenDetailPanel({
           <HR />
 
           {/* FIYAT */}
-          <SectionHeader label="FIYAT" />
+          <SectionHeader label="PRICE" />
           {price ? (
             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)', lineHeight: 1.8 }}>
               <span style={{ fontWeight: 700 }}>${formatPrice(price.currentPrice)}</span>
@@ -342,7 +342,7 @@ export function TokenDetailPanel({
                 </span>
               )}
               <span style={{ color: 'var(--wr-text-3)', margin: '0 6px' }}>•</span>
-              <span style={{ color: 'var(--wr-text-3)' }}>Vol 24s: </span>
+              <span style={{ color: 'var(--wr-text-3)' }}>Vol 24h: </span>
               {formatLargeNumber(price.volume24h)}
               <span style={{ color: 'var(--wr-text-3)', margin: '0 6px' }}>•</span>
               <span style={{ color: 'var(--wr-text-3)' }}>MCap: </span>
@@ -379,7 +379,7 @@ export function TokenDetailPanel({
               transition: 'background-color 0.15s',
             }}
           >
-            {loading ? 'Yenileniyor…' : 'Yenile'}
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
           <span
             style={{

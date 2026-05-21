@@ -197,8 +197,8 @@ export function getScoreColor(level: ScoreLevel): string {
 
 export function getScoreLabel(level: ScoreLevel): string {
   switch (level) {
-    case 'high': return 'GÜÇLÜ';
-    case 'mid':  return 'ORTA';
-    case 'low':  return 'DÜŞÜK';
+    case 'high': return 'STRONG';
+    case 'mid':  return 'MID';
+    case 'low':  return 'LOW';
   }
 }

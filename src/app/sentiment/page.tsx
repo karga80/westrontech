@@ -98,7 +98,7 @@ export default function SentimentPage() {
               color: 'var(--wr-text-3)',
               margin: 0,
             }}>
-              Token ve NFT sentiment analizi
+              Token &amp; NFT sentiment analysis — score 0–100
             </p>
           </div>
 
@@ -172,7 +172,7 @@ export default function SentimentPage() {
               margin: 0,
               textAlign: 'center',
             }}>
-              Henüz watchlist item yok
+              No items in watchlist yet
             </p>
             <p style={{
               fontFamily: 'var(--font-jetbrains)',
@@ -181,7 +181,7 @@ export default function SentimentPage() {
               margin: 0,
               textAlign: 'center',
             }}>
-              Token veya NFT koleksiyon ekleyerek başla
+              Add a token or NFT collection to get started
             </p>
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button
@@ -275,7 +275,7 @@ export default function SentimentPage() {
                     textTransform: 'uppercase',
                     color: 'var(--wr-text-3)',
                   }}>
-                    NFT Koleksiyonlar
+                    NFT Collections
                   </span>
                   <span style={{
                     fontFamily: 'var(--font-jetbrains)',
