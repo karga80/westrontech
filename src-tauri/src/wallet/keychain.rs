@@ -50,11 +50,13 @@ pub fn delete_key(address: &str) -> Result<(), String> {
 // ── Alchemy API key ───────────────────────────────────────────────────────────
 
 pub fn store_alchemy_key(api_key: &str) -> Result<(), String> {
-    write_key("alchemy", api_key)
+    write_key("alchemy", &super::api_key::normalize_api_key(api_key))
 }
 
+/// Normalised on read as well as on write, so a key stored as a full endpoint
+/// URL by an older build starts working without the user re-entering it.
 pub fn fetch_alchemy_key() -> Result<String, String> {
-    read_key("alchemy")
+    read_key("alchemy").map(|k| super::api_key::normalize_api_key(&k))
 }
 
 pub fn delete_alchemy_key() -> Result<(), String> {
@@ -64,11 +66,11 @@ pub fn delete_alchemy_key() -> Result<(), String> {
 // ── OpenSea API key ───────────────────────────────────────────────────────────
 
 pub fn store_opensea_key(api_key: &str) -> Result<(), String> {
-    write_key("opensea", api_key)
+    write_key("opensea", &super::api_key::normalize_api_key(api_key))
 }
 
 pub fn fetch_opensea_key() -> Result<String, String> {
-    read_key("opensea")
+    read_key("opensea").map(|k| super::api_key::normalize_api_key(&k))
 }
 
 pub fn delete_opensea_key() -> Result<(), String> {
@@ -78,11 +80,11 @@ pub fn delete_opensea_key() -> Result<(), String> {
 // ── Etherscan API key ─────────────────────────────────────────────────────────
 
 pub fn store_etherscan_key(api_key: &str) -> Result<(), String> {
-    write_key("etherscan", api_key)
+    write_key("etherscan", &super::api_key::normalize_api_key(api_key))
 }
 
 pub fn fetch_etherscan_key() -> Result<String, String> {
-    read_key("etherscan")
+    read_key("etherscan").map(|k| super::api_key::normalize_api_key(&k))
 }
 
 pub fn delete_etherscan_key() -> Result<(), String> {
