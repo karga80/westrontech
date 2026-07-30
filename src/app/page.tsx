@@ -238,112 +238,188 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
 }
 
 // ─── Wallet Card ───────────────────────────────────────────────────────────
+// Brand v2 §6 "Wallet card". Identity → address → balance → change → 2-cell
+// breakdown → Edit + ··· menu. Delete lives in the menu with typed
+// confirmation, never on the card face. The whole card opens wallet detail;
+// inner actions swallow the click.
+
+// Chain identity dot — colour is identity, never direction (brand §series).
+const CHAIN_DOT: Record<string, string> = {
+  ETH: '#7c5cff', WETH: '#7c5cff',
+  BNB: '#f6c445', BSC: '#f6c445',
+  MATIC: '#2fc4d6', POLYGON: '#2fc4d6',
+  ARB: '#2fc4d6', OP: '#ff8a5b', BASE: '#5b7cfa',
+};
 
 function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boolean; onDelete?: () => void; onEdit?: () => void }) {
   const chg = pnlColor(w.change);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const dotColor = CHAIN_DOT[w.badge?.toUpperCase()] ?? '#7c5cff';
+
+  // Split balance so the cents can be dimmed (brand §6.3).
+  const [whole, cents] = w.usdValue
+    .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .split('.');
+
+  // Close the ··· menu on outside click.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
+
+  const swallow = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+
   return (
     <div
-      className="flex flex-col border transition-all duration-150"
-      style={{ height: '239px', backgroundColor: 'var(--wr-surface)', borderColor: 'var(--wr-border)', position: 'relative' }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.borderColor = 'var(--wr-border-hover)';
-        el.style.backgroundColor = 'var(--wr-hover-bg)';
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLDivElement;
-        el.style.borderColor = 'var(--wr-border)';
-        el.style.backgroundColor = 'var(--wr-surface)';
-      }}
+      className="flex flex-col transition-colors duration-150"
+      style={{ backgroundColor: 'var(--wr-row)', border: '1px solid rgba(242,242,247,.1)', borderRadius: '12px', position: 'relative' }}
+      onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'rgba(242,242,247,.2)'; el.style.backgroundColor = 'var(--wr-row-zebra)'; }}
+      onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'rgba(242,242,247,.1)'; el.style.backgroundColor = 'var(--wr-row)'; }}
     >
       {/* Loading shimmer */}
       {loading && (
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, borderRadius: 'inherit' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-row)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, borderRadius: '12px' }}>
           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', letterSpacing: '2px' }}>LOADING…</span>
         </div>
       )}
 
-      {/* Clickable area — navigates to wallet detail */}
-      <Link href={`/wallet/${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '20px', paddingBottom: '12px', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
+      {/* Whole card opens wallet detail */}
+      <Link href={`/wallet/${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '16px 16px 0', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
-        <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>
-          {w.name}
-        </span>
-        <Tag variant={WALLET_TOKEN_VARIANT[w.badge] ?? 'neutral'}>{w.badge}</Tag>
-      </div>
-
-      {/* Address */}
-      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '8px' }}>
-        {w.address}
-      </div>
-
-      {/* Balance */}
-      <div style={{ marginBottom: '4px' }}>
-        <div style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>
-          ${w.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
-        <div className="flex items-center" style={{ gap: '4px' }}>
-          <span style={{ color: chg, fontSize: '10px' }}>{w.change >= 0 ? '↑' : '↓'}</span>
-          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: chg, fontVariantNumeric: 'tabular-nums' }}>
-            {w.change >= 0 ? '+' : ''}${Math.abs(w.change).toLocaleString()} ({w.change >= 0 ? '+' : ''}{w.changePct.toFixed(2)}%)
+        {/* 1 — Identity: name + chain badge */}
+        <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+          <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(242,242,247,.06)', border: '1px solid rgba(242,242,247,.12)', borderRadius: '99px', padding: '3px 9px 3px 7px', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.04em', color: 'var(--wr-text-2)' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '99px', background: dotColor }} />
+            {w.badge}
           </span>
         </div>
-      </div>
 
-      {/* Stats row */}
-      <div className="flex items-start mt-auto pt-3" style={{ borderTop: '1px solid var(--wr-border)', gap: '0' }}>
-        <div className="flex flex-1" style={{ gap: '20px' }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>NFTs</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>{w.nfts}</div>
+        {/* 2 — Address (click to copy) */}
+        <div
+          onClick={e => { swallow(e); if (w.rawAddress) navigator.clipboard?.writeText(w.rawAddress); }}
+          title="Click to copy"
+          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11.5px', color: 'var(--wr-text-3)', marginBottom: '14px', cursor: 'copy', width: 'fit-content' }}
+        >
+          {w.address}
+        </div>
+
+        {/* 3 — Balance, cents dimmed */}
+        <div style={{ fontFamily: 'var(--font-space)', fontSize: '26px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>
+          ${whole}<span style={{ color: 'var(--wr-text-3)', fontSize: '17px' }}>.{cents}</span>
+        </div>
+
+        {/* 4 — Change: arrow + amount + percentage, direction colour */}
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: chg, margin: '9px 0 14px', fontVariantNumeric: 'tabular-nums' }}>
+          {w.change >= 0 ? '↑' : '↓'} {w.change >= 0 ? '+' : '−'}${Math.abs(w.change).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({w.change >= 0 ? '+' : ''}{w.changePct.toFixed(2)}%)
+        </div>
+
+        {/* 5 — Breakdown: two cells, count folded into label */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '1px solid rgba(242,242,247,.08)' }}>
+          <div style={{ padding: '11px 0', borderRight: '1px solid rgba(242,242,247,.08)' }}>
+            <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: '5px' }}>{w.nfts} NFTs · floor</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: pnlColor(w.floorPnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.floorPnl)}</div>
           </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Floor PnL</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: pnlColor(w.floorPnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.floorPnl)}</div>
+          <div style={{ padding: '11px 0 11px 12px' }}>
+            <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: '5px' }}>{w.coins} tokens · pnl</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: pnlColor(w.pnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.pnl)}</div>
           </div>
         </div>
-        <div style={{ width: '1px', backgroundColor: 'var(--wr-border-hover)', alignSelf: 'stretch', margin: '0 16px' }} />
-        <div className="flex flex-1" style={{ gap: '20px' }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>COINS</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>{w.coins}</div>
-          </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>PnL</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: pnlColor(w.pnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.pnl)}</div>
-          </div>
-        </div>
-      </div>
-
       </Link>
 
-      {/* Action buttons */}
-      <div className="flex" style={{ borderTop: '1px solid var(--wr-border)', height: '27px' }}>
+      {/* 6 — Actions: Edit link + ··· menu */}
+      <div className="flex items-center justify-between" style={{ borderTop: '1px solid rgba(242,242,247,.08)', padding: '11px 16px', fontSize: '12.5px', position: 'relative' }}>
         <button
-          className="flex-1 h-full cursor-pointer"
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
-          onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-border-hover)'; }}
-          onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
-          onClick={onEdit}
-          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', borderRight: '1px solid var(--wr-border)', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
+          onClick={e => { swallow(e); onEdit?.(); }}
+          className="cursor-pointer transition-opacity hover:opacity-80"
+          style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: 'var(--wr-accent-nav)', background: 'none', border: 'none', padding: 0 }}
         >
           Edit
         </button>
-        <button
-          className="flex-1 h-full transition-colors cursor-pointer"
-          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2b070c'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
-          onMouseDown={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? '#fecaca' : '#3d0f0f'; }}
-          onMouseUp={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2b070c'; }}
-          onClick={onDelete}
-          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-danger)', backgroundColor: 'transparent', border: 'none', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
-        >
-          Delete
-        </button>
+        <div ref={menuRef} style={{ position: 'relative' }}>
+          <button
+            onClick={e => { swallow(e); setMenuOpen(v => !v); }}
+            aria-label="More actions"
+            className="cursor-pointer transition-colors"
+            style={{ fontSize: '15px', lineHeight: 1, color: menuOpen ? 'var(--wr-text)' : 'var(--wr-text-3)', background: 'none', border: 'none', padding: '0 4px' }}
+          >
+            ···
+          </button>
+          {menuOpen && (
+            <div
+              onClick={swallow}
+              style={{ position: 'absolute', right: 0, bottom: 'calc(100% + 6px)', minWidth: '148px', background: 'var(--wr-surface)', border: '1px solid rgba(242,242,247,.12)', borderRadius: '8px', overflow: 'hidden', zIndex: 20, boxShadow: 'none' }}
+            >
+              <button
+                onClick={e => { swallow(e); setMenuOpen(false); onEdit?.(); }}
+                className="w-full text-left cursor-pointer transition-colors"
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-row-hover)'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'}
+                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-text)', background: 'transparent', border: 'none', padding: '10px 12px', display: 'block' }}
+              >
+                Edit wallet
+              </button>
+              <button
+                onClick={e => { swallow(e); setMenuOpen(false); setTyped(''); setConfirmOpen(true); }}
+                className="w-full text-left cursor-pointer transition-colors"
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-sell-tint)'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'}
+                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-sell-text)', background: 'transparent', border: 'none', borderTop: '1px solid rgba(242,242,247,.08)', padding: '10px 12px', display: 'block' }}
+              >
+                Delete wallet
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Delete — typed confirmation (brand §6.6: never on the card face) */}
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-[400]"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setConfirmOpen(false); }}
+        >
+          <div style={{ width: '380px', background: 'var(--wr-surface)', border: '1px solid var(--wr-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-space)', fontSize: '17px', fontWeight: 600, color: 'var(--wr-text)', marginBottom: '6px' }}>Delete wallet</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-text-2)', lineHeight: 1.6 }}>
+                This removes <span style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{w.name}</span> from Westron. Your keys and on-chain funds are untouched. Type the wallet name to confirm.
+              </div>
+            </div>
+            <input
+              autoFocus
+              value={typed}
+              onChange={e => setTyped(e.target.value)}
+              placeholder={w.name}
+              className="focus:border-[#7c5cff]"
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text)', background: 'var(--wr-row)', border: '1px solid var(--wr-border)', borderRadius: '8px', padding: '10px 12px', outline: 'none' }}
+            />
+            <div className="flex items-center justify-end" style={{ gap: '8px' }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="cursor-pointer"
+                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: 'var(--wr-text-2)', background: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', borderRadius: '8px', padding: '8px 14px' }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={typed.trim() !== w.name}
+                onClick={() => { setConfirmOpen(false); onDelete?.(); }}
+                className="transition-opacity"
+                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: typed.trim() === w.name ? '#2b070c' : 'var(--wr-text-3)', background: typed.trim() === w.name ? 'var(--wr-sell)' : 'var(--wr-overlay)', border: '1px solid ' + (typed.trim() === w.name ? 'var(--wr-sell)' : 'var(--wr-border)'), borderRadius: '8px', padding: '8px 14px', cursor: typed.trim() === w.name ? 'pointer' : 'not-allowed' }}
+              >
+                Delete wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1149,7 +1225,7 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-3" style={{ gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
           {displayWallets.map(w => (
             <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
               onDelete={() => {
