@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { getPortfolioSnapshot, loadAlchemyKey, type PortfolioSnapshot } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { Tag, type TagVariant } from '@/components/Tag';
 
 // ─── Portfolio / Holdings — matches 0G1do design ─────────────────────────────
@@ -37,7 +37,7 @@ export default function PortfolioHoldingsPage() {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const wallets = loadWallets();
     if (wallets[0]) setWalletName(wallets[0].name);
-    if (!inTauri) { setSnap(MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot); return; }
+    if (!inTauri) { setSnap(EMPTY_SNAPSHOT as PortfolioSnapshot); return; }
     (async () => {
       const key  = await loadAlchemyKey().catch(() => '');
       const addr = wallets[0]?.address ?? '';

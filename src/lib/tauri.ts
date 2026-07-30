@@ -418,6 +418,43 @@ export async function deleteOpenSeaKey(): Promise<void> {
   return invoke('delete_opensea_key_cmd');
 }
 
+// ── Sister-wallet finder (Etherscan, ETH mainnet) ────────────────────────────
+
+export type SisterReason = 'common_funder' | 'funded_target' | 'target_funded' | 'round_trip';
+
+export interface SisterCandidate {
+  address: string;
+  reasons: SisterReason[];
+  direct_out: number;
+  direct_in: number;
+  first_interaction?: number | null;
+  last_interaction?: number | null;
+  score: number;
+}
+
+export interface SisterReport {
+  target: string;
+  funder?: string | null;
+  candidates: SisterCandidate[];
+  note?: string | null;
+}
+
+export async function findSisterWallets(address: string): Promise<SisterReport> {
+  return invoke<SisterReport>('find_sister_wallets', { address });
+}
+
+export async function saveEtherscanKey(apiKey: string): Promise<void> {
+  return invoke('save_etherscan_key', { apiKey });
+}
+
+export async function loadEtherscanKey(): Promise<string> {
+  return invoke<string>('load_etherscan_key');
+}
+
+export async function deleteEtherscanKey(): Promise<void> {
+  return invoke('delete_etherscan_key_cmd');
+}
+
 // Sniping
 export interface SnipeRuleInput {
   collection_slug: string;

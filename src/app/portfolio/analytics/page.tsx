@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { getPnlSummary, getPortfolioSnapshot, loadAlchemyKey, type PnlSummary, type PortfolioSnapshot } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_PNL_SUMMARY, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { EMPTY_PNL, EMPTY_SNAPSHOT } from '@/lib/emptyData';
 
 // ─── Portfolio / Analytics — matches WK5Xm design ────────────────────────────
 
@@ -33,8 +33,8 @@ export default function PortfolioAnalyticsPage() {
     const wallets = loadWallets();
     if (wallets[0]) setWalletName(wallets[0].name);
     if (!inTauri) {
-      setPnl(MOCK_PNL_SUMMARY as PnlSummary);
-      setSnap(MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot);
+      setPnl(EMPTY_PNL as PnlSummary);
+      setSnap(EMPTY_SNAPSHOT as PortfolioSnapshot);
       return;
     }
     (async () => {

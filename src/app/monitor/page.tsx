@@ -10,7 +10,7 @@ import { TrackedNftNotificationModal } from '@/components/TrackedNftNotification
 import { loadWallets, removeWallet } from '@/lib/walletStore';
 import { loadCollections, saveCollection, removeCollection, type WatchedCollection } from '@/lib/collectionStore';
 import { fetchCollectionByContract } from '@/lib/tauri';
-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { useTheme } from '@/lib/themeContext';
 import ProGate from '@/components/ProGate';
 
@@ -464,7 +464,7 @@ export default function MonitorPage() {
       const results = await Promise.allSettled(
         stored.map(async (w) => {
           const [snap, txs] = await Promise.all([
-            getPortfolioSnapshot(w.address, key).catch(() => MOCK_PORTFOLIO_SNAPSHOT),
+            getPortfolioSnapshot(w.address, key).catch(() => EMPTY_SNAPSHOT),
             getAssetTransfers(w.address, key).catch(() => [] as AssetTransfer[]),
           ]);
           return { w, snap: snap as PortfolioSnapshot, txCount: (txs as AssetTransfer[]).length };

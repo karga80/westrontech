@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getNftsForOwner, saveAlchemyKey, loadAlchemyKey, type OwnedNft, type NftsForOwnerResponse } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_NFTS_RESPONSE } from '@/lib/mockData';
+import { EMPTY_NFTS_RESPONSE } from '@/lib/emptyData';
 
 type ViewMode = 'grid' | 'list';
 type SortKey = 'name' | 'collection' | 'floor_price';
@@ -142,8 +142,8 @@ export default function Gallery() {
       const wallets = loadWallets();
       const firstAddr = wallets[0]?.address ?? '';
       setAddress(firstAddr);
-      setNfts(MOCK_NFTS_RESPONSE.owned_nfts);
-      setTotalCount(MOCK_NFTS_RESPONSE.total_count);
+      setNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
+      setTotalCount(EMPTY_NFTS_RESPONSE.total_count);
       return;
     }
 
@@ -171,8 +171,8 @@ export default function Gallery() {
 
   const fetchNfts = async () => {
     if (!isTauri) {
-      setNfts(MOCK_NFTS_RESPONSE.owned_nfts);
-      setTotalCount(MOCK_NFTS_RESPONSE.total_count);
+      setNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
+      setTotalCount(EMPTY_NFTS_RESPONSE.total_count);
       setSelectedIds(new Set());
       return;
     }

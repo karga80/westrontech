@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '@/lib/themeContext';
 import { loadSubscription, isSubscriptionActive } from '@/lib/subscriptionStore';
 
@@ -11,32 +11,8 @@ const NAV_LINKS = [
   { label: 'Dashboard', href: '/',        pro: false },
   { label: 'Monitor',   href: '/monitor', pro: true  },
   { label: 'Bulk',      href: '/bulk',    pro: true  },
-  { label: 'Tasks',     href: '/tasks',   pro: true  },
 ];
 
-const ACTIVE_TASKS = [
-  {
-    icon: '↑',
-    title: 'List Bored Ape #3291',
-    detail: 'Price: 12.5 ETH · Expires: 7d',
-    status: 'Pending',
-    statusType: 'accent' as const,
-  },
-  {
-    icon: '↑',
-    title: 'Bid on CryptoPunk #5822',
-    detail: 'Bid: 80 ETH · Expires: 24h',
-    status: 'Pending',
-    statusType: 'accent' as const,
-  },
-  {
-    icon: '⇄',
-    title: 'Transfer Azuki #1108',
-    detail: 'To: Polygon Cold · Now',
-    status: 'Processing',
-    statusType: 'warn' as const,
-  },
-];
 
 // ─── Theme Toggle (minimal icon) ────────────────────────────────────────────
 
@@ -88,8 +64,6 @@ export default function Navbar() {
   const pathname = usePathname();
   const { theme } = useTheme();
   const isDay = theme === 'day';
-  const [tasksOpen, setTasksOpen] = useState(false);
-  const tasksRef = useRef<HTMLDivElement>(null);
   const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
@@ -101,15 +75,6 @@ export default function Navbar() {
 
   const isSettings = pathname === '/settings';
   if (pathname === '/login') return null;
-
-  // Close tasks dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (tasksRef.current && !tasksRef.current.contains(e.target as Node)) setTasksOpen(false);
-    }
-    if (tasksOpen) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [tasksOpen]);
 
   // Explicit color values — no CSS variable indirection
   const NAV_BG      = isDay ? '#FFFFFF' : '#000000';
@@ -221,107 +186,6 @@ export default function Navbar() {
               </span>
             </div>
 
-            {/* Tasks indicator chip + dropdown */}
-            <div ref={tasksRef} style={{ position: 'relative' }}>
-              <button
-                onClick={() => setTasksOpen(o => !o)}
-                className="flex items-center border"
-                style={{
-                  borderColor: tasksOpen ? NAV_ACTIVE : NAV_BORDER,
-                  padding: '4px 10px',
-                  gap: '6px',
-                  background: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: tasksOpen ? NAV_ACTIVE : NAV_MUTED }}>Tasks</span>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: '#BEFF00', color: '#000000',
-                  fontSize: '9px', fontWeight: 700,
-                  borderRadius: '8px', padding: '1px 5px',
-                  fontFamily: 'var(--font-jetbrains)',
-                }}>3</span>
-              </button>
-
-              {tasksOpen && (
-                <div style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 8px)',
-                  right: 0,
-                  width: '340px',
-                  backgroundColor: 'var(--wr-surface)',
-                  border: `1px solid ${NAV_BORDER}`,
-                  zIndex: 200,
-                  boxShadow: isDay ? '0 8px 32px rgba(0,0,0,0.12)' : '0 8px 32px rgba(0,0,0,0.6)',
-                }}>
-                  {/* Header */}
-                  <div className="flex items-center justify-between" style={{ padding: '14px 16px', borderBottom: `1px solid ${NAV_BORDER}` }}>
-                    <div className="flex items-center gap-2">
-                      <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: NAV_TEXT }}>Active Tasks</span>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: NAV_ACTIVE }}>3</span>
-                    </div>
-                    <Link
-                      href="/tasks"
-                      onClick={() => setTasksOpen(false)}
-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: NAV_ACTIVE, textDecoration: 'none' }}
-                    >
-                      View All →
-                    </Link>
-                  </div>
-
-                  {/* Task items */}
-                  {ACTIVE_TASKS.map((task, i) => {
-                    const statusColor = task.statusType === 'warn'
-                      ? (isDay ? '#D97706' : '#FBBF24')
-                      : NAV_ACTIVE;
-                    return (
-                    <div key={i} style={{ padding: '12px 16px', borderBottom: i < ACTIVE_TASKS.length - 1 ? `1px solid ${NAV_BORDER}` : 'none' }}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2.5">
-                          <div style={{
-                            width: '26px', height: '26px', flexShrink: 0,
-                            backgroundColor: task.statusType === 'warn' ? (isDay ? '#FEF3C7' : '#2a1800') : (isDay ? '#E8FFCC' : '#0a1200'),
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '12px', color: statusColor, fontWeight: 700,
-                          }}>
-                            {task.icon}
-                          </div>
-                          <span style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: NAV_TEXT }}>{task.title}</span>
-                        </div>
-                        <span style={{
-                          fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
-                          color: statusColor, border: `1px solid ${statusColor}`,
-                          padding: '2px 7px', borderRadius: '20px',
-                          display: 'flex', alignItems: 'center', gap: '4px',
-                        }}>
-                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusColor, display: 'inline-block', flexShrink: 0 }} />
-                          {task.status}
-                        </span>
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: NAV_MUTED, marginBottom: '10px', marginLeft: '34px' }}>
-                        {task.detail}
-                      </div>
-                      <div className="flex items-center gap-2" style={{ marginLeft: '34px' }}>
-                        {['Pause', 'Edit'].map(action => (
-                          <button key={action} style={{
-                            fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 500,
-                            color: NAV_MUTED, backgroundColor: 'transparent',
-                            border: `1px solid ${NAV_BORDER}`, padding: '3px 10px', cursor: 'pointer',
-                          }}>{action}</button>
-                        ))}
-                        <button style={{
-                          fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
-                          color: isDay ? '#DC2626' : '#F87171', backgroundColor: 'transparent',
-                          border: `1px solid ${isDay ? '#DC2626' : '#F87171'}`, padding: '3px 10px', cursor: 'pointer',
-                        }}>Cancel</button>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
             {/* Subscribe CTA / PRO badge */}
             {isPro ? (

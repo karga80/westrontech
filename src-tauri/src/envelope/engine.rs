@@ -197,3 +197,79 @@ impl EnvelopeEngine {
         let _ = self.audit.write_entry(&entry);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::envelope::types::{Envelope, TransactionRequest};
+
+    const ADDR: &str = "0x000000000000000000000000000000000000dead";
+    const ETH: u128 = 1_000_000_000_000_000_000; // 1 ETH in wei
+
+    fn engine_with(per_tx: u128, hard_cap: u128, spent: u128, kill: bool, expired: bool) -> EnvelopeEngine {
+        let e = EnvelopeEngine::new();
+        let now = Utc::now().timestamp();
+        e.create_envelope(Envelope {
+            id: Uuid::new_v4(),
+            created_at: now,
+            expires_at: if expired { now - 10 } else { now + 3600 },
+            per_tx_ceiling_wei: per_tx,
+            hard_cap_wei: hard_cap,
+            spent_wei: spent,
+            scope: vec![ADDR.to_string()],
+            kill_switch_active: kill,
+        });
+        e
+    }
+
+    fn req(to: &str, value: u128) -> TransactionRequest {
+        TransactionRequest { to: to.to_string(), value_wei: value, calldata: String::new() }
+    }
+
+    #[test]
+    fn authorizes_within_limits_and_tracks_spend() {
+        let e = engine_with(2 * ETH, 5 * ETH, 0, false, false);
+        assert!(e.check_and_authorize(&req(ADDR, ETH)).is_ok());
+        let st = e.get_status().unwrap();
+        assert_eq!(st.spent_wei, ETH);
+    }
+
+    #[test]
+    fn rejects_over_per_tx_ceiling() {
+        let e = engine_with(1 * ETH, 100 * ETH, 0, false, false);
+        let err = e.check_and_authorize(&req(ADDR, 2 * ETH)).unwrap_err();
+        assert!(matches!(err, EnvelopeError::PerTxCeilingExceeded { .. }));
+    }
+
+    #[test]
+    fn rejects_out_of_scope_address() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, false, false);
+        let other = "0x1111111111111111111111111111111111111111";
+        let err = e.check_and_authorize(&req(other, ETH)).unwrap_err();
+        assert!(matches!(err, EnvelopeError::AddressOutOfScope { .. }));
+    }
+
+    #[test]
+    fn hard_cap_breach_trips_kill_switch() {
+        // ceiling high, hard cap 3 ETH, already spent 2.5 ETH -> a 1 ETH tx breaches.
+        let e = engine_with(10 * ETH, 3 * ETH, 2_500_000_000_000_000_000, false, false);
+        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
+        assert!(matches!(err, EnvelopeError::HardCapExceeded { .. }));
+        // auto kill switch must now be engaged
+        assert!(e.get_status().unwrap().kill_switch);
+    }
+
+    #[test]
+    fn expired_envelope_rejects() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, false, true);
+        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
+        assert!(matches!(err, EnvelopeError::EnvelopeExpired { .. }));
+    }
+
+    #[test]
+    fn kill_switch_blocks_all() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, true, false);
+        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
+        assert!(matches!(err, EnvelopeError::KillSwitchActive));
+    }
+}

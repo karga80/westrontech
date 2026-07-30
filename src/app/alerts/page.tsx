@@ -7,7 +7,7 @@ import {
   type AlertRule, type AlertRuleInput,
 } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_ALERTS } from '@/lib/mockData';
+import { EMPTY_ALERTS } from '@/lib/emptyData';
 import ProGate from '@/components/ProGate';
 import { loadNotificationPrefs } from '@/lib/notificationPrefsStore';
 
@@ -163,7 +163,7 @@ export default function AlertsPage() {
       const wallets = loadWallets();
       const addr = wallets[0]?.address ?? '';
       setWalletAddress(addr);
-      setAlerts(MOCK_ALERTS);
+      setAlerts(EMPTY_ALERTS);
       setLoading(false);
       return;
     }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getPortfolioSnapshot, getPnlSummary, getAssetTransfers, loadAlchemyKey, type PortfolioSnapshot, type PnlSummary, type AssetTransfer } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_PORTFOLIO_SNAPSHOT, MOCK_PNL_SUMMARY, MOCK_TRANSFERS } from '@/lib/mockData';
+import { EMPTY_PNL, EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, TX_TYPE_VARIANT } from '@/components/Tag';
 import EthIcon from '@/components/EthIcon';
 
@@ -48,11 +48,11 @@ function WalletsTab() {
         name: w.name,
         address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
         rawAddress: w.address,
-        eth: MOCK_PORTFOLIO_SNAPSHOT.eth_balance,
-        usd: MOCK_PORTFOLIO_SNAPSHOT.portfolio_value_usd,
+        eth: EMPTY_SNAPSHOT.eth_balance,
+        usd: EMPTY_SNAPSHOT.portfolio_value_usd,
         color: WALLET_COLORS[i % WALLET_COLORS.length],
-        nfts: MOCK_PORTFOLIO_SNAPSHOT.nft_count,
-        tokens: MOCK_PORTFOLIO_SNAPSHOT.token_count,
+        nfts: EMPTY_SNAPSHOT.nft_count,
+        tokens: EMPTY_SNAPSHOT.token_count,
       })));
       setLoading(false);
       return;
@@ -60,10 +60,10 @@ function WalletsTab() {
     (async () => {
       const key = await loadAlchemyKey().catch(() => '');
       const results = await Promise.allSettled(
-        stored.map(w => getPortfolioSnapshot(w.address, key).catch(() => MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot))
+        stored.map(w => getPortfolioSnapshot(w.address, key).catch(() => EMPTY_SNAPSHOT as PortfolioSnapshot))
       );
       setWalletCards(results.map((r, i) => {
-        const snap = r.status === 'fulfilled' ? r.value : MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot;
+        const snap = r.status === 'fulfilled' ? r.value : EMPTY_SNAPSHOT as PortfolioSnapshot;
         return {
           name: stored[i].name,
           address: stored[i].address.slice(0, 6) + '…' + stored[i].address.slice(-4),
@@ -121,14 +121,14 @@ function AnalyticsTab() {
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const addr = loadWallets()[0]?.address ?? '';
-    if (!inTauri) { setPnl(MOCK_PNL_SUMMARY as PnlSummary); return; }
+    if (!inTauri) { setPnl(EMPTY_PNL as PnlSummary); return; }
     (async () => {
       const key = await loadAlchemyKey().catch(() => '');
       if (addr && key) {
-        const data = await getPnlSummary(addr, key).catch(() => MOCK_PNL_SUMMARY as PnlSummary);
+        const data = await getPnlSummary(addr, key).catch(() => EMPTY_PNL as PnlSummary);
         setPnl(data);
       } else {
-        setPnl(MOCK_PNL_SUMMARY as PnlSummary);
+        setPnl(EMPTY_PNL as PnlSummary);
       }
     })();
   }, []);
@@ -197,7 +197,7 @@ export default function PortfolioPage() {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const addr = loadWallets()[0]?.address ?? '';
     if (!inTauri) {
-      setLiveTxs((MOCK_TRANSFERS as AssetTransfer[]).map(t => mapTransfer(t, addr)));
+      setLiveTxs((EMPTY_TRANSFERS as AssetTransfer[]).map(t => mapTransfer(t, addr)));
       return;
     }
     (async () => {

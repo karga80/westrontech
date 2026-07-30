@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { getAssetTransfers, loadAlchemyKey, type AssetTransfer } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_TRANSFERS } from '@/lib/mockData';
+import { EMPTY_TRANSFERS } from '@/lib/emptyData';
 
 // ─── Portfolio / Transactions — matches 3qwIV design ────────────────────────
 
@@ -58,7 +58,7 @@ export default function PortfolioTransactionsPage() {
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const addr = loadWallets()[0]?.address ?? '';
-    if (!inTauri) { setLiveTxs((MOCK_TRANSFERS as AssetTransfer[]).map(t => mapTx(t, addr))); return; }
+    if (!inTauri) { setLiveTxs((EMPTY_TRANSFERS as AssetTransfer[]).map(t => mapTx(t, addr))); return; }
     (async () => {
       const key = await loadAlchemyKey().catch(() => '');
       if (!key || !addr) { setLiveTxs(TXS as ReturnType<typeof mapTx>[]); return; }

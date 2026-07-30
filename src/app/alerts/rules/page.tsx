@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { listAlerts, setAlertActive, deleteAlert, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_ALERTS } from '@/lib/mockData';
+import { EMPTY_ALERTS } from '@/lib/emptyData';
 import ProGate from '@/components/ProGate';
 
 // ─── Alerts / Rules — matches 5JKDK design ───────────────────────────────────
@@ -40,7 +40,7 @@ export default function AlertRulesPage() {
     const wallets = loadWallets();
     const addr = wallets[0]?.address ?? '';
     setWalletAddress(addr);
-    if (!inTauri) { setRules(MOCK_ALERTS); setLoading(false); return; }
+    if (!inTauri) { setRules(EMPTY_ALERTS); setLoading(false); return; }
     (async () => {
       const key = await loadAlchemyKey().catch(() => '');
       void key;

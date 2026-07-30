@@ -10,8 +10,9 @@ import {
   loadWallets, saveWallets, addWallet as persistWallet, removeWallet as deleteWalletFromStore,
   updateWallet as updateWalletInStore, type StoredWallet,
 } from '@/lib/walletStore';
-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
+import SisterWalletFinder from '@/components/SisterWalletFinder';
 import { useTheme } from '@/lib/themeContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -700,7 +701,7 @@ export default function WalletsPage() {
     if (!inTauri) {
       // Browser mock mode
       const mock: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { mock[w.id] = MOCK_PORTFOLIO_SNAPSHOT; });
+      wallets.forEach(w => { mock[w.id] = EMPTY_SNAPSHOT; });
       setSnapshots(mock);
       setLoadingData(false);
       return;
@@ -746,6 +747,7 @@ export default function WalletsPage() {
     <div className="flex flex-col min-h-screen" style={{ backgroundColor: 'var(--wr-bg)' }}>
       <div style={{ flex: 1, padding: '32px 48px' }}>
 
+
         {/* Header */}
         <div className="flex items-center justify-between" style={{ marginBottom: '28px' }}>
           <div>
@@ -789,6 +791,8 @@ export default function WalletsPage() {
             </button>
           </div>
         </div>
+
+        <SisterWalletFinder />
 
         {/* Wallet grid */}
         {wallets.length === 0 ? (

@@ -10,7 +10,7 @@ import {
   type TradeRecord,
   type PortfolioSnapshot,
 } from '@/lib/tauri';
-import { MOCK_PORTFOLIO_SNAPSHOT, MOCK_PNL_SUMMARY, MOCK_TRADES } from '@/lib/mockData';
+import { EMPTY_PNL, EMPTY_SNAPSHOT, EMPTY_TRADES } from '@/lib/emptyData';
 
 const DEMO_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
 
@@ -56,9 +56,9 @@ export default function AnalyticsPage() {
 
   const handleLoadAnalytics = async () => {
     if (!isTauri) {
-      setSnapshot(MOCK_PORTFOLIO_SNAPSHOT);
-      setPnl(MOCK_PNL_SUMMARY);
-      setTrades(MOCK_TRADES);
+      setSnapshot(EMPTY_SNAPSHOT);
+      setPnl(EMPTY_PNL);
+      setTrades(EMPTY_TRADES);
       setLoaded(true);
       return;
     }

@@ -10,6 +10,7 @@ export interface Env {
   SUBS: KVNamespace;
   // Set these via `wrangler secret put` or in the Cloudflare dashboard
   ALCHEMY_WEBHOOK_SECRET: string; // from Alchemy webhook signing key
+  LICENSE_SIGNING_KEY: string;    // base64 PKCS8 DER of the ED25519 private key (see DEPLOY.md)
   // Set these in wrangler.toml [vars] or dashboard environment variables
   PAYMENT_WALLET: string;         // your ETH address that receives payments (lowercase)
   MONTHLY_PRICE_ETH: string;      // e.g. "0.01"
@@ -112,6 +113,65 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
   return json(response);
 }
 
+// ── Signed license issuance ───────────────────────────────────────────────────
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+/**
+ * Issue a signed license for a wallet with an active subscription.
+ * The app verifies the signature offline with the embedded public key.
+ */
+async function handleLicense(request: Request, env: Env): Promise<Response> {
+  let body: { wallet?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const wallet = body.wallet?.toLowerCase();
+  if (!wallet || !/^0x[0-9a-f]{40}$/.test(wallet)) {
+    return json({ active: false });
+  }
+
+  const record = await env.SUBS.get<SubRecord>(`sub:${wallet}`, 'json');
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!record || record.expires_at <= nowSec) {
+    return json({ active: false });
+  }
+
+  // Canonical payload string — signed verbatim and returned as-is.
+  const payload = JSON.stringify({
+    wallet,
+    plan: record.plan,
+    expires_at: record.expires_at,
+    issued_at: nowSec,
+  });
+
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    base64ToBytes(env.LICENSE_SIGNING_KEY),
+    { name: 'Ed25519' },
+    false,
+    ['sign'],
+  );
+  const sigBuf = await crypto.subtle.sign('Ed25519', key, new TextEncoder().encode(payload));
+  const sig = bytesToBase64(new Uint8Array(sigBuf));
+
+  return json({ active: true, payload, sig });
+}
+
 async function handleAlchemyWebhook(request: Request, env: Env): Promise<Response> {
   const rawBody = await request.text();
 
@@ -209,6 +269,9 @@ export default {
     if (request.method === 'POST') {
       if (url.pathname === '/validate') {
         return handleValidate(request, env);
+      }
+      if (url.pathname === '/license') {
+        return handleLicense(request, env);
       }
       if (url.pathname === '/webhook/alchemy') {
         return handleAlchemyWebhook(request, env);

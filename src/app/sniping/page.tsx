@@ -18,7 +18,7 @@ import {
   type SnipeResult,
   type SnipeOpportunity,
 } from '@/lib/tauri';
-import { MOCK_ENVELOPE, MOCK_SNIPE_RULES } from '@/lib/mockData';
+import { EMPTY_SNIPE_RULES } from '@/lib/emptyData';
 import ProGate from '@/components/ProGate';
 
 const isValidEthAddress = (addr: string): boolean =>
@@ -69,7 +69,7 @@ function EnvelopePanel({ isTauri }: EnvelopePanelProps) {
   const [createLoading, setCreateLoading] = useState(false);
 
   const loadStatus = async () => {
-    if (!isTauri) { setStatus(MOCK_ENVELOPE); return; }
+    if (!isTauri) { setStatus(null); return; }
     setLoading(true);
     setError(null);
     try {
@@ -512,7 +512,7 @@ export default function SnipingPage() {
   }, []);
 
   const loadRules = async (addr: string) => {
-    if (!isTauri) { setRules(MOCK_SNIPE_RULES); return; }
+    if (!isTauri) { setRules(EMPTY_SNIPE_RULES); return; }
     setListLoading(true);
     setListError(null);
     try {

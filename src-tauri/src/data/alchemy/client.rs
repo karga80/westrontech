@@ -13,7 +13,7 @@ use crate::data::provider::{DataProviderError, ProviderResult};
 /// Three host families:
 /// - Mainnet RPC + NFT v3:    `https://eth-mainnet.g.alchemy.com/{...}`
 /// - Data API (Portfolio):    `https://api.g.alchemy.com/data/v1/{key}/...`
-/// - Prices API:              `https://api.g.alchemy.com/prices/v1/...` (Bearer auth)
+/// - Prices API:              `https://api.g.alchemy.com/prices/v1/{key}/...` (key in path)
 pub struct AlchemyHttpClient {
     http: Client,
     api_key: String,
@@ -47,9 +47,9 @@ impl AlchemyHttpClient {
         format!("https://api.g.alchemy.com/data/v1/{}", self.api_key)
     }
 
-    /// Prices API base (Bearer auth — key passed via header, not URL).
-    pub fn prices_v1_base(&self) -> &'static str {
-        "https://api.g.alchemy.com/prices/v1"
+    /// Prices API base (key passed in the URL path, like the other Alchemy APIs).
+    pub fn prices_v1_base(&self) -> String {
+        format!("https://api.g.alchemy.com/prices/v1/{}", self.api_key)
     }
 
     pub fn ws_url(&self) -> String {
@@ -132,7 +132,7 @@ impl AlchemyHttpClient {
         query: &Q,
     ) -> ProviderResult<T> {
         let url = format!("{}/{}", self.prices_v1_base().trim_end_matches('/'), path.trim_start_matches('/'));
-        self.rest_get(&url, query, Some(&self.api_key)).await
+        self.rest_get(&url, query, None).await
     }
 
     /// REST POST on the Prices API (Bearer auth).
@@ -142,7 +142,7 @@ impl AlchemyHttpClient {
         body: &B,
     ) -> ProviderResult<T> {
         let url = format!("{}/{}", self.prices_v1_base().trim_end_matches('/'), path.trim_start_matches('/'));
-        self.rest_post(&url, body, Some(&self.api_key)).await
+        self.rest_post(&url, body, None).await
     }
 
     async fn rest_get<T: DeserializeOwned, Q: Serialize>(

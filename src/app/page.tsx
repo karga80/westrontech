@@ -9,7 +9,7 @@ import {
 } from '@/lib/tauri';
 import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
 import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
-import { MOCK_TRANSFERS, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
+import { EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import { useTheme } from '@/lib/themeContext';
 import EthIcon from '@/components/EthIcon';
@@ -915,9 +915,9 @@ export default function Dashboard() {
     } else {
       // Browser mode — use mock data immediately
       const mockSnaps: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { mockSnaps[w.id] = MOCK_PORTFOLIO_SNAPSHOT; });
+      wallets.forEach(w => { mockSnaps[w.id] = EMPTY_SNAPSHOT; });
       setSnapshots(mockSnaps);
-      setLiveTransactions(MOCK_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
+      setLiveTransactions(EMPTY_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
       setLoadingData(false);
     }
   }, []);

@@ -8,7 +8,7 @@ import ProGate from '@/components/ProGate';
 import EthIcon from '@/components/EthIcon';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-import { MOCK_NFTS_RESPONSE } from '@/lib/mockData';
+import { EMPTY_NFTS_RESPONSE } from '@/lib/emptyData';
 import { Tag, type TagVariant } from '@/components/Tag';
 
 // ─── Types & Data ─────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ export default function BulkListPage() {
         const w = stored.map((sw, i) => ({ id: sw.address, name: sw.name, address: sw.address, nftCount: 0 }));
         setWallets(w);
         setActiveWallets(new Set(w.map(x => x.id)));
-        const mockNfts = (MOCK_NFTS_RESPONSE.owned_nfts as OwnedNft[]).map((n, i) => ownedNftToNFT(n, i, w[0].id));
+        const mockNfts = (EMPTY_NFTS_RESPONSE.owned_nfts as OwnedNft[]).map((n, i) => ownedNftToNFT(n, i, w[0].id));
         setAllNfts(mockNfts.length > 0 ? mockNfts : STATIC_NFTS);
       }
       return;

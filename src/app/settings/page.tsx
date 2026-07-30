@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { loadWallets, addWallet, removeWallet } from '@/lib/walletStore';
-import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, importWallet, checkSubscription } from '@/lib/tauri';
+import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription } from '@/lib/tauri';
 import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, type SubscriptionState } from '@/lib/subscriptionStore';
 import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
 import { Tag } from '@/components/Tag';
@@ -336,6 +336,10 @@ function SecuritySection() {
   const [osKeyInput, setOsKeyInput] = useState('');
   const [osKeySaving, setOsKeySaving] = useState(false);
   const [osKeyMsg, setOsKeyMsg] = useState('');
+  const [esKey, setEsKey] = useState('');
+  const [esKeyInput, setEsKeyInput] = useState('');
+  const [esKeySaving, setEsKeySaving] = useState(false);
+  const [esKeyMsg, setEsKeyMsg] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [connectedWallets, setConnectedWallets] = useState<{ id: string; short: string; rawAddress: string; chain: string; name: string; }[]>([]);
 
@@ -354,6 +358,7 @@ function SecuritySection() {
     if (isTauri) {
       loadAlchemyKey().then(k => { if (k) { setApiKey(k); setApiKeyInput(k); } }).catch(() => {});
       loadOpenSeaKey().then(k => { if (k) { setOsKey(k); setOsKeyInput(k); } }).catch(() => {});
+      loadEtherscanKey().then(k => { if (k) { setEsKey(k); setEsKeyInput(k); } }).catch(() => {});
     }
     reloadWallets();
   }, []);
@@ -400,6 +405,28 @@ function SecuritySection() {
       setOsKeyMsg('Removed.');
     } catch { setOsKeyMsg('Error removing key.'); }
     setTimeout(() => setOsKeyMsg(''), 2000);
+  };
+
+  const handleSaveEsKey = async () => {
+    if (!esKeyInput.trim()) return;
+    setEsKeySaving(true);
+    try {
+      if (isTauri) await saveEtherscanKey(esKeyInput.trim());
+      setEsKey(esKeyInput.trim());
+      setEsKeyMsg('Saved.');
+    } catch (e) { setEsKeyMsg(`Error: ${e instanceof Error ? e.message : String(e)}`); }
+    setEsKeySaving(false);
+    setTimeout(() => setEsKeyMsg(''), 2000);
+  };
+
+  const handleDeleteEsKey = async () => {
+    try {
+      if (isTauri) await deleteEtherscanKey();
+      setEsKey('');
+      setEsKeyInput('');
+      setEsKeyMsg('Removed.');
+    } catch { setEsKeyMsg('Error removing key.'); }
+    setTimeout(() => setEsKeyMsg(''), 2000);
   };
 
   const handleRemoveWallet = (id: string) => {
@@ -524,7 +551,7 @@ function SecuritySection() {
         </div>
         {/* OpenSea row */}
         <div>
-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+          <div style={rowStyle}>
             <span style={labelStyle}>OpenSea Key</span>
             <input
               type="password"
@@ -542,6 +569,29 @@ function SecuritySection() {
           </div>
           {osKeyMsg && (
             <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: osKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{osKeyMsg}</div>
+          )}
+        </div>
+
+        {/* Etherscan row (powers the Sister Wallet Finder) */}
+        <div>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <span style={labelStyle}>Etherscan Key</span>
+            <input
+              type="password"
+              value={esKeyInput}
+              onChange={e => setEsKeyInput(e.target.value)}
+              placeholder="Enter Etherscan API key…"
+              style={inputStyle}
+            />
+            <button onClick={handleSaveEsKey} disabled={esKeySaving || !esKeyInput.trim()} style={{ ...inlineBtn, opacity: esKeySaving || !esKeyInput.trim() ? 0.4 : 1, cursor: esKeySaving || !esKeyInput.trim() ? 'not-allowed' : 'pointer' }}>
+              {esKeySaving ? 'Saving…' : 'Save'}
+            </button>
+            {esKey && (
+              <button onClick={handleDeleteEsKey} style={dangerBtn}>Remove</button>
+            )}
+          </div>
+          {esKeyMsg && (
+            <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: esKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{esKeyMsg}</div>
           )}
         </div>
       </div>

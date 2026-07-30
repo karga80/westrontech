@@ -25,6 +25,7 @@ use crate::data::types::SubscriptionId;
 
 /// What the frontend wants us to watch right now.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchSet {
     /// Wallet addresses (incoming + outgoing tx subscription).
     pub wallets: Vec<String>,

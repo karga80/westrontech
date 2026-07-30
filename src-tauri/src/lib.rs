@@ -8,11 +8,14 @@ mod wallet;
 mod rpc;
 mod signing;
 mod sniping;
+mod sister;
+mod subscription;
 
 use envelope::engine::EnvelopeEngine;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use chrono::Utc;
+use tauri::Emitter;
 use uuid::Uuid;
 
 static POLLING_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -404,58 +407,12 @@ fn open_external_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("failed to open URL: {}", e))
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct SubscriptionCheckResult {
-    pub active: bool,
-    pub plan: Option<String>,       // "monthly" | "annual" | null
-    pub expires_at: Option<String>, // ISO date string
-    pub error: Option<String>,
-}
-
-const SUBSCRIPTION_WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
-
-/// Check subscription status for a wallet address against the Westron subscription worker.
-/// Falls back to the locally cached result if the worker is unreachable.
+/// Check subscription status for a wallet. Fetches a fresh signed license from
+/// the worker when online, verifies it with the embedded public key, caches it,
+/// and re-verifies offline with clock-rollback protection. See `subscription` module.
 #[tauri::command]
-async fn check_subscription(wallet_address: String) -> SubscriptionCheckResult {
-    let addr = wallet_address.trim().to_lowercase();
-    if addr.is_empty() {
-        return SubscriptionCheckResult {
-            active: false, plan: None, expires_at: None,
-            error: Some("No wallet address provided".to_string()),
-        };
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
-        .build()
-        .unwrap_or_default();
-
-    let resp = client
-        .post(format!("{}/validate", SUBSCRIPTION_WORKER_URL))
-        .header("content-type", "application/json")
-        .json(&serde_json::json!({ "wallet": addr }))
-        .send()
-        .await;
-
-    match resp {
-        Err(e) => {
-            log::warn!("Subscription worker unreachable: {}", e);
-            SubscriptionCheckResult {
-                active: false, plan: None, expires_at: None,
-                error: Some("Could not reach subscription server. Using cached status.".to_string()),
-            }
-        }
-        Ok(r) => {
-            let body: serde_json::Value = r.json().await.unwrap_or_default();
-            SubscriptionCheckResult {
-                active: body.get("active").and_then(|v| v.as_bool()).unwrap_or(false),
-                plan: body.get("plan").and_then(|p| p.as_str()).map(str::to_string),
-                expires_at: body.get("expires_at").and_then(|e| e.as_str()).map(str::to_string),
-                error: None,
-            }
-        }
-    }
+async fn check_subscription(wallet_address: String) -> subscription::SubscriptionCheckResult {
+    subscription::evaluate(&wallet_address).await
 }
 
 // ── OpenSea API key commands ──────────────────────────────────────────────────
@@ -473,6 +430,32 @@ fn load_opensea_key() -> Result<String, String> {
 #[tauri::command]
 fn delete_opensea_key_cmd() -> Result<(), String> {
     wallet::keychain::delete_opensea_key()
+}
+
+// ── Etherscan API key commands (used by the sister-wallet finder) ─────────────
+
+#[tauri::command]
+fn save_etherscan_key(api_key: String) -> Result<(), String> {
+    wallet::keychain::store_etherscan_key(&api_key)
+}
+
+#[tauri::command]
+fn load_etherscan_key() -> Result<String, String> {
+    wallet::keychain::fetch_etherscan_key()
+}
+
+#[tauri::command]
+fn delete_etherscan_key_cmd() -> Result<(), String> {
+    wallet::keychain::delete_etherscan_key()
+}
+
+// ── Sister-wallet finder ──────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn find_sister_wallets(address: String) -> Result<sister::types::SisterReport, String> {
+    let api_key = wallet::keychain::fetch_etherscan_key()
+        .map_err(|_| "Etherscan API key not set — add it in Settings first.".to_string())?;
+    sister::find_sisters(&address, &api_key).await
 }
 
 // ── Marketplace commands ──────────────────────────────────────────────────────
@@ -711,6 +694,10 @@ pub fn run() {
         save_opensea_key,
         load_opensea_key,
         delete_opensea_key_cmd,
+        save_etherscan_key,
+        load_etherscan_key,
+        delete_etherscan_key_cmd,
+        find_sister_wallets,
         get_nfts_for_owner,
         get_floor_price,
         create_alert,

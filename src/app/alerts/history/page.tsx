@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { listAlerts, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_ALERTS } from '@/lib/mockData';
+import { EMPTY_ALERTS } from '@/lib/emptyData';
 import { Tag, type TagVariant } from '@/components/Tag';
 import ProGate from '@/components/ProGate';
 
@@ -47,7 +47,7 @@ export default function AlertHistoryPage() {
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const addr = loadWallets()[0]?.address ?? '';
-    if (!inTauri) { setEntries(MOCK_ALERTS.map(ruleToEntry)); setLoading(false); return; }
+    if (!inTauri) { setEntries(EMPTY_ALERTS.map(ruleToEntry)); setLoading(false); return; }
     (async () => {
       await loadAlchemyKey().catch(() => '');
       const rules = await listAlerts(addr).catch(() => [] as AlertRule[]);

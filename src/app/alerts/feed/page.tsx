@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { listAlerts, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { MOCK_ALERTS } from '@/lib/mockData';
+import { EMPTY_ALERTS } from '@/lib/emptyData';
 import ProGate from '@/components/ProGate';
 
 // ─── Alerts / Feed — matches dMkWk design ────────────────────────────────────
@@ -58,7 +58,7 @@ export default function AlertsFeedPage() {
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     const addr = loadWallets()[0]?.address ?? '';
-    if (!inTauri) { setAllRules(MOCK_ALERTS); setLoading(false); return; }
+    if (!inTauri) { setAllRules(EMPTY_ALERTS); setLoading(false); return; }
     (async () => {
       await loadAlchemyKey().catch(() => '');
       const data = await listAlerts(addr).catch(() => [] as AlertRule[]);

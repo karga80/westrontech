@@ -74,3 +74,17 @@ pub fn fetch_opensea_key() -> Result<String, String> {
 pub fn delete_opensea_key() -> Result<(), String> {
     delete_key_file("opensea")
 }
+
+// ── Etherscan API key ─────────────────────────────────────────────────────────
+
+pub fn store_etherscan_key(api_key: &str) -> Result<(), String> {
+    write_key("etherscan", api_key)
+}
+
+pub fn fetch_etherscan_key() -> Result<String, String> {
+    read_key("etherscan")
+}
+
+pub fn delete_etherscan_key() -> Result<(), String> {
+    delete_key_file("etherscan")
+}
