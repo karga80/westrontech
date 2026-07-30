@@ -12,9 +12,9 @@ import ProGate from '@/components/ProGate';
 type AlertTab = 'All' | 'Wallet Activity' | 'Price Alerts' | 'Rule';
 
 const TYPE_COLOR: Record<string, string> = {
-  portfolio_value: '#FBBF24',
-  floor_price:     '#F87171',
-  wallet_activity: '#34d399',
+  portfolio_value: '#ffb020',
+  floor_price:     '#ff8a96',
+  wallet_activity: '#4fe9b4',
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -34,7 +34,7 @@ function relTime(iso: string): string {
 }
 
 function ruleToFeedItem(r: AlertRule) {
-  const color = TYPE_COLOR[r.alert_type] ?? '#6E6E6E';
+  const color = TYPE_COLOR[r.alert_type] ?? '#6e7590';
   const label = TYPE_LABEL[r.alert_type] ?? r.alert_type;
   const slug  = r.collection_slug ?? r.wallet_address.slice(0, 10) + '…';
   const cond  = r.condition === 'below' ? '↓' : '↑';
@@ -103,8 +103,8 @@ export default function AlertsFeedPage() {
               style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500,
                 padding: '5px 12px',
-                color: tab === t ? '#000000' : 'var(--wr-text-3)',
-                backgroundColor: tab === t ? '#BEFF00' : 'transparent',
+                color: tab === t ? '#0b0c14' : 'var(--wr-text-3)',
+                backgroundColor: tab === t ? '#7c5cff' : 'transparent',
                 border: tab === t ? 'none' : '1px solid var(--wr-border)',
                 cursor: 'pointer',
               }}>
@@ -132,7 +132,7 @@ export default function AlertsFeedPage() {
         ) : feedItems.length === 0 ? (
           <div className="px-5 py-8 text-center" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No alerts in this category.</div>
         ) : feedItems.map((alert, i) => (
-          <div key={i} className="flex items-center justify-between px-5 py-4 border-b border-[#1A1A1A] last:border-b-0 hover:bg-[#111111] transition-colors cursor-pointer">
+          <div key={i} className="flex items-center justify-between px-5 py-4 border-b border-[#14161f] last:border-b-0 hover:bg-[#14161f] transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: alert.color, flexShrink: 0 }} />
               <div>

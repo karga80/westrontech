@@ -195,7 +195,7 @@ const TOKEN_PNL = [
 
 const RECENT_TRADES = [
   { token: 'ETH',        tokenColor: '#627eea', name: 'Ethereum',    eth: '$1,396',  pnl: '+$508.44', pnlPos: true,  pct: '+41.8%', pctPos: true,  duration: '2 days' },
-  { token: 'BAYC#451',   tokenColor: '#f59e0b', name: 'Bored Ape',   eth: '$13,491', pnl: '+$5,765',  pnlPos: true,  pct: '+125.4%',pctPos: true,  duration: '10 days' },
+  { token: 'BAYC#451',   tokenColor: '#ffb020', name: 'Bored Ape',   eth: '$13,491', pnl: '+$5,765',  pnlPos: true,  pct: '+125.4%',pctPos: true,  duration: '10 days' },
   { token: 'USDC>ETH',   tokenColor: '#26a17b', name: 'Swap',        eth: '$1,886',  pnl: '-$88.82',  pnlPos: false, pct: '-4.61%', pctPos: false, duration: '1 day' },
   { token: 'Azuki#331',  tokenColor: '#a78bfa', name: 'Azuki',       eth: '$9,108',  pnl: '+$973.30', pnlPos: true,  pct: '+9.75%', pctPos: true,  duration: '5 days' },
 ];
@@ -205,7 +205,7 @@ const RELATED_WALLETS = [
   {
     address: '0x1a3…and',
     label: '0x1a3...and',
-    tags: [{ text: 'NFT Trace', color: '#fcd34d', bg: '#2d1f00' }],
+    tags: [{ text: 'NFT Trace', color: '#ffb020', bg: '#2a1e05' }],
     inflow: 5000,
     outflow: 16954,
     txIn: 5,
@@ -227,7 +227,7 @@ const RELATED_WALLETS = [
   {
     address: '0x1b3…a9879',
     label: '0x1b3...a9879',
-    tags: [{ text: 'Discounted', color: '#fcd34d', bg: '#2d1f00' }],
+    tags: [{ text: 'Discounted', color: '#ffb020', bg: '#2a1e05' }],
     inflow: 270,
     outflow: 1710,
     txIn: 5,
@@ -268,24 +268,24 @@ function DualPnLChart() {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 100 }} preserveAspectRatio="none">
       <defs>
         <linearGradient id="gGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#34d399" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#34d399" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#4fe9b4" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#4fe9b4" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="rGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f87171" stopOpacity="0.05" />
-          <stop offset="100%" stopColor="#f87171" stopOpacity="0.35" />
+          <stop offset="0%" stopColor="#ff8a96" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="#ff8a96" stopOpacity="0.35" />
         </linearGradient>
       </defs>
       <line x1="0" y1={midY} x2={W} y2={midY} stroke="#27272a" strokeWidth="0.5" />
       <path d={gArea} fill="url(#gGrad)" />
-      <path d={gLine} fill="none" stroke="#34d399" strokeWidth="1.5" />
+      <path d={gLine} fill="none" stroke="#4fe9b4" strokeWidth="1.5" />
       <path d={rArea} fill="url(#rGrad)" />
-      <path d={rLine} fill="none" stroke="#f87171" strokeWidth="1.5" />
+      <path d={rLine} fill="none" stroke="#ff8a96" strokeWidth="1.5" />
     </svg>
   );
 }
 
-function GaugeChart({ value = 0.5, color = '#34d399' }: { value?: number; color?: string }) {
+function GaugeChart({ value = 0.5, color = '#4fe9b4' }: { value?: number; color?: string }) {
   const cx = 50, cy = 50, r = 36;
   const startAngle = Math.PI;
   const endAngle = 2 * Math.PI;
@@ -304,7 +304,7 @@ function GaugeChart({ value = 0.5, color = '#34d399' }: { value?: number; color?
       <path d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${nx} ${ny}`}
         fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" />
       <line x1={cx} y1={cy} x2={cx + (r-4) * Math.cos(angle)} y2={cy + (r-4) * Math.sin(angle)}
-        stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+        stroke="#f2f2f7" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -312,7 +312,7 @@ function GaugeChart({ value = 0.5, color = '#34d399' }: { value?: number; color?
 function HBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = Math.min((value / max) * 100, 100);
   return (
-    <div className="flex-1 h-2 bg-[#1a1a1a] overflow-hidden">
+    <div className="flex-1 h-2 bg-[#14161f] overflow-hidden">
       <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
     </div>
   );
@@ -320,29 +320,29 @@ function HBar({ value, max, color }: { value: number; max: number; color: string
 
 // ── Connections Bubble Map ─────────────────────────────────────────────────────
 const BUBBLE_NODES = [
-  { id: 'center', label: '0x7034…a122e', sub: 'This Wallet',   x: 450, y: 258, r: 44, fill: '#3b1f7a', stroke: '#a78bfa', textColor: '#ffffff' },
-  { id: 'n1',     label: '0x1a3…and',    sub: '$21.9K Flow',   x: 672, y: 148, r: 30, fill: '#3d0f0f', stroke: '#f87171', textColor: '#f87171' },
-  { id: 'n2',     label: '0x4f3…12a68',  sub: '$8K Out',       x: 648, y: 378, r: 26, fill: '#0f1f3d', stroke: '#60a5fa', textColor: '#60a5fa' },
+  { id: 'center', label: '0x7034…a122e', sub: 'This Wallet',   x: 450, y: 258, r: 44, fill: '#3b1f7a', stroke: '#a78bfa', textColor: '#f2f2f7' },
+  { id: 'n1',     label: '0x1a3…and',    sub: '$21.9K Flow',   x: 672, y: 148, r: 30, fill: '#3d0f0f', stroke: '#ff8a96', textColor: '#ff8a96' },
+  { id: 'n2',     label: '0x4f3…12a68',  sub: '$8K Out',       x: 648, y: 378, r: 26, fill: '#0f1f3d', stroke: '#90a6ff', textColor: '#90a6ff' },
   { id: 'n3',     label: '0x1b3…a9879',  sub: '$1.98K Flow',   x: 228, y: 358, r: 22, fill: '#1a0a2e', stroke: '#c084fc', textColor: '#c084fc' },
-  { id: 'n4',     label: 'Natural/ir…',  sub: '$1.9K Out',     x: 262, y: 128, r: 20, fill: '#032232', stroke: '#67e8f9', textColor: '#67e8f9' },
-  { id: 'n5',     label: 'Exchange',      sub: 'CEX Hub',       x: 840, y: 235, r: 15, fill: '#231500', stroke: '#fbbf24', textColor: '#fbbf24' },
-  { id: 'n6',     label: 'DeFi Pool',     sub: 'Contract',      x: 118, y: 265, r: 13, fill: '#012318', stroke: '#34d399', textColor: '#34d399' },
+  { id: 'n4',     label: 'Natural/ir…',  sub: '$1.9K Out',     x: 262, y: 128, r: 20, fill: '#032232', stroke: '#2fc4d6', textColor: '#2fc4d6' },
+  { id: 'n5',     label: 'Exchange',      sub: 'CEX Hub',       x: 840, y: 235, r: 15, fill: '#231500', stroke: '#ffb020', textColor: '#ffb020' },
+  { id: 'n6',     label: 'DeFi Pool',     sub: 'Contract',      x: 118, y: 265, r: 13, fill: '#012318', stroke: '#4fe9b4', textColor: '#4fe9b4' },
 ];
 
 const BUBBLE_EDGES = [
-  { from: 'center', to: 'n1', color: '#f87171', width: 2.2, label: '16.9K', dashed: false },
-  { from: 'n1',     to: 'center', color: '#34d399', width: 1.2, label: '5K',    dashed: true  },
-  { from: 'center', to: 'n2', color: '#f87171', width: 1.8, label: '8K',    dashed: false },
-  { from: 'center', to: 'n3', color: '#f87171', width: 1.2, label: '1.7K',  dashed: false },
-  { from: 'n3',     to: 'center', color: '#34d399', width: 0.8, label: '270',   dashed: true  },
-  { from: 'center', to: 'n4', color: '#f87171', width: 1.2, label: '1.9K',  dashed: false },
-  { from: 'n1',     to: 'n5', color: '#fbbf24', width: 1.0, label: '',      dashed: true  },
-  { from: 'n3',     to: 'n6', color: '#34d399', width: 0.8, label: '',      dashed: true  },
+  { from: 'center', to: 'n1', color: '#ff8a96', width: 2.2, label: '16.9K', dashed: false },
+  { from: 'n1',     to: 'center', color: '#4fe9b4', width: 1.2, label: '5K',    dashed: true  },
+  { from: 'center', to: 'n2', color: '#ff8a96', width: 1.8, label: '8K',    dashed: false },
+  { from: 'center', to: 'n3', color: '#ff8a96', width: 1.2, label: '1.7K',  dashed: false },
+  { from: 'n3',     to: 'center', color: '#4fe9b4', width: 0.8, label: '270',   dashed: true  },
+  { from: 'center', to: 'n4', color: '#ff8a96', width: 1.2, label: '1.9K',  dashed: false },
+  { from: 'n1',     to: 'n5', color: '#ffb020', width: 1.0, label: '',      dashed: true  },
+  { from: 'n3',     to: 'n6', color: '#4fe9b4', width: 0.8, label: '',      dashed: true  },
 ];
 
 const NODE_TAGS: Record<string, { text: string; color: string; bg: string }[]> = {
-  n1: [{ text: 'NFT Trace', color: '#fcd34d', bg: '#2d1f00' }],
-  n3: [{ text: 'Discounted', color: '#fcd34d', bg: '#2d1f00' }],
+  n1: [{ text: 'NFT Trace', color: '#ffb020', bg: '#2a1e05' }],
+  n3: [{ text: 'Discounted', color: '#ffb020', bg: '#2a1e05' }],
 };
 
 function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => void }) {
@@ -362,10 +362,10 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
         ))}
         {/* Arrow markers */}
         <marker id="arrow-out" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 Z" fill="#f87171" opacity="0.7" />
+          <path d="M0,0 L0,6 L6,3 Z" fill="#ff8a96" opacity="0.7" />
         </marker>
         <marker id="arrow-in" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 Z" fill="#34d399" opacity="0.7" />
+          <path d="M0,0 L0,6 L6,3 Z" fill="#4fe9b4" opacity="0.7" />
         </marker>
       </defs>
 
@@ -384,7 +384,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
         const cx = mx + (dx / len) * offset;
         const cy = my + (dy / len) * offset;
         const path = `M ${src.x} ${src.y} Q ${cx} ${cy} ${dst.x} ${dst.y}`;
-        const markerId = e.color === '#34d399' ? 'arrow-in' : 'arrow-out';
+        const markerId = e.color === '#4fe9b4' ? 'arrow-in' : 'arrow-out';
         return (
           <g key={i}>
             <path
@@ -437,7 +437,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
               style={{ fontFamily: 'var(--font-jetbrains)' }}>
               {n.label}
             </text>
-            <text x={n.x} y={n.y + n.r + 25} textAnchor="middle" fill="#6e6e6e" fontSize="8"
+            <text x={n.x} y={n.y + n.r + 25} textAnchor="middle" fill="#6e7590" fontSize="8"
               style={{ fontFamily: 'var(--font-jetbrains)' }}>
               {n.sub}
             </text>
@@ -477,7 +477,7 @@ function WalletHeader({ tab, setTab, display, address, raw }: {
   raw: string;
 }) {
   return (
-    <div className="border-b border-[#1a1a1a] px-12 pt-6 pb-0">
+    <div className="border-b border-[#14161f] px-12 pt-6 pb-0">
       {/* Breadcrumb */}
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '16px' }}>
         <Link href="/monitor" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Monitor</Link>
@@ -494,25 +494,25 @@ function WalletHeader({ tab, setTab, display, address, raw }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 leading-none flex-wrap">
             <span className="text-[22px] font-bold text-white leading-none">{display}</span>
-            <a href={`https://etherscan.io/address/${raw}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+            <a href={`https://etherscan.io/address/${raw}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
               <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </a>
           </div>
-          <span className="text-[#6e6e6e] text-[11px] mt-0.5 font-mono">{raw}</span>
+          <span className="text-[#6e7590] text-[11px] mt-0.5 font-mono">{raw}</span>
         </div>
       </div>
 
       {/* Stats row */}
       <div className="flex items-center gap-4 mb-4">
-        <div className="bg-[#111111] border border-[#1a1a1a] px-6 py-4 min-w-[180px]">
-          <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-2">Native Token Balance</div>
+        <div className="bg-[#14161f] border border-[#14161f] px-6 py-4 min-w-[180px]">
+          <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Native Token Balance</div>
           <div className="text-[18px] font-bold text-white leading-none">4.32 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
-          <div className="text-[11px] text-[#6e6e6e] mt-1">$11,232</div>
+          <div className="text-[11px] text-[#6e7590] mt-1">$11,232</div>
         </div>
-        <div className="bg-[#111111] border border-[#1a1a1a] px-6 py-4 min-w-[180px]">
-          <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-2">Portfolio Value</div>
+        <div className="bg-[#14161f] border border-[#14161f] px-6 py-4 min-w-[180px]">
+          <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Portfolio Value</div>
           <div className="text-[18px] font-bold text-white leading-none">18.7 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
-          <div className="text-[11px] text-[#6e6e6e] mt-1">$48,620</div>
+          <div className="text-[11px] text-[#6e7590] mt-1">$48,620</div>
         </div>
       </div>
 
@@ -524,8 +524,8 @@ function WalletHeader({ tab, setTab, display, address, raw }: {
             onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
               tab === t
-                ? 'text-[#beff00] border-[#beff00]'
-                : 'text-[#6e6e6e] border-transparent hover:text-[#a1a1aa]'
+                ? 'text-[#7c5cff] border-[#7c5cff]'
+                : 'text-[#6e7590] border-transparent hover:text-[#9298b8]'
             }`}
           >
             {t}
@@ -573,9 +573,9 @@ function MonitorWalletInner() {
         if (s < 86400) return `${Math.floor(s / 3600)} hrs ago`;
         return `${Math.floor(s / 86400)} days ago`;
       })() : t.block_num;
-      const color  = isOut ? '#22d3ee' : '#34d399';
-      const bg     = isOut ? '#083344' : '#065f46';
-      const border = isOut ? '#164e63' : '#065f46';
+      const color  = isOut ? '#2fc4d6' : '#4fe9b4';
+      const bg     = isOut ? '#0e2630' : '#06251b';
+      const border = isOut ? '#0e2630' : '#06251b';
       const other  = isOut ? (t.to ?? '—') : t.from;
       const short  = other.slice(0, 6) + '…' + other.slice(-4);
       const val    = t.value != null ? `${t.value.toFixed(4)} ${t.asset ?? 'ETH'}` : '—';
@@ -670,7 +670,7 @@ function MonitorWalletInner() {
                     <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--wr-text-3)' }}>Last Active</div>
                     <div className="text-[13px] font-semibold flex items-center gap-2" style={{ color: 'var(--wr-text)' }}>
                       2 hours ago
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#34d399', display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4fe9b4', display: 'inline-block', flexShrink: 0 }} />
                     </div>
                   </div>
                 </div>
@@ -707,17 +707,17 @@ function MonitorWalletInner() {
                     <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--wr-text-3)' }}>Risk Score</div>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-32 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--wr-border)' }}>
-                        <div className="h-full rounded-full" style={{ width: '28%', backgroundColor: '#34d399' }} />
+                        <div className="h-full rounded-full" style={{ width: '28%', backgroundColor: '#4fe9b4' }} />
                       </div>
-                      <span className="text-[11px] font-semibold" style={{ color: '#34d399' }}>28 / 100</span>
-                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#34d399' }}>Low</span>
+                      <span className="text-[11px] font-semibold" style={{ color: '#4fe9b4' }}>28 / 100</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#4fe9b4' }}>Low</span>
                     </div>
                   </div>
                   <div>
                     <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--wr-text-3)' }}>Flagged</div>
                     <div className="flex items-center gap-1.5">
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#34d399', display: 'inline-block' }} />
-                      <span className="text-[12px] font-semibold" style={{ color: '#34d399' }}>No</span>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4fe9b4', display: 'inline-block' }} />
+                      <span className="text-[12px] font-semibold" style={{ color: '#4fe9b4' }}>No</span>
                     </div>
                   </div>
                 </div>
@@ -758,8 +758,8 @@ function MonitorWalletInner() {
                   fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700,
                   padding: '2px 8px', letterSpacing: '0.05em',
                   color:           feedFilters.size === 0 ? '#000' : 'var(--wr-text-3)',
-                  backgroundColor: feedFilters.size === 0 ? '#BEFF00' : 'transparent',
-                  border:          feedFilters.size === 0 ? '1px solid #BEFF00' : '1px solid var(--wr-border)',
+                  backgroundColor: feedFilters.size === 0 ? '#7c5cff' : 'transparent',
+                  border:          feedFilters.size === 0 ? '1px solid #7c5cff' : '1px solid var(--wr-border)',
                   cursor: 'pointer',
                 }}>ALL</button>
 
@@ -816,7 +816,7 @@ function MonitorWalletInner() {
             </div>
 
             {/* Transactions */}
-            <div className="border border-[#1a1a1a] overflow-hidden">
+            <div className="border border-[#14161f] overflow-hidden">
               {(liveFeed ?? FEED_ITEMS).filter(item => {
                 // Type filter (multi-select; empty set = show all)
                 if (feedFilters.size > 0 && !feedFilters.has(item.type)) return false;
@@ -841,7 +841,7 @@ function MonitorWalletInner() {
                           {before}
                           <span className="inline-flex items-center gap-0.5">
                             <span>{item.counterpartyDisplay}</span>
-                            <a href={`https://etherscan.io/address/${item.counterpartyAddress}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+                            <a href={`https://etherscan.io/address/${item.counterpartyAddress}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
                               <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </a>
                           </span>
@@ -860,7 +860,7 @@ function MonitorWalletInner() {
                           {before}
                           <span className="inline-flex items-center gap-0.5">
                             <span>{item.collectionName}</span>
-                            <a href={`https://opensea.io/collection/${item.collectionSlug}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+                            <a href={`https://opensea.io/collection/${item.collectionSlug}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
                               <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </a>
                           </span>
@@ -873,18 +873,18 @@ function MonitorWalletInner() {
                 })();
 
                 return (
-                  <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#1a1a1a] last:border-0 transition-colors" onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                    <div className="w-7 h-7 rounded-full bg-[#1a1a1a] flex items-center justify-center text-[9px] text-[#6e6e6e] shrink-0">tx</div>
+                  <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors" onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
+                    <div className="w-7 h-7 rounded-full bg-[#14161f] flex items-center justify-center text-[9px] text-[#6e7590] shrink-0">tx</div>
                     <Tag variant={TX_TYPE_VARIANT[item.type] ?? 'neutral'} size="xs">{item.type}</Tag>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1 flex-wrap">
                         {titleNode}
                       </div>
-                      {item.sub && <div className="text-[10px] text-[#6e6e6e]">{item.sub}</div>}
+                      {item.sub && <div className="text-[10px] text-[#6e7590]">{item.sub}</div>}
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-[10px] text-[#a1a1aa]">{item.timeAgo}</div>
-                      <div className="text-[9px] text-[#6e6e6e]">{item.date}</div>
+                      <div className="text-[10px] text-[#9298b8]">{item.timeAgo}</div>
+                      <div className="text-[9px] text-[#6e7590]">{item.date}</div>
                     </div>
                   </div>
                 );
@@ -899,12 +899,12 @@ function MonitorWalletInner() {
           <div className="flex flex-col gap-6">
             {/* Token holdings */}
             <div>
-              <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-3">Token Holdings</p>
-              <div className="border border-[#1a1a1a] overflow-hidden">
-                <div className="grid border-b border-[#1a1a1a] px-4 py-2"
+              <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-3">Token Holdings</p>
+              <div className="border border-[#14161f] overflow-hidden">
+                <div className="grid border-b border-[#14161f] px-4 py-2"
                   style={{ backgroundColor: 'var(--wr-surface)', gridTemplateColumns: '2fr 1fr 1fr 1fr 80px' }}>
                   {['Asset', 'Balance', 'Price', 'Value', '% Portfolio'].map(h => (
-                    <span key={h} className="text-[9px] text-[#6e6e6e] uppercase tracking-wider">{h}</span>
+                    <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
                 {[
@@ -915,20 +915,20 @@ function MonitorWalletInner() {
                   { name: 'ARB', label: 'Arbitrum', color: '#28a0f0', balance: '315.6', price: '$0.60', value: '$189.36', pct: '4.4%' },
                   { name: 'LINK', label: 'Chainlink', color: '#2a5ada', balance: '2.4', price: '$14.20', value: '$34.08', pct: '0.5%' },
                 ].map(tok => (
-                  <div key={tok.name} className="grid items-center px-4 py-3 border-b border-[#1a1a1a] last:border-0 transition-colors"
+                  <div key={tok.name} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 80px' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
                         style={{ backgroundColor: tok.color }}>{tok.name[0]}</span>
                       <div>
                         <div className="text-[12px] text-white font-medium">{tok.name}</div>
-                        <div className="text-[9px] text-[#6e6e6e]">{tok.label}</div>
+                        <div className="text-[9px] text-[#6e7590]">{tok.label}</div>
                       </div>
                     </div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{tok.balance}</div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{tok.price}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.balance}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.price}</div>
                     <div className="text-[11px] text-white font-medium tabular-nums">{tok.value}</div>
-                    <div className="text-[11px] text-[#6e6e6e] tabular-nums">{tok.pct}</div>
+                    <div className="text-[11px] text-[#6e7590] tabular-nums">{tok.pct}</div>
                   </div>
                 ))}
               </div>
@@ -936,29 +936,29 @@ function MonitorWalletInner() {
 
             {/* NFT holdings summary */}
             <div>
-              <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-3">NFT Holdings</p>
-              <div className="border border-[#1a1a1a] overflow-hidden">
-                <div className="grid border-b border-[#1a1a1a] px-4 py-2"
+              <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-3">NFT Holdings</p>
+              <div className="border border-[#14161f] overflow-hidden">
+                <div className="grid border-b border-[#14161f] px-4 py-2"
                   style={{ backgroundColor: 'var(--wr-surface)', gridTemplateColumns: '2fr 1fr 1fr 1fr' }}>
                   {['Collection', 'Held', 'Floor', 'Est. Value'].map(h => (
-                    <span key={h} className="text-[9px] text-[#6e6e6e] uppercase tracking-wider">{h}</span>
+                    <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
                 {[
-                  { name: 'Bored Ape YC', color: '#f59e0b', held: 1, floor: '14.2 ETH', value: '$46,030' },
+                  { name: 'Bored Ape YC', color: '#ffb020', held: 1, floor: '14.2 ETH', value: '$46,030' },
                   { name: 'Azuki', color: '#a78bfa', held: 2, floor: '5.1 ETH', value: '$33,062' },
-                  { name: 'Pudgy Penguins', color: '#60a5fa', held: 1, floor: '6.8 ETH', value: '$22,042' },
-                  { name: 'Art Blocks', color: '#34d399', held: 3, floor: '0.3 ETH', value: '$2,916' },
+                  { name: 'Pudgy Penguins', color: '#90a6ff', held: 1, floor: '6.8 ETH', value: '$22,042' },
+                  { name: 'Art Blocks', color: '#4fe9b4', held: 3, floor: '0.3 ETH', value: '$2,916' },
                 ].map(col => (
-                  <div key={col.name} className="grid items-center px-4 py-3 border-b border-[#1a1a1a] last:border-0 transition-colors"
+                  <div key={col.name} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white shrink-0"
                         style={{ backgroundColor: col.color }}>{col.name[0]}</span>
                       <div className="text-[12px] text-white font-medium">{col.name}</div>
                     </div>
-                    <div className="text-[11px] text-[#a1a1aa]">{col.held}</div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{col.floor}</div>
+                    <div className="text-[11px] text-[#9298b8]">{col.held}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{col.floor}</div>
                     <div className="text-[11px] text-white font-medium tabular-nums">{col.value}</div>
                   </div>
                 ))}
@@ -972,30 +972,30 @@ function MonitorWalletInner() {
           <>
             {/* TOKEN P&L BREAKDOWN */}
             <div className="mb-6">
-              <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-3">Token P&L Breakdown</p>
-              <div className="border border-[#1a1a1a] overflow-hidden">
-                <div className="grid border-b border-[#1a1a1a] px-4 py-2"
+              <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-3">Token P&L Breakdown</p>
+              <div className="border border-[#14161f] overflow-hidden">
+                <div className="grid border-b border-[#14161f] px-4 py-2"
                   style={{ backgroundColor: 'var(--wr-surface)', gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr 1.2fr' }}>
                   {['Token', 'Avg Buy', 'Avg Sell', 'Realized', 'Unrealized', 'Total P&L'].map(h => (
-                    <span key={h} className="text-[9px] text-[#6e6e6e] uppercase tracking-wider">{h}</span>
+                    <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
                 {TOKEN_PNL.map(tok => (
-                  <div key={tok.name} className="grid items-center px-4 py-3 border-b border-[#1a1a1a] last:border-0 transition-colors"
+                  <div key={tok.name} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr 1.2fr' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
                         style={{ backgroundColor: tok.color }}>{tok.name[0]}</span>
                       <div>
                         <div className="text-[12px] text-white font-medium">{tok.name}</div>
-                        <div className="text-[9px] text-[#6e6e6e]">{tok.label}</div>
+                        <div className="text-[9px] text-[#6e7590]">{tok.label}</div>
                       </div>
                     </div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{tok.avgBuy}</div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{tok.avgSell}</div>
-                    <div className={`text-[11px] font-medium tabular-nums ${tok.realized.pos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{tok.realized.val}</div>
-                    <div className={`text-[11px] tabular-nums ${tok.unrealized.pos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{tok.unrealized.val}</div>
-                    <div className={`text-[11px] font-bold tabular-nums ${tok.total.pos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{tok.total.val}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.avgBuy}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.avgSell}</div>
+                    <div className={`text-[11px] font-medium tabular-nums ${tok.realized.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.realized.val}</div>
+                    <div className={`text-[11px] tabular-nums ${tok.unrealized.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.unrealized.val}</div>
+                    <div className={`text-[11px] font-bold tabular-nums ${tok.total.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.total.val}</div>
                   </div>
                 ))}
               </div>
@@ -1004,12 +1004,12 @@ function MonitorWalletInner() {
             {/* P&L OVERVIEW */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest">P&L Overview</p>
+                <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest">P&L Overview</p>
                 <div className="flex items-center gap-1">
                   {(['24h','7d','30d','1M','ALL'] as TimeFilter[]).map(f => (
                     <button key={f} onClick={() => setPnlTime(f)}
                       className={`text-[9px] font-semibold px-2 py-1 transition-colors ${
-                        pnlTime === f ? 'bg-[#beff00] text-black' : 'text-[#6e6e6e] hover:text-[#a1a1aa]'
+                        pnlTime === f ? 'bg-[#7c5cff] text-black' : 'text-[#6e7590] hover:text-[#9298b8]'
                       }`}>{f}</button>
                   ))}
                 </div>
@@ -1023,45 +1023,45 @@ function MonitorWalletInner() {
                   { label: 'Unrealized P&L',  value: '+$2,481.30', sub: 'across 11 positions', pos: true },
                   { label: 'Win Rate',        value: '72.2%',      sub: '15/21 trades',        pos: true },
                 ].map(k => (
-                  <div key={k.label} className="bg-[#111111] border border-[#1a1a1a] px-4 py-3">
-                    <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-1">{k.label}</div>
-                    <div className={`text-[18px] font-bold ${k.pos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{k.value}</div>
-                    <div className="text-[9px] text-[#6e6e6e] mt-0.5">{k.sub}</div>
+                  <div key={k.label} className="bg-[#14161f] border border-[#14161f] px-4 py-3">
+                    <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">{k.label}</div>
+                    <div className={`text-[18px] font-bold ${k.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{k.value}</div>
+                    <div className="text-[9px] text-[#6e7590] mt-0.5">{k.sub}</div>
                   </div>
                 ))}
               </div>
 
               {/* Chart */}
-              <div className="bg-[#111111] border border-[#1a1a1a] px-4 py-3">
-                <div className="text-[11px] text-[#34d399] font-bold mb-1">+$4,821.30</div>
-                <div className="text-[9px] text-[#6e6e6e] mb-3">+ Last PnL</div>
+              <div className="bg-[#14161f] border border-[#14161f] px-4 py-3">
+                <div className="text-[11px] text-[#4fe9b4] font-bold mb-1">+$4,821.30</div>
+                <div className="text-[9px] text-[#6e7590] mb-3">+ Last PnL</div>
                 <DualPnLChart />
               </div>
             </div>
 
             {/* RECENT TRADES */}
             <div>
-              <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-3">Recent Trades</p>
-              <div className="border border-[#1a1a1a] overflow-hidden">
-                <div className="grid border-b border-[#1a1a1a] px-4 py-2"
+              <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-3">Recent Trades</p>
+              <div className="border border-[#14161f] overflow-hidden">
+                <div className="grid border-b border-[#14161f] px-4 py-2"
                   style={{ backgroundColor: 'var(--wr-surface)', gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr 0.6fr 0.8fr' }}>
                   {['Token','Name','ETH','PnL','%','Duration'].map(h => (
-                    <span key={h} className="text-[9px] text-[#6e6e6e] uppercase tracking-wider">{h}</span>
+                    <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
                 {RECENT_TRADES.map((t, i) => (
-                  <div key={i} className="grid items-center px-4 py-3 border-b border-[#1a1a1a] last:border-0 transition-colors"
+                  <div key={i} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr 0.6fr 0.8fr' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] text-white font-bold shrink-0"
                         style={{ backgroundColor: t.tokenColor }}>{t.token[0]}</span>
                       <span className="text-[11px] text-white font-mono">{t.token}</span>
                     </div>
-                    <div className="text-[11px] text-[#a1a1aa]">{t.name}</div>
-                    <div className="text-[11px] text-[#a1a1aa] tabular-nums">{t.eth}</div>
-                    <div className={`text-[11px] font-medium tabular-nums ${t.pnlPos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{t.pnl}</div>
-                    <div className={`text-[11px] tabular-nums ${t.pctPos ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{t.pct}</div>
-                    <div className="text-[11px] text-[#6e6e6e]">{t.duration}</div>
+                    <div className="text-[11px] text-[#9298b8]">{t.name}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{t.eth}</div>
+                    <div className={`text-[11px] font-medium tabular-nums ${t.pnlPos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{t.pnl}</div>
+                    <div className={`text-[11px] tabular-nums ${t.pctPos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{t.pct}</div>
+                    <div className="text-[11px] text-[#6e7590]">{t.duration}</div>
                   </div>
                 ))}
               </div>
@@ -1078,7 +1078,7 @@ function MonitorWalletInner() {
                 {(['1d','1m','3M','ALL'] as TimeFilter[]).map(f => (
                   <button key={f} onClick={() => setStatsTime(f)}
                     className={`text-[10px] font-semibold px-2.5 py-1 transition-colors ${
-                      statsTime === f ? 'bg-[#beff00] text-black' : 'text-[#6e6e6e] hover:text-[#a1a1aa]'
+                      statsTime === f ? 'bg-[#7c5cff] text-black' : 'text-[#6e7590] hover:text-[#9298b8]'
                     }`}>{f}</button>
                 ))}
               </div>
@@ -1087,19 +1087,19 @@ function MonitorWalletInner() {
             {/* 4 KPI cards */}
             <div className="grid grid-cols-4 gap-3 mb-5">
               {[
-                { icon: '📊', iconBg: '#083344', label: 'Total Trading', value: '1 trade', sub: '1 Bot' },
-                { icon: '🏆', iconBg: '#2d1f00', label: 'Win Rate',      value: '—',       sub: '' },
-                { icon: '📈', iconBg: '#065f46', label: 'Max Profit',    value: '—',       sub: '' },
-                { icon: '📉', iconBg: '#7f1d1d', label: 'Max Drawdown',  value: '—',       sub: '' },
+                { icon: '📊', iconBg: '#0e2630', label: 'Total Trading', value: '1 trade', sub: '1 Bot' },
+                { icon: '🏆', iconBg: '#2a1e05', label: 'Win Rate',      value: '—',       sub: '' },
+                { icon: '📈', iconBg: '#06251b', label: 'Max Profit',    value: '—',       sub: '' },
+                { icon: '📉', iconBg: '#2b070c', label: 'Max Drawdown',  value: '—',       sub: '' },
               ].map(k => (
-                <div key={k.label} className="bg-[#111111] border border-[#1a1a1a] p-4">
+                <div key={k.label} className="bg-[#14161f] border border-[#14161f] p-4">
                   <div className="w-8 h-8 flex items-center justify-center text-[14px] mb-3 rounded-[4px]"
                     style={{ backgroundColor: k.iconBg }}>
                     {k.icon}
                   </div>
-                  <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-1">{k.label}</div>
+                  <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">{k.label}</div>
                   <div className="text-[18px] font-bold text-white">{k.value}</div>
-                  {k.sub && <div className="text-[9px] text-[#6e6e6e]">{k.sub}</div>}
+                  {k.sub && <div className="text-[9px] text-[#6e7590]">{k.sub}</div>}
                 </div>
               ))}
             </div>
@@ -1110,21 +1110,21 @@ function MonitorWalletInner() {
                 { title: 'Buy / Sell Volume', buyLabel: 'Total Buy Amount', sellLabel: 'Total Sell Amount', buyVal: '$0.00', sellVal: '$0.00' },
                 { title: 'Realistic Amounts', buyLabel: 'Realistic Buy Amount', sellLabel: 'Avg Sell Amount', buyVal: '$0.00', sellVal: '$0.00' },
               ].map((panel, i) => (
-                <div key={i} className="bg-[#111111] border border-[#1a1a1a] p-4">
+                <div key={i} className="bg-[#14161f] border border-[#14161f] p-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
-                      <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-1">Buying</div>
-                      <div className="text-[9px] text-[#6e6e6e] mb-2">{panel.buyLabel}</div>
+                      <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">Buying</div>
+                      <div className="text-[9px] text-[#6e7590] mb-2">{panel.buyLabel}</div>
                       <div className="flex justify-center mb-2">
-                        <GaugeChart value={0} color="#34d399" />
+                        <GaugeChart value={0} color="#4fe9b4" />
                       </div>
-                      <div className="flex justify-between text-[8px] text-[#6e6e6e] mb-1"><span>Poor</span><span>Good</span></div>
+                      <div className="flex justify-between text-[8px] text-[#6e7590] mb-1"><span>Poor</span><span>Good</span></div>
                     </div>
                     <div className="text-center">
-                      <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-1">Selling</div>
-                      <div className="text-[9px] text-[#6e6e6e] mb-2">{panel.sellLabel}</div>
+                      <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">Selling</div>
+                      <div className="text-[9px] text-[#6e7590] mb-2">{panel.sellLabel}</div>
                       <div className="flex justify-center mb-2">
-                        <GaugeChart value={0} color="#f87171" />
+                        <GaugeChart value={0} color="#ff8a96" />
                       </div>
                       <div className="text-[13px] font-bold text-white">{panel.sellVal}</div>
                     </div>
@@ -1135,8 +1135,8 @@ function MonitorWalletInner() {
 
             {/* 2 bar chart panels */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-[#111111] border border-[#1a1a1a] p-4">
-                <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-4">Token Profit Distribution</p>
+              <div className="bg-[#14161f] border border-[#14161f] p-4">
+                <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-4">Token Profit Distribution</p>
                 {[
                   { label: '< 10%',        val: 90 },
                   { label: '10% – 100%',   val: 65 },
@@ -1144,13 +1144,13 @@ function MonitorWalletInner() {
                   { label: '-35',          val: 5  },
                 ].map(row => (
                   <div key={row.label} className="flex items-center gap-3 mb-2">
-                    <span className="text-[9px] text-[#6e6e6e] w-20 shrink-0">{row.label}</span>
-                    <HBar value={row.val} max={100} color="#beff00" />
+                    <span className="text-[9px] text-[#6e7590] w-20 shrink-0">{row.label}</span>
+                    <HBar value={row.val} max={100} color="#7c5cff" />
                   </div>
                 ))}
               </div>
-              <div className="bg-[#111111] border border-[#1a1a1a] p-4">
-                <p className="text-[9px] font-bold text-[#6e6e6e] uppercase tracking-widest mb-4">Avg Token Held Time</p>
+              <div className="bg-[#14161f] border border-[#14161f] p-4">
+                <p className="text-[9px] font-bold text-[#6e7590] uppercase tracking-widest mb-4">Avg Token Held Time</p>
                 {[
                   { label: '0h – 2k',   val: 80 },
                   { label: '2k – 10k',  val: 50 },
@@ -1158,8 +1158,8 @@ function MonitorWalletInner() {
                   { label: '1D+',       val: 10 },
                 ].map(row => (
                   <div key={row.label} className="flex items-center gap-3 mb-2">
-                    <span className="text-[9px] text-[#6e6e6e] w-20 shrink-0">{row.label}</span>
-                    <HBar value={row.val} max={100} color="#beff00" />
+                    <span className="text-[9px] text-[#6e7590] w-20 shrink-0">{row.label}</span>
+                    <HBar value={row.val} max={100} color="#7c5cff" />
                   </div>
                 ))}
               </div>
@@ -1176,16 +1176,16 @@ function MonitorWalletInner() {
               {/* Legend */}
               <div className="absolute top-3 left-4 flex items-center gap-4 z-10">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-5 h-px bg-[#f87171]" />
-                  <span className="text-[9px] text-[#6e6e6e]">Outflow</span>
+                  <div className="w-5 h-px bg-[#ff8a96]" />
+                  <span className="text-[9px] text-[#6e7590]">Outflow</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-5 border-t border-dashed border-[#34d399]" />
-                  <span className="text-[9px] text-[#6e6e6e]">Inflow</span>
+                  <div className="w-5 border-t border-dashed border-[#4fe9b4]" />
+                  <span className="text-[9px] text-[#6e7590]">Inflow</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-[#a78bfa]" />
-                  <span className="text-[9px] text-[#6e6e6e]">This Wallet</span>
+                  <span className="text-[9px] text-[#6e7590]">This Wallet</span>
                 </div>
               </div>
               {/* Time filter */}
@@ -1193,7 +1193,7 @@ function MonitorWalletInner() {
                 {(['7d','30d','All'] as TimeFilter[]).map(f => (
                   <button key={f} onClick={() => setRelTime(f)}
                     className={`text-[9px] font-semibold px-2 py-1 transition-colors ${
-                      relTime === f ? 'bg-[#beff00] text-black' : 'text-[#6e6e6e] hover:text-[#a1a1aa]'
+                      relTime === f ? 'bg-[#7c5cff] text-black' : 'text-[#6e7590] hover:text-[#9298b8]'
                     }`}>{f}</button>
                 ))}
               </div>
@@ -1217,10 +1217,10 @@ function MonitorWalletInner() {
                         </div>
                         <div>
                           <div className="text-[11px] font-mono text-white font-semibold">{node.label}</div>
-                          <div className="text-[9px] text-[#6e6e6e]">{node.sub}</div>
+                          <div className="text-[9px] text-[#6e7590]">{node.sub}</div>
                         </div>
                       </div>
-                      <button onClick={() => setSelectedNode(null)} className="text-[#6e6e6e] text-[12px] hover:text-white">✕</button>
+                      <button onClick={() => setSelectedNode(null)} className="text-[#6e7590] text-[12px] hover:text-white">✕</button>
                     </div>
                     {(NODE_TAGS[selectedNode] ?? []).map(t => (
                       <span key={t.text} className="inline-block text-[8px] font-bold px-2 py-0.5 mb-3 mr-1"
@@ -1229,40 +1229,40 @@ function MonitorWalletInner() {
                     {relW && (
                       <div className="space-y-3">
                         {[
-                          { label: 'Inflow',  value: relW.inflow > 0 ? `$${relW.inflow.toLocaleString()}` : '$0', color: '#34d399' },
-                          { label: 'Outflow', value: `$${relW.outflow.toLocaleString()}`, color: '#f87171' },
+                          { label: 'Inflow',  value: relW.inflow > 0 ? `$${relW.inflow.toLocaleString()}` : '$0', color: '#4fe9b4' },
+                          { label: 'Outflow', value: `$${relW.outflow.toLocaleString()}`, color: '#ff8a96' },
                           { label: 'Tx In',   value: String(relW.txIn),   color: 'var(--wr-text-2)' },
                           { label: 'Tx Out',  value: String(relW.txOut),  color: 'var(--wr-text-2)' },
                           { label: 'Balance', value: relW.balance,        color: 'var(--wr-text)' },
                         ].map(s => (
                           <div key={s.label} className="flex items-center justify-between">
-                            <span className="text-[10px] text-[#6e6e6e] uppercase tracking-wider">{s.label}</span>
+                            <span className="text-[10px] text-[#6e7590] uppercase tracking-wider">{s.label}</span>
                             <span className="text-[11px] font-semibold tabular-nums" style={{ color: s.color }}>{s.value}</span>
                           </div>
                         ))}
                         <div className="pt-3">
-                          <div className="text-[9px] text-[#6e6e6e] uppercase tracking-wider mb-2">Flow Ratio</div>
-                          <div className="h-1.5 bg-[#1a1a1a] overflow-hidden rounded-full">
+                          <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Flow Ratio</div>
+                          <div className="h-1.5 bg-[#14161f] overflow-hidden rounded-full">
                             <div className="h-full rounded-full"
                               style={{
                                 width: `${Math.min((relW.outflow / (relW.inflow + relW.outflow || 1)) * 100, 100)}%`,
-                                background: 'linear-gradient(90deg, #fbbf24, #f87171)',
+                                background: 'linear-gradient(90deg, #ffb020, #ff8a96)',
                               }} />
                           </div>
                           <div className="flex justify-between mt-1">
-                            <span className="text-[8px] text-[#34d399]">In</span>
-                            <span className="text-[8px] text-[#f87171]">Out</span>
+                            <span className="text-[8px] text-[#4fe9b4]">In</span>
+                            <span className="text-[8px] text-[#ff8a96]">Out</span>
                           </div>
                         </div>
                       </div>
                     )}
                     <div className="flex flex-col gap-2 mt-5">
                       <button className="text-[10px] font-semibold px-3 py-2"
-                        style={{ color: '#22d3ee', backgroundColor: '#083344', border: '1px solid #164e63' }}>
+                        style={{ color: '#2fc4d6', backgroundColor: '#0e2630', border: '1px solid #0e2630' }}>
                         Track Wallet
                       </button>
                       <button className="text-[10px] font-semibold px-3 py-2"
-                        style={{ color: 'var(--wr-accent)', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid #BEFF0033' }}>
+                        style={{ color: 'var(--wr-accent)', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid #7c5cff33' }}>
                         Create Alert
                       </button>
                     </div>
@@ -1272,7 +1272,7 @@ function MonitorWalletInner() {
                 <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '12px', padding: '20px', minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <div className="text-center">
                     <div className="text-[28px] mb-3 opacity-30">◎</div>
-                    <p className="text-[11px] text-[#6e6e6e] leading-relaxed">
+                    <p className="text-[11px] text-[#6e7590] leading-relaxed">
                       Click a node to<br />inspect wallet details
                     </p>
                   </div>

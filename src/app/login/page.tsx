@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { importWallet } from '@/lib/tauri';
+import WestronLogo from '@/components/WestronLogo';
 import { addWallet, loadWallets } from '@/lib/walletStore';
 import { useTheme } from '@/lib/themeContext';
 
@@ -32,18 +32,8 @@ export default function LoginPage() {
 
       {/* Brand */}
       <div className="flex flex-col items-center" style={{ marginBottom: '40px', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Image src="/logo-mark.png" alt="" width={320} height={361}
-            style={{ height: '36px', width: 'auto' }} priority />
-          <span style={{
-            fontFamily: 'var(--font-bellota)',
-            fontSize: '28px',
-            fontWeight: 700,
-            letterSpacing: '5px',
-            color: 'var(--wr-text)',
-            textTransform: 'uppercase',
-            lineHeight: 1,
-          }}>WESTRON</span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <WestronLogo size={36} wordmark variant="gradient" />
         </div>
         <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
           Ethereum portfolio & NFT trading — keys stay on your machine
@@ -82,10 +72,10 @@ function HomeStep({ isDay, onImport, onWatch }: { isDay: boolean; onImport: () =
           style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', padding: '16px 20px', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
           <span style={{
             width: '32px', height: '32px',
-            backgroundColor: isDay ? '#3D6000' : '#BEFF00',
+            backgroundColor: isDay ? '#3D6000' : '#7c5cff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0, fontWeight: 700, fontSize: '14px',
-            color: isDay ? '#FFFFFF' : '#000000',
+            color: isDay ? '#f2f2f7' : '#0b0c14',
           }}>
             ↓
           </span>
@@ -210,7 +200,7 @@ function ImportStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
         </div>
 
         {error && (
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171' }}>{error}</div>
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96' }}>{error}</div>
         )}
 
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -219,7 +209,7 @@ function ImportStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
             Back
           </button>
           <button onClick={handleConfirm} disabled={saving}
-            style={{ flex: 2, backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, padding: '12px 0', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+            style={{ flex: 2, backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, padding: '12px 0', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Adding…' : 'Add Wallet →'}
           </button>
         </div>
@@ -251,11 +241,11 @@ function ImportStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
       </div>
 
       {error && (
-        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171' }}>{error}</div>
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96' }}>{error}</div>
       )}
 
       <button onClick={handleDerive} disabled={deriving}
-        style={{ backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, padding: '13px 0', border: 'none', cursor: deriving ? 'not-allowed' : 'pointer', opacity: deriving ? 0.6 : 1 }}>
+        style={{ backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, padding: '13px 0', border: 'none', cursor: deriving ? 'not-allowed' : 'pointer', opacity: deriving ? 0.6 : 1 }}>
         {deriving ? 'Deriving address…' : 'Continue →'}
       </button>
     </div>
@@ -305,7 +295,7 @@ function WatchStep({ onBack, onDone }: { onBack: () => void; onDone: () => void 
       ))}
 
       {error && (
-        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171' }}>{error}</div>
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96' }}>{error}</div>
       )}
 
       <button onClick={handleWatch} disabled={saving}

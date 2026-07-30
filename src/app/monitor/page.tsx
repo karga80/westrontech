@@ -80,7 +80,7 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
               value={address}
               onChange={e => setAddress(e.target.value)}
               placeholder="0x..."
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00] transition-colors"
+              className="placeholder-[#232533] focus:border-[#7c5cff] transition-colors"
               style={FIELD}
             />
           </div>
@@ -92,7 +92,7 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
               value={label}
               onChange={e => setLabel(e.target.value)}
               placeholder="e.g. Whale Watcher, Dev Wallet…"
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00] transition-colors"
+              className="placeholder-[#232533] focus:border-[#7c5cff] transition-colors"
               style={FIELD}
             />
           </div>
@@ -110,8 +110,8 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
                     style={{
                       fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
                       padding: '4px 10px',
-                      color: active ? '#000000' : 'var(--wr-text-3)',
-                      backgroundColor: active ? '#BEFF00' : 'var(--wr-surface-alt)',
+                      color: active ? '#0b0c14' : 'var(--wr-text-3)',
+                      backgroundColor: active ? '#7c5cff' : 'var(--wr-surface-alt)',
                       border: `1px solid ${active ? 'var(--wr-accent)' : 'var(--wr-border)'}`,
                       cursor: 'pointer', transition: 'all 0.12s',
                     }}
@@ -142,8 +142,8 @@ function WatchAddressModal({ onClose }: { onClose: () => void }) {
             <button
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: canSubmit ? '#000000' : 'var(--wr-text-3)',
-                backgroundColor: canSubmit ? '#BEFF00' : 'var(--wr-surface-alt)',
+                color: canSubmit ? '#0b0c14' : 'var(--wr-text-3)',
+                backgroundColor: canSubmit ? '#7c5cff' : 'var(--wr-surface-alt)',
                 border: 'none', padding: '11px 0',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 transition: 'background-color 0.15s',
@@ -162,10 +162,10 @@ type ActivityTag = 'High Frequency' | 'Frequent Trader' | 'Active' | 'Low Activi
 
 const ACTIVITY_TAG_STYLE: Record<ActivityTag, { color: string; bg: string; border: string }> = {
   'High Frequency': { color: '#f472b6', bg: '#1a0010', border: '#831843' },
-  'Frequent Trader': { color: '#34d399', bg: '#052e16', border: '#166534' },
-  'Active':          { color: '#60a5fa', bg: '#0c1a2e', border: '#1d4ed8' },
-  'Low Activity':    { color: '#fbbf24', bg: '#1c1000', border: '#92400e' },
-  'Dormant':         { color: '#6E6E6E', bg: '#1a1a1a', border: '#2a2a2a' },
+  'Frequent Trader': { color: '#4fe9b4', bg: '#06251b', border: '#06251b' },
+  'Active':          { color: '#90a6ff', bg: '#0c1a2e', border: '#1d4ed8' },
+  'Low Activity':    { color: '#ffb020', bg: '#1c1000', border: '#92400e' },
+  'Dormant':         { color: '#6e7590', bg: '#14161f', border: '#232533' },
 };
 
 // Tag thresholds — edit here to change classification rules
@@ -344,7 +344,7 @@ function WatchCollectionModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
             Cancel
           </button>
           <button onClick={handle} disabled={!canSubmit}
-            style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000', backgroundColor: canSubmit ? '#BEFF00' : '#BEFF0040', border: 'none', padding: '11px 0', cursor: canSubmit ? 'pointer' : 'not-allowed', letterSpacing: '0.5px' }}>
+            style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000', backgroundColor: canSubmit ? '#7c5cff' : '#7c5cff40', border: 'none', padding: '11px 0', cursor: canSubmit ? 'pointer' : 'not-allowed', letterSpacing: '0.5px' }}>
             {status === 'loading' ? 'Fetching…' : 'Add to Watchlist'}
           </button>
         </div>
@@ -578,11 +578,11 @@ export default function MonitorPage() {
                 className="flex items-center gap-1.5 group"
                 onClick={() => setShowRelSettings(v => !v)}
               >
-                <span className="group-hover:text-[#a1a1aa] transition-colors"
+                <span className="group-hover:text-[#9298b8] transition-colors"
                   style={{ color: 'var(--wr-text-3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                   Relationship
                 </span>
-                <span className={`text-[9px] transition-colors ${showRelSettings ? 'text-[#beff00]' : 'text-[#3f3f46] group-hover:text-[#6e6e6e]'}`}>⚙</span>
+                <span className={`text-[9px] transition-colors ${showRelSettings ? 'text-[#7c5cff]' : 'text-[#2b2e3f] group-hover:text-[#6e7590]'}`}>⚙</span>
               </button>
 
               {showRelSettings && (
@@ -602,7 +602,7 @@ export default function MonitorPage() {
                         <button
                           onClick={() => setRelRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r))}
                           className="w-7 h-4 flex-shrink-0 relative transition-colors"
-                          style={{ borderRadius: 2, backgroundColor: rule.enabled ? '#BEFF00' : 'var(--wr-border-hover)', border: 'none', cursor: 'pointer' }}
+                          style={{ borderRadius: 2, backgroundColor: rule.enabled ? '#7c5cff' : 'var(--wr-border-hover)', border: 'none', cursor: 'pointer' }}
                         >
                           <span className="absolute top-0.5 w-3 h-3 transition-all" style={{ left: rule.enabled ? '14px' : '2px', borderRadius: 1, backgroundColor: rule.enabled ? '#000' : 'var(--wr-text-3)' }} />
                         </button>
@@ -632,7 +632,7 @@ export default function MonitorPage() {
                     <button
                       onClick={() => setShowRelSettings(false)}
                       className="w-full py-1.5 hover:opacity-90 transition-opacity"
-                      style={{ backgroundColor: '#BEFF00', color: '#000', fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                      style={{ backgroundColor: '#7c5cff', color: '#000', fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' }}
                     >Save Rules</button>
                   </div>
                 </div>
@@ -666,7 +666,7 @@ export default function MonitorPage() {
                     tabIndex={0}
                     onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(`https://etherscan.io/address/${w.rawAddress}`, '_blank', 'noopener,noreferrer'); }}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.open(`https://etherscan.io/address/${w.rawAddress}`, '_blank', 'noopener,noreferrer'); } }}
-                    className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex cursor-pointer"
+                    className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex cursor-pointer"
                   >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </span>
@@ -706,11 +706,11 @@ export default function MonitorPage() {
               {/* 30D P&L */}
               <div className="flex items-center" style={{ gap: 4 }}>
                 {w.pnl30d !== '—' && (
-                  <span style={{ color: w.pnlUp ? '#34d399' : '#f87171', fontSize: 10 }}>
+                  <span style={{ color: w.pnlUp ? '#4fe9b4' : '#ff8a96', fontSize: 10 }}>
                     {w.pnlUp ? '↑' : '↘'}
                   </span>
                 )}
-                <span className="tabular-nums" style={{ color: w.pnl30d === '—' ? 'var(--wr-text-3)' : w.pnlUp ? '#34d399' : '#f87171', fontSize: 12, fontWeight: 500 }}>
+                <span className="tabular-nums" style={{ color: w.pnl30d === '—' ? 'var(--wr-text-3)' : w.pnlUp ? '#4fe9b4' : '#ff8a96', fontSize: 12, fontWeight: 500 }}>
                   {w.pnl30d}
                 </span>
               </div>
@@ -775,11 +775,11 @@ export default function MonitorPage() {
             <span title={streamConnected ? 'Stream live' : 'Stream disconnected'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
-                backgroundColor: streamConnected ? '#4ade80' : 'var(--wr-border)',
+                backgroundColor: streamConnected ? '#4fe9b4' : 'var(--wr-border)',
                 display: 'inline-block',
-                boxShadow: streamConnected ? '0 0 6px #4ade80' : 'none',
+                boxShadow: streamConnected ? '0 0 6px #4fe9b4' : 'none',
               }} />
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 9, color: streamConnected ? '#4ade80' : 'var(--wr-text-4)', letterSpacing: '0.05em' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: 9, color: streamConnected ? '#4fe9b4' : 'var(--wr-text-4)', letterSpacing: '0.05em' }}>
                 {streamConnected ? 'LIVE' : 'OFFLINE'}
               </span>
             </span>
@@ -839,7 +839,7 @@ export default function MonitorPage() {
                 No collections in watchlist
               </div>
               <button onClick={() => setShowWatchColModal(true)}
-                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '8px 20px', cursor: 'pointer' }}>
+                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '8px 20px', cursor: 'pointer' }}>
                 + Watch Collection
               </button>
             </div>
@@ -878,7 +878,7 @@ export default function MonitorPage() {
               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                 <button
                   className="text-[9px] font-semibold px-2 py-1 transition-opacity hover:opacity-80"
-                  style={{ color: '#000', backgroundColor: '#beff00', border: '1px solid #beff00' }}
+                  style={{ color: '#000', backgroundColor: '#7c5cff', border: '1px solid #7c5cff' }}
                   onClick={() => router.push(`/monitor/collection?name=${encodeURIComponent(col.name)}&slug=${encodeURIComponent(col.slug)}&contract=${encodeURIComponent(col.contract_address)}${col.image_url ? `&image=${encodeURIComponent(col.image_url)}` : ''}`)}>
                   Open
                 </button>
@@ -1050,7 +1050,7 @@ export default function MonitorPage() {
                         style={{
                           ...ACTION_BTN_BASE,
                           fontWeight: 700,
-                          color: '#000', backgroundColor: '#BEFF00', border: '1px solid #BEFF00',
+                          color: '#000', backgroundColor: '#7c5cff', border: '1px solid #7c5cff',
                         }}
                       >Buy</button>
                       <button

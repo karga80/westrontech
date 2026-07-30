@@ -173,8 +173,8 @@ export function TrackedNftNotificationModal({
             className="btn-cta"
             style={{
               fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-              color: '#000', backgroundColor: '#BEFF00',
-              border: '1px solid #BEFF00', padding: '7px 18px', cursor: 'pointer',
+              color: '#000', backgroundColor: '#7c5cff',
+              border: '1px solid #7c5cff', padding: '7px 18px', cursor: 'pointer',
             }}>Save Rules</button>
         </div>
       </div>
@@ -201,7 +201,7 @@ function ToggleRow({
         aria-checked={checked}
         style={{
           width: '30px', height: '16px', borderRadius: '10px',
-          backgroundColor: checked ? '#BEFF00' : 'var(--wr-overlay)',
+          backgroundColor: checked ? '#7c5cff' : 'var(--wr-overlay)',
           position: 'relative', border: '1px solid var(--wr-border)',
           padding: 0, cursor: 'pointer', flexShrink: 0,
           transition: 'background-color 0.15s',

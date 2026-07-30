@@ -1,0 +1,73 @@
+/* Westron design tokens — v2 vivid
+   Dark theme is fixed. Do not add a light theme. */
+:root {
+  /* Brand */
+  --w-bg:            #0B0C14;
+  --w-surface:       #14161F;
+  --w-accent-bg:     #241C4D;
+  --w-accent:        #7C5CFF;   /* primary CTA + brand only, never data */
+  --w-accent-light:  #C9B8FF;
+  --w-accent-dark:   #5B3DF0;   /* logo on light surfaces */
+  --w-text:          #F2F2F7;
+  --w-text-2:        #9298B8;
+  --w-text-3:        #6E7590;   /* labels, cents, muted figures */
+  --w-divider:       rgba(242,242,247,.16);
+  --w-hairline:      rgba(242,242,247,.08);
+  --w-border:        rgba(242,242,247,.12);
+  --w-gradient:      linear-gradient(90deg, #7C5CFF, #C9B8FF);
+
+  /* Financial set — tables, lists, buy/sell */
+  --w-buy:           #00D68F;
+  --w-buy-hover:     #00B87A;
+  --w-buy-tint:      rgba(0,214,143,.14);
+  --w-buy-text:      #4FE9B4;   /* on dark surfaces */
+  --w-buy-on:        #06251B;   /* text on a buy fill */
+  --w-sell:          #FF4D5E;
+  --w-sell-hover:    #E63950;
+  --w-sell-tint:     rgba(255,77,94,.14);
+  --w-sell-text:     #FF8A96;
+  --w-sell-on:       #2B070C;
+  --w-pending:       #FFB020;
+  --w-pending-tint:  rgba(255,176,32,.14);
+  --w-info:          #5B7CFA;
+  --w-info-text:     #90A6FF;
+  --w-info-tint:     rgba(91,124,250,.16);
+
+  /* Table surfaces */
+  --w-row:           #10121B;
+  --w-row-zebra:     #161925;
+  --w-row-hover:     #1D2130;
+
+  /* Series / asset colours (charts, list dots, chain dots) */
+  --w-series-1: #7C5CFF;
+  --w-series-2: #2FC4D6;
+  --w-series-3: #F6C445;
+  --w-series-4: #FF8A5B;
+  --w-series-5: #4FE9B4;
+  --w-series-6: #A78BFA;
+
+  /* NFT rarity — fixed ladder, one colour per tier */
+  --w-rarity-legendary: #F6C445;
+  --w-rarity-epic:      #7C5CFF;
+  --w-rarity-rare:      #2FC4D6;
+  --w-rarity-common:    #9298B8;
+
+  /* Type */
+  --w-font-display: 'Space Grotesk', sans-serif;  /* headings, balances */
+  --w-font-body:    Inter, sans-serif;            /* UI text */
+  --w-font-mono:    'JetBrains Mono', monospace;  /* all figures, addresses */
+
+  /* Desktop scale (Tauri / macOS) */
+  --w-unit:        4px;
+  --w-text-body:   13px;
+  --w-row-h:       44px;
+  --w-row-h-compact: 36px;
+  --w-sidebar-w:   208px;
+  --w-titlebar-h:  44px;
+  --w-btn-h:       32px;
+  --w-radius-card: 12px;
+  --w-radius-ctl:  8px;
+}
+
+/* Every figure in the product */
+.w-num { font-family: var(--w-font-mono); font-variant-numeric: tabular-nums; text-align: right; }

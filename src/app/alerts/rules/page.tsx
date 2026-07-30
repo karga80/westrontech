@@ -12,8 +12,8 @@ import ProGate from '@/components/ProGate';
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle}
-      style={{ width: '40px', height: '22px', borderRadius: '11px', flexShrink: 0, backgroundColor: on ? '#BEFF00' : 'var(--wr-overlay)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background-color 0.2s' }}>
-      <span style={{ position: 'absolute', top: '3px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: on ? '#000000' : 'var(--wr-text-3)', left: on ? '21px' : '3px', transition: 'left 0.2s' }} />
+      style={{ width: '40px', height: '22px', borderRadius: '11px', flexShrink: 0, backgroundColor: on ? '#7c5cff' : 'var(--wr-overlay)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background-color 0.2s' }}>
+      <span style={{ position: 'absolute', top: '3px', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: on ? '#0b0c14' : 'var(--wr-text-3)', left: on ? '21px' : '3px', transition: 'left 0.2s' }} />
     </button>
   );
 }
@@ -79,7 +79,7 @@ export default function AlertRulesPage() {
       </div>
       <div className="flex items-center justify-between mb-6">
         <h1 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)' }}>Alert Rules</h1>
-        <button className="btn-cta" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#000000', backgroundColor: '#BEFF00', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px' }}>
+        <button className="btn-cta" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px' }}>
           + Add Rules
         </button>
       </div>
@@ -88,12 +88,12 @@ export default function AlertRulesPage() {
       <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
         <SL>Tracked Wallets</SL>
         <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', overflow: 'hidden' }}>
-          <div className="grid px-4 py-2.5 border-b border-[#1A1A1A]"
+          <div className="grid px-4 py-2.5 border-b border-[#14161f]"
             style={{ gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 120px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
             <span>Wallet</span><span>Labels</span><span>Route</span><span>Slots</span><span>Actions</span>
           </div>
           {trackedWallets.map((w, i) => (
-            <div key={i} className="grid px-4 py-3 border-b border-[#1A1A1A] last:border-b-0 items-center"
+            <div key={i} className="grid px-4 py-3 border-b border-[#14161f] last:border-b-0 items-center"
               style={{ gridTemplateColumns: '1.5fr 1.5fr 1fr 1fr 120px' }}>
               <span style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.wallet}</span>
               <span style={{ color: 'var(--wr-text-2)', fontSize: '12px' }}>{w.name}</span>
@@ -105,7 +105,7 @@ export default function AlertRulesPage() {
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
                   color: w.active ? 'var(--wr-accent)' : 'var(--wr-text-3)',
                   backgroundColor: w.active ? 'var(--wr-accent-dim)' : 'var(--wr-border)',
-                  border: `1px solid ${w.active ? '#BEFF0044' : 'var(--wr-border-hover)'}`, padding: '2px 8px' }}>
+                  border: `1px solid ${w.active ? '#7c5cff44' : 'var(--wr-border-hover)'}`, padding: '2px 8px' }}>
                   {w.active ? 'Active' : 'Paused'}
                 </span>
               </div>
@@ -118,7 +118,7 @@ export default function AlertRulesPage() {
       <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '16px', padding: '24px', marginBottom: '24px' }}>
         <SL>Price Alert Rules</SL>
         <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', overflow: 'hidden' }}>
-          <div className="grid px-4 py-2.5 border-b border-[#1A1A1A]"
+          <div className="grid px-4 py-2.5 border-b border-[#14161f]"
             style={{ gridTemplateColumns: '1.2fr 1.2fr 1fr 1fr 80px 80px 100px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
             <span>Collection</span><span>Condition</span><span>Target</span><span>Update</span><span>Status</span><span>Active</span><span>Actions</span>
           </div>
@@ -127,7 +127,7 @@ export default function AlertRulesPage() {
           ) : rules.length === 0 ? (
             <div className="px-4 py-6 text-center" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No alert rules yet. Create one from the Alerts hub.</div>
           ) : rules.map((r) => (
-            <div key={r.id} className="grid px-4 py-3 border-b border-[#1A1A1A] last:border-b-0 items-center"
+            <div key={r.id} className="grid px-4 py-3 border-b border-[#14161f] last:border-b-0 items-center"
               style={{ gridTemplateColumns: '1.2fr 1.2fr 1fr 1fr 80px 80px 100px' }}>
               <span style={{ color: 'var(--wr-text)', fontSize: '12px' }}>
                 {r.collection_slug ?? r.alert_type}
@@ -145,12 +145,12 @@ export default function AlertRulesPage() {
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
                 color: r.active ? 'var(--wr-accent)' : 'var(--wr-text-3)',
                 backgroundColor: r.active ? 'var(--wr-accent-dim)' : 'var(--wr-border)',
-                border: `1px solid ${r.active ? '#BEFF0044' : 'var(--wr-border-hover)'}`, padding: '2px 8px', display: 'inline-block' }}>
+                border: `1px solid ${r.active ? '#7c5cff44' : 'var(--wr-border-hover)'}`, padding: '2px 8px', display: 'inline-block' }}>
                 {r.active ? 'Active' : 'Paused'}
               </span>
               <div className="flex gap-2">
                 <button onClick={() => handleDelete(r.id)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#F87171', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
               </div>
             </div>
           ))}
@@ -162,7 +162,7 @@ export default function AlertRulesPage() {
         <SL>Notification Preferences</SL>
         <div className="space-y-3">
           {notifPrefs.map((p, i) => (
-            <div key={p.label} className="flex items-center justify-between bg-[#111111] border border-[#1A1A1A] px-4 py-3.5">
+            <div key={p.label} className="flex items-center justify-between bg-[#14161f] border border-[#14161f] px-4 py-3.5">
               <div>
                 <div style={{ color: 'var(--wr-text)', fontSize: '13px' }}>{p.label}</div>
                 <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', marginTop: '2px', fontFamily: 'var(--font-jetbrains)' }}>{p.desc}</div>

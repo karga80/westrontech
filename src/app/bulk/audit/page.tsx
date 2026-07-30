@@ -48,8 +48,8 @@ export default function AuditLogPage() {
         style={{ backgroundColor: 'var(--wr-border)', border: '1px solid var(--wr-border)', gap: '1px' }}>
         {[
           { label: 'Total Entries', value: '14,832', color: 'var(--wr-text)' },
-          { label: 'Success Rate',  value: '98.3%',  color: '#34d399' },
-          { label: 'Errors Logged', value: '4',       color: '#F87171' },
+          { label: 'Success Rate',  value: '98.3%',  color: '#4fe9b4' },
+          { label: 'Errors Logged', value: '4',       color: '#ff8a96' },
           { label: 'Last Action',   value: '12s ago', color: 'var(--wr-text)' },
         ].map(s => (
           <div key={s.label} style={{ backgroundColor: 'var(--wr-surface)', padding: '20px 24px' }}>
@@ -72,12 +72,12 @@ export default function AuditLogPage() {
           </button>
         ))}
         <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginLeft: 'auto' }}>7,247 results</span>
-        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#F87171', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
       </div>
 
       {/* Table */}
       <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '16px', overflow: 'hidden' }}>
-        <div className="grid px-5 py-2.5 border-b border-[#1A1A1A]"
+        <div className="grid px-5 py-2.5 border-b border-[#14161f]"
           style={{ gridTemplateColumns: '1.4fr 1.2fr 3fr 0.8fr 1.2fr', columnGap: '16px', backgroundColor: 'var(--wr-surface)', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
           <span>Timestamp</span><span>Action Type</span><span>Entity</span><span>Status</span><span>Owner / Result</span>
         </div>
@@ -86,8 +86,8 @@ export default function AuditLogPage() {
           const variant = AUDIT_STATUS_VARIANT[e.status] ?? 'neutral';
           const isExpanded = expanded === i;
           return (
-            <div key={i} className="border-b border-[#1A1A1A] last:border-b-0">
-              <div className="grid px-5 py-4 hover:bg-[#111111] transition-colors items-center cursor-pointer"
+            <div key={i} className="border-b border-[#14161f] last:border-b-0">
+              <div className="grid px-5 py-4 hover:bg-[#14161f] transition-colors items-center cursor-pointer"
                 style={{ gridTemplateColumns: '1.4fr 1.2fr 3fr 0.8fr 1.2fr', columnGap: '16px' }}
                 onClick={() => setExpanded(isExpanded ? null : i)}>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{e.time}</span>
@@ -103,7 +103,7 @@ export default function AuditLogPage() {
                     <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '12px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)', whiteSpace: 'pre' }}>
                       {e.detail.inputBody}
                     </div>
-                    <div style={{ backgroundColor: '#2a0a0a', border: '1px solid #F87171', padding: '12px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#F87171', whiteSpace: 'pre' }}>
+                    <div style={{ backgroundColor: '#2a0a0a', border: '1px solid #ff8a96', padding: '12px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', whiteSpace: 'pre' }}>
                       {e.detail.outputData}
                     </div>
                   </div>
@@ -117,7 +117,7 @@ export default function AuditLogPage() {
       {/* Pagination */}
       <div className="flex justify-center gap-1 mt-5">
         {[1, 2, 3, '...', 5].map((p, i) => (
-          <button key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', width: '28px', height: '28px', backgroundColor: p === 1 ? '#BEFF00' : 'var(--wr-surface)', color: p === 1 ? '#000000' : 'var(--wr-text-3)', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
+          <button key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', width: '28px', height: '28px', backgroundColor: p === 1 ? '#7c5cff' : 'var(--wr-surface)', color: p === 1 ? '#0b0c14' : 'var(--wr-text-3)', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
             {p}
           </button>
         ))}

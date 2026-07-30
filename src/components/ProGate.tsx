@@ -52,7 +52,7 @@ export default function ProGate({ feature, children }: ProGateProps) {
           <Link href="/settings#billing"
             style={{
               fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
-              color: '#000000', backgroundColor: 'var(--wr-accent)',
+              color: '#0b0c14', backgroundColor: 'var(--wr-accent)',
               padding: '10px 24px', textDecoration: 'none',
             }}>
             Upgrade to Pro →

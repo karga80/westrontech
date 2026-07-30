@@ -34,11 +34,11 @@ function StepIndicator({ current }: { current: Step }) {
             <div className="flex items-center gap-2">
               <div style={{
                 width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                backgroundColor: done || active ? '#BEFF00' : 'var(--wr-surface-alt)',
+                backgroundColor: done || active ? '#7c5cff' : 'var(--wr-surface-alt)',
                 border: `1px solid ${active || done ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-                color: active || done ? '#000000' : 'var(--wr-text-3)',
+                color: active || done ? '#0b0c14' : 'var(--wr-text-3)',
               }}>
                 {done ? '✓' : n}
               </div>
@@ -46,7 +46,7 @@ function StepIndicator({ current }: { current: Step }) {
                 {label}
               </span>
             </div>
-            {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#BEFF00' : 'var(--wr-border)', margin: '0 12px' }} />}
+            {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', margin: '0 12px' }} />}
           </div>
         );
       })}
@@ -135,7 +135,7 @@ export default function DistributeFundsPage() {
                   {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
                 </div>
               </div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#FBBF24' : 'var(--wr-text-3)' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#ffb020' : 'var(--wr-text-3)' }}>
                 {i === 0 ? 'Processing' : 'Pending'}
               </span>
             </div>
@@ -283,7 +283,7 @@ export default function DistributeFundsPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: isSel ? 'var(--wr-accent)' : 'var(--wr-text)' }}>{ab.name}</span>
-                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                             </div>
                             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
                           </div>
@@ -311,7 +311,7 @@ export default function DistributeFundsPage() {
                           letterSpacing: '0.05em', textTransform: 'uppercase',
                           padding: '5px 12px', border: 'none', cursor: 'pointer',
                           backgroundColor: mode === m ? 'var(--wr-accent)' : 'transparent',
-                          color: mode === m ? '#000000' : 'var(--wr-text-3)',
+                          color: mode === m ? '#0b0c14' : 'var(--wr-text-3)',
                           transition: 'background-color 0.1s',
                         }}
                       >
@@ -361,7 +361,7 @@ export default function DistributeFundsPage() {
                       <div key={ab.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '90px', flexShrink: 0, overflow: 'hidden' }}>
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.name}</span>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                         </div>
                         <div style={{ flex: 1, display: 'flex', border: '1px solid var(--wr-border)' }}>
                           <input
@@ -394,7 +394,7 @@ export default function DistributeFundsPage() {
                 <button
                   onClick={() => { if (canReview) setStep(2); }}
                   disabled={!canReview}
-                  style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: canReview ? '#000000' : 'var(--wr-text-4)', backgroundColor: canReview ? '#BEFF00' : 'var(--wr-overlay)', border: `1px solid ${canReview ? '#BEFF00' : 'var(--wr-border)'}`, padding: '11px 0', cursor: canReview ? 'pointer' : 'not-allowed' }}
+                  style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: canReview ? '#0b0c14' : 'var(--wr-text-4)', backgroundColor: canReview ? '#7c5cff' : 'var(--wr-overlay)', border: `1px solid ${canReview ? '#7c5cff' : 'var(--wr-border)'}`, padding: '11px 0', cursor: canReview ? 'pointer' : 'not-allowed' }}
                 >
                   Review ({totalSelected} wallet{totalSelected !== 1 ? 's' : ''})
                 </button>
@@ -422,7 +422,7 @@ export default function DistributeFundsPage() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{ab.name}</span>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                     </div>
                     <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{ab.address}</div>
                   </div>
@@ -437,7 +437,7 @@ export default function DistributeFundsPage() {
               </div>
               <div className="flex gap-2 mt-2">
                 <button onClick={() => setStep(1)} style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>Back</button>
-                <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 0', border: 'none', cursor: 'pointer' }}>Confirm & Send</button>
+                <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 0', border: 'none', cursor: 'pointer' }}>Confirm & Send</button>
               </div>
             </div>
           )}

@@ -14,9 +14,9 @@
       {
         "title": "Westron",
         "width": 1280,
-        "height": 820,
-        "minWidth": 1024,
-        "minHeight": 640,
+        "height": 800,
+        "minWidth": 1040,
+        "minHeight": 680,
         "resizable": true,
         "fullscreen": false,
         "titleBarStyle": "Overlay",

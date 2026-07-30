@@ -61,7 +61,7 @@ function EmailVerificationModal({ email, onClose }: { email: string; onClose: ()
           {verified ? (
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
               <div style={{ fontSize: '32px', marginBottom: '12px' }}>✓</div>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: '#34d399' }}>Email verified successfully!</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: '#4fe9b4' }}>Email verified successfully!</div>
             </div>
           ) : (
             <>
@@ -76,7 +76,7 @@ function EmailVerificationModal({ email, onClose }: { email: string; onClose: ()
               {!sent ? (
                 <button
                   onClick={handleSend}
-                  style={{ backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: 'pointer', alignSelf: 'flex-start' }}
+                  style={{ backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: 'pointer', alignSelf: 'flex-start' }}
                 >
                   Send Verification Code
                 </button>
@@ -89,12 +89,12 @@ function EmailVerificationModal({ email, onClose }: { email: string; onClose: ()
                       onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
                       placeholder="000000"
                       maxLength={6}
-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '20px', fontWeight: 700, letterSpacing: '8px', textAlign: 'center', width: '100%', backgroundColor: 'var(--wr-surface)', border: `1px solid ${error ? '#f87171' : 'var(--wr-border)'}`, padding: '12px', color: 'var(--wr-text)', outline: 'none' }}
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '20px', fontWeight: 700, letterSpacing: '8px', textAlign: 'center', width: '100%', backgroundColor: 'var(--wr-surface)', border: `1px solid ${error ? '#ff8a96' : 'var(--wr-border)'}`, padding: '12px', color: 'var(--wr-text)', outline: 'none' }}
                     />
-                    {error && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginTop: '6px' }}>{error}</div>}
+                    {error && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginTop: '6px' }}>{error}</div>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button onClick={handleVerify} style={{ backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: 'pointer' }}>
+                    <button onClick={handleVerify} style={{ backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: 'pointer' }}>
                       Verify
                     </button>
                     <button onClick={handleSend} style={{ backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', padding: '10px 12px', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
@@ -231,13 +231,13 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       onClick={onToggle}
       style={{
         width: '40px', height: '22px', borderRadius: '11px', flexShrink: 0,
-        backgroundColor: on ? '#BEFF00' : 'var(--wr-border-hover)',
+        backgroundColor: on ? '#7c5cff' : 'var(--wr-border-hover)',
         border: 'none', cursor: 'pointer', position: 'relative', transition: 'background-color 0.2s',
       }}
     >
       <span style={{
         position: 'absolute', top: '3px', width: '16px', height: '16px', borderRadius: '50%',
-        backgroundColor: on ? '#000000' : 'var(--wr-text-3)',
+        backgroundColor: on ? '#0b0c14' : 'var(--wr-text-3)',
         left: on ? '21px' : '3px', transition: 'left 0.2s',
       }} />
     </button>
@@ -306,10 +306,10 @@ function ImportWalletModal({ onClose, onImported }: { onClose: () => void; onImp
                 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', width: '100%', backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '9px 12px', color: 'var(--wr-text)', outline: 'none', boxSizing: 'border-box' }} />
             </div>
           ))}
-          {error && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171' }}>{error}</div>}
+          {error && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
             <button onClick={handleImport} disabled={saving}
-              style={{ backgroundColor: '#BEFF00', color: '#000000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              style={{ backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 20px', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Importing…' : 'Import'}
             </button>
             <button onClick={onClose}
@@ -1003,10 +1003,10 @@ export default function SettingsPage() {
   const ActiveSection = SECTION_COMPONENTS[section];
 
   return (
-    <main className="min-h-full bg-[#000000] text-white flex" style={{ paddingLeft: 0 }}>
+    <main className="min-h-full bg-[#0b0c14] text-white flex" style={{ paddingLeft: 0 }}>
 
       {/* Sidebar */}
-      <aside className="shrink-0 border-r border-[#1a1a1a]" style={{ width: '240px', paddingTop: '24px' }}>
+      <aside className="shrink-0 border-r border-[#14161f]" style={{ width: '240px', paddingTop: '24px' }}>
         <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-accent)', padding: '0 24px', marginBottom: '12px' }}>Settings</div>
         <nav>
           {SIDEBAR_ITEMS.map(item => (

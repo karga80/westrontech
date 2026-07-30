@@ -17,9 +17,9 @@ const REASON_LABEL: Record<SisterReason, string> = {
 };
 
 const REASON_COLOR: Record<SisterReason, string> = {
-  common_funder: '#BEFF00',
+  common_funder: '#7c5cff',
   round_trip:    '#7DD3FC',
-  funded_target: '#FBBF24',
+  funded_target: '#ffb020',
   target_funded: '#C4B5FD',
 };
 
@@ -33,8 +33,8 @@ function fmtDate(ts?: number | null) {
 }
 
 function scoreColor(s: number) {
-  if (s >= 70) return '#BEFF00';
-  if (s >= 40) return '#FBBF24';
+  if (s >= 70) return '#7c5cff';
+  if (s >= 40) return '#ffb020';
   return 'var(--wr-text-3)';
 }
 
@@ -107,7 +107,7 @@ export default function SisterWalletFinder() {
           disabled={loading}
           style={{
             fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
-            color: '#000', backgroundColor: loading ? 'var(--wr-text-3)' : '#BEFF00',
+            color: '#000', backgroundColor: loading ? 'var(--wr-text-3)' : '#7c5cff',
             border: 'none', padding: '10px 20px', cursor: loading ? 'default' : 'pointer',
             letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap',
           }}
@@ -117,7 +117,7 @@ export default function SisterWalletFinder() {
       </div>
 
       {error && (
-        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#F87171', border: '1px solid #F87171', padding: '10px 12px' }}>
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#ff8a96', border: '1px solid #ff8a96', padding: '10px 12px' }}>
           {error}
         </div>
       )}
@@ -131,7 +131,7 @@ export default function SisterWalletFinder() {
             </div>
           )}
           {report.note && (
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#FBBF24', border: '1px solid #4a3000', backgroundColor: '#1a1200', padding: '8px 10px', marginBottom: '14px', lineHeight: 1.5 }}>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ffb020', border: '1px solid #2a1e05', backgroundColor: '#1a1200', padding: '8px 10px', marginBottom: '14px', lineHeight: 1.5 }}>
               {report.note}
             </div>
           )}

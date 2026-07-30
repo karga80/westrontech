@@ -44,17 +44,17 @@ interface QueuedBid {
 
 const INITIAL_COLLECTIONS: Collection[] = [
   { id: 'courtyard', name: 'Courtyard.io',           emoji: '🏛', color: '#6366f1', verified: true,  starred: false, floor: 3.90,   change:  4.0,  topOffer: 0,     vol: 1200,  sales: 25469, owners: 70131, supply: 257257, desc: 'Physical collectibles onchain. RWA-backed NFTs.' },
-  { id: 'pudgy',     name: 'Pudgy Penguins',          emoji: '🐧', color: '#3b82f6', verified: true,  starred: true,  floor: 4.124,  change: -1.5,  topOffer: 4.00,  vol: 57.62, sales: 13,    owners: 5092,  supply: 8888,   desc: 'A collection of 8,888 NFTs living on the Ethereum blockchain.' },
-  { id: 'punks',     name: 'CryptoPunks',             emoji: '👾', color: '#818cf8', verified: true,  starred: true,  floor: 29.00,  change: -1.4,  topOffer: 0,     vol: 28.98, sales: 1,     owners: 3825,  supply: 9994,   desc: '10,000 unique algorithmically generated characters by Larva Labs.' },
+  { id: 'pudgy',     name: 'Pudgy Penguins',          emoji: '🐧', color: '#5b7cfa', verified: true,  starred: true,  floor: 4.124,  change: -1.5,  topOffer: 4.00,  vol: 57.62, sales: 13,    owners: 5092,  supply: 8888,   desc: 'A collection of 8,888 NFTs living on the Ethereum blockchain.' },
+  { id: 'punks',     name: 'CryptoPunks',             emoji: '👾', color: '#5b7cfa', verified: true,  starred: true,  floor: 29.00,  change: -1.4,  topOffer: 0,     vol: 28.98, sales: 1,     owners: 3825,  supply: 9994,   desc: '10,000 unique algorithmically generated characters by Larva Labs.' },
   { id: 'milady',    name: 'Milady Maker',             emoji: '👧', color: '#ec4899', verified: true,  starred: false, floor: 1.18,   change: -3.8,  topOffer: 1.11,  vol: 24.42, sales: 21,    owners: 5159,  supply: 9998,   desc: 'Radical street style NFT collection of 10k Miladys.' },
   { id: 'warplets',  name: 'The Warplets',             emoji: '🌀', color: '#8b5cf6', verified: true,  starred: false, floor: 0.003,  change: -1.1,  topOffer: 0.003, vol: 22.70, sales: 7372,  owners: 21617, supply: 49141,  desc: 'Warplets are a new kind of NFT living in the Warpcast ecosystem.' },
-  { id: 'veefriends',name: 'VeeFriends',               emoji: '🐾', color: '#f59e0b', verified: true,  starred: false, floor: 1.30,   change:  2.4,  topOffer: 1.21,  vol: 15.53, sales: 4,     owners: 4657,  supply: 10255,  desc: 'Gary Vaynerchuk\'s hand-drawn NFT collection.' },
-  { id: 'doodles',   name: 'Doodles',                  emoji: '🌈', color: '#fbbf24', verified: true,  starred: true,  floor: 0.4865, change: -3.3,  topOffer: 0.475, vol: 15.02, sales: 28,    owners: 4465,  supply: 9998,   desc: 'A community-driven collectibles project by Evan Keast & Jordan Castro.' },
+  { id: 'veefriends',name: 'VeeFriends',               emoji: '🐾', color: '#ffb020', verified: true,  starred: false, floor: 1.30,   change:  2.4,  topOffer: 1.21,  vol: 15.53, sales: 4,     owners: 4657,  supply: 10255,  desc: 'Gary Vaynerchuk\'s hand-drawn NFT collection.' },
+  { id: 'doodles',   name: 'Doodles',                  emoji: '🌈', color: '#ffb020', verified: true,  starred: true,  floor: 0.4865, change: -3.3,  topOffer: 0.475, vol: 15.02, sales: 28,    owners: 4465,  supply: 9998,   desc: 'A community-driven collectibles project by Evan Keast & Jordan Castro.' },
   { id: 'bayc',      name: 'Bored Ape Yacht Club',     emoji: '🦍', color: '#a855f7', verified: true,  starred: true,  floor: 14.20,  change: -2.6,  topOffer: 13.80, vol: 14.10, sales: 8,     owners: 6432,  supply: 10000,  desc: 'A collection of 10,000 Bored Ape NFTs — unique digital collectibles.' },
   { id: 'mayc',      name: 'Mutant Ape Yacht Club',    emoji: '🧬', color: '#7c3aed', verified: true,  starred: true,  floor: 0.7597, change: -2.6,  topOffer: 0.761, vol: 13.32, sales: 16,    owners: 12089, supply: 19559,  desc: 'A collection of 20,000 Mutant Apes created from existing BAYCs.' },
-  { id: 'azuki',     name: 'Azuki',                    emoji: '⛩',  color: '#f87171', verified: true,  starred: false, floor: 0.676,  change: -1.0,  topOffer: 0.661, vol: 10.90, sales: 10,    owners: 4392,  supply: 10000,  desc: 'A brand for the metaverse. Built by the community. Join the garden.' },
-  { id: 'clonex',    name: 'Clone X',                  emoji: '🤖', color: '#34d399', verified: true,  starred: false, floor: 1.92,   change:  0.5,  topOffer: 1.88,  vol: 9.14,  sales: 25,    owners: 9841,  supply: 20000,  desc: 'RTFKT x Takashi Murakami 3D Avatar collection. Metaverse-ready.' },
-  { id: 'moon',      name: 'Moonbirds',                emoji: '🦉', color: '#60a5fa', verified: true,  starred: false, floor: 1.40,   change: -0.2,  topOffer: 1.35,  vol: 8.20,  sales: 22,    owners: 6100,  supply: 10000,  desc: 'A collection of 10,000 utility-enabled PFPs by PROOF Collective.' },
+  { id: 'azuki',     name: 'Azuki',                    emoji: '⛩',  color: '#ff8a96', verified: true,  starred: false, floor: 0.676,  change: -1.0,  topOffer: 0.661, vol: 10.90, sales: 10,    owners: 4392,  supply: 10000,  desc: 'A brand for the metaverse. Built by the community. Join the garden.' },
+  { id: 'clonex',    name: 'Clone X',                  emoji: '🤖', color: '#4fe9b4', verified: true,  starred: false, floor: 1.92,   change:  0.5,  topOffer: 1.88,  vol: 9.14,  sales: 25,    owners: 9841,  supply: 20000,  desc: 'RTFKT x Takashi Murakami 3D Avatar collection. Metaverse-ready.' },
+  { id: 'moon',      name: 'Moonbirds',                emoji: '🦉', color: '#90a6ff', verified: true,  starred: false, floor: 1.40,   change: -0.2,  topOffer: 1.35,  vol: 8.20,  sales: 22,    owners: 6100,  supply: 10000,  desc: 'A collection of 10,000 utility-enabled PFPs by PROOF Collective.' },
 ];
 
 const COLLECTION_TRAITS: Record<string, Trait[]> = {
@@ -132,7 +132,7 @@ function fakeHash() {
   return '0x' + Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('') + '…';
 }
 
-const WALLET_COLORS = ['#06B6D4', '#a855f7', '#f59e0b', '#34d399'];
+const WALLET_COLORS = ['#2fc4d6', '#a855f7', '#ffb020', '#4fe9b4'];
 
 interface BidWallet {
   id: string; label: string; address: string; color: string;
@@ -140,9 +140,9 @@ interface BidWallet {
 }
 
 const STATIC_BID_WALLETS: BidWallet[] = [
-  { id: 'w1', label: 'Main Wallet',   address: '', color: '#06B6D4', ethBalance: 4.218,  wethBalance: 1.500 },
+  { id: 'w1', label: 'Main Wallet',   address: '', color: '#2fc4d6', ethBalance: 4.218,  wethBalance: 1.500 },
   { id: 'w2', label: 'Trading Vault', address: '', color: '#a855f7', ethBalance: 12.044, wethBalance: 8.200 },
-  { id: 'w3', label: 'Cold Storage',  address: '', color: '#f59e0b', ethBalance: 0.812,  wethBalance: 0.000 },
+  { id: 'w3', label: 'Cold Storage',  address: '', color: '#ffb020', ethBalance: 0.812,  wethBalance: 0.000 },
 ];
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -269,7 +269,7 @@ export default function BulkBidPage() {
         <h2 style={{ fontSize: '22px', fontWeight: 600, marginBottom: '8px' }}>Placing {txRows.length} Bid{txRows.length !== 1 ? 's' : ''}</h2>
         <p style={{ fontSize: '13px', color: 'var(--wr-text-3)', marginBottom: '28px' }}>{done} of {txRows.length} confirmed</p>
         <div style={{ height: '4px', backgroundColor: 'var(--wr-border)', borderRadius: '2px', marginBottom: '32px' }}>
-          <div style={{ height: '100%', width: `${progress}%`, backgroundColor: '#06B6D4', borderRadius: '2px', transition: 'width 0.4s ease' }} />
+          <div style={{ height: '100%', width: `${progress}%`, backgroundColor: '#2fc4d6', borderRadius: '2px', transition: 'width 0.4s ease' }} />
         </div>
         <div style={{ border: '1px solid var(--wr-border)', borderRadius: '10px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -303,7 +303,7 @@ export default function BulkBidPage() {
   const TH = ({ label, k, align = 'right' }: { label: string; k: SortKey; align?: 'left' | 'right' }) => {
     const active = sortKey === k;
     return (
-      <th onClick={() => handleSort(k)} style={{ padding: '7px 12px', textAlign: align, fontSize: '10px', color: active ? '#06B6D4' : '#555', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
+      <th onClick={() => handleSort(k)} style={{ padding: '7px 12px', textAlign: align, fontSize: '10px', color: active ? '#2fc4d6' : '#555', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
         {label} {active ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ opacity: 0.4 }}>↕</span>}
       </th>
     );
@@ -326,7 +326,7 @@ export default function BulkBidPage() {
           <div style={{ display: 'flex', gap: '4px' }}>
             {(['top', 'trending', 'watchlist'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)',
-                backgroundColor: tab === t ? '#06B6D41A' : 'transparent', color: tab === t ? '#06B6D4' : '#71717A' }}>
+                backgroundColor: tab === t ? '#2fc4d61A' : 'transparent', color: tab === t ? '#2fc4d6' : '#6e7590' }}>
                 {t === 'watchlist' ? '★ Watchlist' : t === 'trending' ? '↗ Trending' : '◉ Top'}
               </button>
             ))}
@@ -342,16 +342,16 @@ export default function BulkBidPage() {
         </div>
 
         {/* ── Wallet selector ─────────────────────────────────────────────────── */}
-        <div style={{ padding: '12px 32px', borderBottom: '1px solid #0f0f0f', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ padding: '12px 32px', borderBottom: '1px solid #10121b', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '4px', flexShrink: 0 }}>Bid from</span>
           {wallets.map(w => {
             const active = activeWalletId === w.id;
             return (
               <button key={w.id} onClick={() => setActiveWalletId(w.id)}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px', padding: '7px 14px', borderRadius: '6px', border: `1px solid ${active ? w.color + '55' : '#1A1A1A'}`, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', backgroundColor: active ? w.color + '18' : 'transparent' }}>
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px', padding: '7px 14px', borderRadius: '6px', border: `1px solid ${active ? w.color + '55' : '#14161f'}`, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', backgroundColor: active ? w.color + '18' : 'transparent' }}>
                 {/* Name row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: active ? w.color : '#3a3a3a', flexShrink: 0 }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: active ? w.color : '#232533', flexShrink: 0 }} />
                   <span style={{ fontSize: '12px', fontWeight: 600, color: active ? w.color : 'var(--wr-text-3)' }}>{w.label}</span>
                 </div>
                 {/* Balance row */}
@@ -360,7 +360,7 @@ export default function BulkBidPage() {
                     <span style={{ color: active ? w.color : '#555', fontWeight: 600 }}>{w.ethBalance.toFixed(3)}</span>
                     <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} />
                   </span>
-                  <span style={{ color: '#2a2a2a', fontSize: '10px' }}>·</span>
+                  <span style={{ color: '#232533', fontSize: '10px' }}>·</span>
                   <span style={{ fontSize: '11px', color: active ? 'var(--wr-text-2)' : '#444' }}>
                     <span style={{ color: active ? '#a78bfa' : '#555', fontWeight: 600 }}>{w.wethBalance.toFixed(3)}</span>
                     <span style={{ color: '#444', marginLeft: '2px' }}>WETH</span>
@@ -412,7 +412,7 @@ export default function BulkBidPage() {
 
       {/* ── Bid Queue Bottom Bar ─────────────────────────────────────────────── */}
       {queue.length > 0 && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40, backgroundColor: 'var(--wr-surface-alt)', borderTop: '1px solid #06B6D433', boxShadow: '0 -8px 32px rgba(0,0,0,0.7)', padding: '0 32px', height: '68px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40, backgroundColor: 'var(--wr-surface-alt)', borderTop: '1px solid #2fc4d633', boxShadow: '0 -8px 32px rgba(0,0,0,0.7)', padding: '0 32px', height: '68px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           {/* Bid chips */}
           <div style={{ flex: 1, display: 'flex', gap: '8px', overflowX: 'auto', alignItems: 'center' }}>
             {queue.map(bid => (
@@ -421,7 +421,7 @@ export default function BulkBidPage() {
                 <span style={{ fontSize: '11px', color: 'var(--wr-text-2)' }}>{bid.collectionName}</span>
                 <span style={{ fontSize: '11px', color: '#555' }}>·</span>
                 <span style={{ fontSize: '11px', color: 'var(--wr-text-3)' }}>{bid.label}</span>
-                <span style={{ fontSize: '11px', color: '#06B6D4', marginLeft: '4px' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{bid.price}</span>
+                <span style={{ fontSize: '11px', color: '#2fc4d6', marginLeft: '4px' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{bid.price}</span>
                 <button onClick={() => removeFromQueue(bid.uid)} style={{ background: 'none', border: 'none', color: '#444', fontSize: '13px', cursor: 'pointer', lineHeight: 1, marginLeft: '2px', padding: 0 }}>×</button>
               </div>
             ))}
@@ -452,9 +452,9 @@ export default function BulkBidPage() {
             })()}
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '11px', color: '#555' }}>{queue.length} bid{queue.length !== 1 ? 's' : ''}</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: '#06B6D4' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{totalEth.toFixed(4)}</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#2fc4d6' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{totalEth.toFixed(4)}</div>
             </div>
-            <button onClick={placeBids} style={{ height: '40px', padding: '0 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, backgroundColor: '#06B6D4', color: '#000' }}>
+            <button onClick={placeBids} style={{ height: '40px', padding: '0 24px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, backgroundColor: '#2fc4d6', color: '#000' }}>
               Place {queue.length} Bid{queue.length !== 1 ? 's' : ''} →
             </button>
           </div>
@@ -489,9 +489,9 @@ function CollectionRow({ col, idx, inQueue, onStar, onClick }: {
 
   return (
     <tr onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onClick}
-      style={{ borderBottom: '1px solid var(--wr-border)', backgroundColor: inQueue ? '#06B6D408' : hover ? 'var(--wr-hover-bg)' : 'transparent', transition: 'background-color 0.1s', cursor: 'pointer' }}>
+      style={{ borderBottom: '1px solid var(--wr-border)', backgroundColor: inQueue ? '#2fc4d608' : hover ? 'var(--wr-hover-bg)' : 'transparent', transition: 'background-color 0.1s', cursor: 'pointer' }}>
       <td style={{ padding: '7px 6px 7px 24px' }} onClick={e => { e.stopPropagation(); onStar(); }}>
-        <span style={{ color: col.starred ? '#fbbf24' : hover ? '#444' : '#2a2a2a', fontSize: '16px', cursor: 'pointer', transition: 'color 0.1s' }}>★</span>
+        <span style={{ color: col.starred ? '#ffb020' : hover ? '#444' : '#232533', fontSize: '16px', cursor: 'pointer', transition: 'color 0.1s' }}>★</span>
       </td>
       <td style={{ padding: '7px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -499,15 +499,15 @@ function CollectionRow({ col, idx, inQueue, onStar, onClick }: {
           <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: col.color + '26', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{col.emoji}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)' }}>{col.name}</span>
-            {col.verified && <span style={{ fontSize: '10px', color: '#06B6D4' }}>✓</span>}
+            {col.verified && <span style={{ fontSize: '10px', color: '#2fc4d6' }}>✓</span>}
           </div>
-          {inQueue && <span style={{ fontSize: '9px', color: '#06B6D4', backgroundColor: '#06B6D41A', border: '1px solid #06B6D433', borderRadius: '4px', padding: '1px 5px' }}>Bidding</span>}
+          {inQueue && <span style={{ fontSize: '9px', color: '#2fc4d6', backgroundColor: '#2fc4d61A', border: '1px solid #2fc4d633', borderRadius: '4px', padding: '1px 5px' }}>Bidding</span>}
         </div>
       </td>
       <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--wr-text)', whiteSpace: 'nowrap' }}>
         {col.floor >= 100 ? `${col.floor.toFixed(0)} USDC` : <>{col.floor}<EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></>}
       </td>
-      <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: pos ? '#34d399' : '#f87171', whiteSpace: 'nowrap' }}>
+      <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: pos ? '#4fe9b4' : '#ff8a96', whiteSpace: 'nowrap' }}>
         {col.change === 0 ? '0%' : `${pos ? '+' : ''}${col.change}%`}
       </td>
       <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--wr-text-2)', whiteSpace: 'nowrap' }}>
@@ -593,7 +593,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--wr-text)' }}>{col.name}</span>
-                {col.verified && <span style={{ fontSize: '12px', color: '#06B6D4' }}>✓</span>}
+                {col.verified && <span style={{ fontSize: '12px', color: '#2fc4d6' }}>✓</span>}
               </div>
               <div style={{ fontSize: '12px', color: '#555', marginTop: '4px', maxWidth: '420px' }}>{col.desc}</div>
             </div>
@@ -602,15 +602,15 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0', border: '1px solid var(--wr-border)', borderRadius: '10px', overflow: 'hidden' }}>
             {[
               { label: 'Floor', value: `${col.floor} ETH` },
-              { label: `${1}D Change`, value: `${pos ? '+' : ''}${col.change}%`, color: pos ? '#34d399' : '#f87171' },
+              { label: `${1}D Change`, value: `${pos ? '+' : ''}${col.change}%`, color: pos ? '#4fe9b4' : '#ff8a96' },
               { label: 'Top Offer', value: col.topOffer > 0 ? `${col.topOffer} WETH` : '—' },
               { label: '1D Volume', value: `${col.vol} ETH` },
               { label: 'Owners', value: col.owners.toLocaleString() },
               { label: 'Supply', value: col.supply.toLocaleString() },
             ].map((stat, i) => (
-              <div key={stat.label} style={{ padding: '12px 14px', borderLeft: i > 0 ? '1px solid #1A1A1A' : 'none' }}>
+              <div key={stat.label} style={{ padding: '12px 14px', borderLeft: i > 0 ? '1px solid #14161f' : 'none' }}>
                 <div style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{stat.label}</div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: stat.color ?? '#FAFAFA' }}>{stat.value}</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: stat.color ?? '#f2f2f7' }}>{stat.value}</div>
               </div>
             ))}
           </div>
@@ -621,8 +621,8 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
           {(['collection', 'traits'] as const).map(t => (
             <button key={t} onClick={() => setActiveTab(t)}
               style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', background: 'none', textTransform: 'capitalize',
-                color: activeTab === t ? '#FAFAFA' : '#555',
-                borderBottom: activeTab === t ? `2px solid #06B6D4` : '2px solid transparent',
+                color: activeTab === t ? '#f2f2f7' : '#555',
+                borderBottom: activeTab === t ? `2px solid #2fc4d6` : '2px solid transparent',
               }}>
               {t === 'collection' ? 'Collection Offer' : `Trait Bids (${traits.length})`}
             </button>
@@ -630,7 +630,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
         </div>
 
         {/* ── Tab Content ──────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', scrollbarWidth: 'thin', scrollbarColor: '#232533 transparent' }}>
 
           {/* Collection Offer tab */}
           {activeTab === 'collection' && (
@@ -643,7 +643,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
                 <div style={{ fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Offer Price</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border-hover)', borderRadius: '8px', padding: '10px 14px' }}>
-                    <EthIcon size={10} color="#06B6D4" style={{ verticalAlign: 'middle', marginRight: 2 }} />
+                    <EthIcon size={10} color="#2fc4d6" style={{ verticalAlign: 'middle', marginRight: 2 }} />
                     <input type="number" value={collectionPrice} onChange={e => setCollectionPrice(e.target.value)} step="0.001" min="0"
                       style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--wr-text)', fontSize: '16px', fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }} />
                     <span style={{ fontSize: '12px', color: '#555' }}>WETH</span>
@@ -704,7 +704,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
                         <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-2)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{cat}</span>
                         <span style={{ fontSize: '10px', color: '#444' }}>{catTraits.length} traits</span>
                         {selectedInCat > 0 && (
-                          <span style={{ fontSize: '9px', color: '#06B6D4', backgroundColor: '#06B6D41A', border: '1px solid #06B6D433', borderRadius: '4px', padding: '1px 6px' }}>{selectedInCat} selected</span>
+                          <span style={{ fontSize: '9px', color: '#2fc4d6', backgroundColor: '#2fc4d61A', border: '1px solid #2fc4d633', borderRadius: '4px', padding: '1px 6px' }}>{selectedInCat} selected</span>
                         )}
                       </div>
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
@@ -730,19 +730,19 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
                           return (
                             <div key={trait.id}
                               onClick={() => toggleTrait(trait.id)}
-                              style={{ display: 'grid', gridTemplateColumns: '20px 1fr 70px 85px 110px', gap: '12px', alignItems: 'center', padding: '8px 14px', cursor: 'pointer', borderTop: '1px solid #0d0d0d',
-                                backgroundColor: sel ? '#06B6D408' : inQueue ? '#06B6D404' : 'transparent',
+                              style={{ display: 'grid', gridTemplateColumns: '20px 1fr 70px 85px 110px', gap: '12px', alignItems: 'center', padding: '8px 14px', cursor: 'pointer', borderTop: '1px solid #0b0c14',
+                                backgroundColor: sel ? '#2fc4d608' : inQueue ? '#2fc4d604' : 'transparent',
                               }}>
                               {/* Checkbox */}
-                              <div style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${sel ? '#06B6D4' : '#333'}`, backgroundColor: sel ? '#06B6D4' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <div style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${sel ? '#2fc4d6' : '#333'}`, backgroundColor: sel ? '#2fc4d6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 {sel && <span style={{ color: '#000', fontSize: '9px', lineHeight: 1 }}>✓</span>}
                               </div>
                               <span style={{ fontSize: '12px', color: 'var(--wr-text)', fontWeight: sel ? 500 : 400 }}>{trait.value}</span>
-                              <span style={{ fontSize: '11px', color: trait.rarity < 1 ? '#f87171' : trait.rarity < 5 ? '#fbbf24' : '#71717A', textAlign: 'right' }}>{trait.rarity}%</span>
+                              <span style={{ fontSize: '11px', color: trait.rarity < 1 ? '#ff8a96' : trait.rarity < 5 ? '#ffb020' : '#6e7590', textAlign: 'right' }}>{trait.rarity}%</span>
                               <span style={{ fontSize: '11px', color: '#555', textAlign: 'right' }}>{trait.supply.toLocaleString()}</span>
                               <div onClick={e => e.stopPropagation()}
-                                style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--wr-surface)', border: `1px solid ${sel ? '#06B6D455' : 'var(--wr-border)'}`, borderRadius: '5px', padding: '4px 8px' }}>
-                                <EthIcon size={10} color="#06B6D4" style={{ verticalAlign: 'middle', marginRight: 2 }} />
+                                style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--wr-surface)', border: `1px solid ${sel ? '#2fc4d655' : 'var(--wr-border)'}`, borderRadius: '5px', padding: '4px 8px' }}>
+                                <EthIcon size={10} color="#2fc4d6" style={{ verticalAlign: 'middle', marginRight: 2 }} />
                                 <input type="number" value={traitPrices[trait.id]} onChange={e => setTraitPrices(p => ({ ...p, [trait.id]: e.target.value }))} step="0.001" min="0"
                                   style={{ width: '60px', background: 'none', border: 'none', outline: 'none', color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', textAlign: 'right' }} />
                               </div>
@@ -762,7 +762,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
         <div style={{ padding: '16px 28px', borderTop: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ fontSize: '12px', color: '#555' }}>
             {activeTab === 'collection'
-              ? (collectionBidExists ? <span style={{ color: '#06B6D4' }}>✓ Collection offer queued</span> : 'Add to bid queue')
+              ? (collectionBidExists ? <span style={{ color: '#2fc4d6' }}>✓ Collection offer queued</span> : 'Add to bid queue')
               : selectedTraits.size > 0
                 ? <span>{selectedTraits.size} trait{selectedTraits.size !== 1 ? 's' : ''} selected · <EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{Array.from(selectedTraits).reduce((s, id) => s + (parseFloat(traitPrices[id]) || 0), 0).toFixed(4)}</span>
                 : 'Select traits above'}
@@ -774,13 +774,13 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
             {activeTab === 'collection' ? (
               <button onClick={handleAddCollection}
                 style={{ height: '38px', padding: '0 20px', borderRadius: '7px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 600,
-                  backgroundColor: collectionBidExists ? 'var(--wr-overlay)' : '#06B6D4', color: collectionBidExists ? '#f87171' : '#000' }}>
+                  backgroundColor: collectionBidExists ? 'var(--wr-overlay)' : '#2fc4d6', color: collectionBidExists ? '#ff8a96' : '#000' }}>
                 {collectionBidExists ? 'Remove Bid' : 'Add Collection Bid →'}
               </button>
             ) : (
               <button onClick={handleAddTraits} disabled={selectedTraits.size === 0}
                 style={{ height: '38px', padding: '0 20px', borderRadius: '7px', border: 'none', cursor: selectedTraits.size > 0 ? 'pointer' : 'default', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 600,
-                  backgroundColor: selectedTraits.size > 0 ? '#06B6D4' : '#111', color: selectedTraits.size > 0 ? '#000' : '#333' }}>
+                  backgroundColor: selectedTraits.size > 0 ? '#2fc4d6' : '#111', color: selectedTraits.size > 0 ? '#000' : '#333' }}>
                 {selectedTraits.size > 0 ? `Add ${selectedTraits.size} Trait Bid${selectedTraits.size !== 1 ? 's' : ''} →` : 'Add Trait Bids →'}
               </button>
             )}

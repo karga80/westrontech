@@ -34,7 +34,7 @@ const TRANSACTIONS: Tx[] = [
 
 const TYPE_FILTERS: (TxType | 'ALL')[] = ['ALL', 'Receive', 'Send', 'Swap', 'NFT'];
 
-const WALLET_COLORS = ['#60a5fa', '#A855F7', '#818CF8', '#34d399', '#f59e0b', '#f87171'];
+const WALLET_COLORS = ['#90a6ff', '#A855F7', '#5b7cfa', '#4fe9b4', '#ffb020', '#ff8a96'];
 
 function WalletsTab() {
   const [walletCards, setWalletCards] = useState<{ name: string; address: string; rawAddress: string; eth: number; usd: number; color: string; nfts: number; tokens: number }[]>([]);
@@ -84,13 +84,13 @@ function WalletsTab() {
   return (
     <div className="grid grid-cols-3 gap-4 mt-4">
       {walletCards.map(w => (
-        <div key={w.address} className="bg-[#111111] rounded-[8px] border border-[#1A1A1A] p-4"
+        <div key={w.address} className="bg-[#14161f] rounded-[8px] border border-[#14161f] p-4"
           style={{ borderLeft: `3px solid ${w.color}` }}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-white text-xs font-semibold">{w.name}</span>
             <div className="flex items-center gap-1">
-              <span className="text-[#6e6e6e] text-[10px] font-mono">{w.address}</span>
-              <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+              <span className="text-[#6e7590] text-[10px] font-mono">{w.address}</span>
+              <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </a>
             </div>
@@ -98,14 +98,14 @@ function WalletsTab() {
           <div className="text-xl font-bold text-white tabular-nums mb-0.5">
             ${w.usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
           </div>
-          <div className="text-[#6e6e6e] text-[11px] font-mono">{w.eth.toFixed(4)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#1A1A1A]">
+          <div className="text-[#6e7590] text-[11px] font-mono">{w.eth.toFixed(4)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
+          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#14161f]">
             <div>
-              <div className="text-[#6e6e6e] text-[9px] uppercase tracking-wider">NFTs</div>
+              <div className="text-[#6e7590] text-[9px] uppercase tracking-wider">NFTs</div>
               <div className="text-white text-sm font-semibold">{w.nfts}</div>
             </div>
             <div>
-              <div className="text-[#6e6e6e] text-[9px] uppercase tracking-wider">Tokens</div>
+              <div className="text-[#6e7590] text-[9px] uppercase tracking-wider">Tokens</div>
               <div className="text-white text-sm font-semibold">{w.tokens}</div>
             </div>
           </div>
@@ -137,21 +137,21 @@ function AnalyticsTab() {
   const winRate  = pnl && pnl.trade_count > 0 ? ((pnl.win_count / pnl.trade_count) * 100).toFixed(1) + '%' : '—';
 
   const stats = pnl ? [
-    { label: 'Realized PnL',   value: (pnl.realized_pnl_eth >= 0 ? '+' : '') + pnl.realized_pnl_eth.toFixed(3) + ' ETH', color: pnl.realized_pnl_eth >= 0 ? '#34d399' : '#F87171' },
-    { label: 'Unrealized PnL', value: (pnl.unrealized_pnl_eth >= 0 ? '+' : '') + pnl.unrealized_pnl_eth.toFixed(3) + ' ETH', color: pnl.unrealized_pnl_eth >= 0 ? '#34d399' : '#F87171' },
+    { label: 'Realized PnL',   value: (pnl.realized_pnl_eth >= 0 ? '+' : '') + pnl.realized_pnl_eth.toFixed(3) + ' ETH', color: pnl.realized_pnl_eth >= 0 ? '#4fe9b4' : '#ff8a96' },
+    { label: 'Unrealized PnL', value: (pnl.unrealized_pnl_eth >= 0 ? '+' : '') + pnl.unrealized_pnl_eth.toFixed(3) + ' ETH', color: pnl.unrealized_pnl_eth >= 0 ? '#4fe9b4' : '#ff8a96' },
     { label: 'Total Volume',   value: totalVol + ' ETH',  color: 'var(--wr-text)' },
     { label: 'Win Rate',       value: winRate,             color: 'var(--wr-accent)' },
     { label: 'Total Trades',   value: String(pnl.trade_count), color: 'var(--wr-text)' },
     { label: 'Win / Loss',     value: `${pnl.win_count} / ${pnl.loss_count}`, color: 'var(--wr-text)' },
     { label: 'Buy Volume',     value: pnl.total_buy_volume_eth.toFixed(2) + ' ETH',  color: 'var(--wr-text)' },
     { label: 'Sell Volume',    value: pnl.total_sell_volume_eth.toFixed(2) + ' ETH', color: 'var(--wr-text)' },
-  ] : Array(8).fill({ label: '—', value: '—', color: '#6E6E6E' });
+  ] : Array(8).fill({ label: '—', value: '—', color: '#6e7590' });
 
   return (
     <div className="mt-4 grid grid-cols-4 gap-4">
       {stats.map((s, i) => (
-        <div key={i} className="bg-[#111111] border border-[#1A1A1A] rounded-[8px] p-4">
-          <div className="text-[#6e6e6e] text-[10px] uppercase tracking-wider mb-2">{s.label}</div>
+        <div key={i} className="bg-[#14161f] border border-[#14161f] rounded-[8px] p-4">
+          <div className="text-[#6e7590] text-[10px] uppercase tracking-wider mb-2">{s.label}</div>
           <div className="text-xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
         </div>
       ))}
@@ -212,18 +212,18 @@ export default function PortfolioPage() {
   const filtered = allTxs.filter(tx => typeFilter === 'ALL' || tx.type === typeFilter);
 
   return (
-    <main className="min-h-full bg-[#0A0A0A] text-white px-12 py-8">
+    <main className="min-h-full bg-[#0b0c14] text-white px-12 py-8">
 
       {/* Sub-tab nav */}
-      <div className="flex items-center gap-0 border-b border-[#1A1A1A] mb-5">
+      <div className="flex items-center gap-0 border-b border-[#14161f] mb-5">
         {(['Wallets', 'Transactions', 'Analytics'] as SubTab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors -mb-px ${
               activeTab === tab
-                ? 'border-[#BEFF00] text-[#BEFF00]'
-                : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+                ? 'border-[#7c5cff] text-[#7c5cff]'
+                : 'border-transparent text-[#6e7590] hover:text-[#9298b8]'
             }`}
           >
             {tab}
@@ -239,7 +239,7 @@ export default function PortfolioPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <h1 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)' }}>Transactions</h1>
-            <button className="text-[#6e6e6e] text-[11px] border border-[#1A1A1A] rounded-[6px] px-3 py-1 hover:border-[#3f3f46] transition-colors">
+            <button className="text-[#6e7590] text-[11px] border border-[#14161f] rounded-[6px] px-3 py-1 hover:border-[#2b2e3f] transition-colors">
               ↓ Export CSV
             </button>
           </div>
@@ -252,35 +252,35 @@ export default function PortfolioPage() {
                 onClick={() => setTypeFilter(f)}
                 className={`px-3 py-1 rounded-[6px] text-[11px] font-medium transition-colors ${
                   typeFilter === f
-                    ? 'bg-[#BEFF00] text-black'
-                    : 'bg-[#111111] border border-[#1A1A1A] text-[#6e6e6e] hover:text-[#A1A1AA] hover:border-[#3f3f46]'
+                    ? 'bg-[#7c5cff] text-black'
+                    : 'bg-[#14161f] border border-[#14161f] text-[#6e7590] hover:text-[#9298b8] hover:border-[#2b2e3f]'
                 }`}
               >
                 {f}
               </button>
             ))}
             <div className="ml-auto flex items-center gap-2">
-              <button className="text-[#6e6e6e] text-[11px] border border-[#1A1A1A] rounded-[6px] px-3 py-1 hover:border-[#3f3f46] transition-colors">
+              <button className="text-[#6e7590] text-[11px] border border-[#14161f] rounded-[6px] px-3 py-1 hover:border-[#2b2e3f] transition-colors">
                 All Chains ▾
               </button>
-              <button className="text-[#6e6e6e] text-[11px] border border-[#1A1A1A] rounded-[6px] px-3 py-1 hover:border-[#3f3f46] transition-colors">
+              <button className="text-[#6e7590] text-[11px] border border-[#14161f] rounded-[6px] px-3 py-1 hover:border-[#2b2e3f] transition-colors">
                 Last 30 Days ▾
               </button>
               <input
                 placeholder="Search by address..."
-                className="bg-[#111111] border border-[#1A1A1A] rounded-[6px] px-3 py-1 text-[11px] text-white placeholder-[#333] focus:outline-none focus:border-[#BEFF0044] w-44"
+                className="bg-[#14161f] border border-[#14161f] rounded-[6px] px-3 py-1 text-[11px] text-white placeholder-[#333] focus:outline-none focus:border-[#7c5cff44] w-44"
               />
             </div>
           </div>
 
           {/* Table */}
-          <div className="rounded-[8px] border border-[#1A1A1A] overflow-hidden">
+          <div className="rounded-[8px] border border-[#14161f] overflow-hidden">
             <div
-              className="grid items-center bg-[#111111] border-b border-[#1A1A1A] px-4"
+              className="grid items-center bg-[#14161f] border-b border-[#14161f] px-4"
               style={{ gridTemplateColumns: '168.5px 168.5px 168.5px 168.5px 168.5px 35px 168.5px 70px 70px 70px', height: '40px' }}
             >
               {['Tx Hash', 'Type', 'Block', 'Age', 'From', '', 'To', 'Token', 'Amount', 'Gas Fee'].map((h, i) => (
-                <span key={i} className="text-[#71717a] text-[11px] font-semibold uppercase tracking-[0.06em]">{h}</span>
+                <span key={i} className="text-[#6e7590] text-[11px] font-semibold uppercase tracking-[0.06em]">{h}</span>
               ))}
             </div>
 
@@ -288,35 +288,35 @@ export default function PortfolioPage() {
               return (
                 <div
                   key={i}
-                  className="grid items-center px-4 border-b border-[#1A1A1A] last:border-0 hover:bg-[#111111] transition-colors"
+                  className="grid items-center px-4 border-b border-[#14161f] last:border-0 hover:bg-[#14161f] transition-colors"
                   style={{ gridTemplateColumns: '168.5px 168.5px 168.5px 168.5px 168.5px 35px 168.5px 70px 70px 70px', height: '56px' }}
                 >
                   <div className="flex items-center gap-1 min-w-0 pr-2">
-                    <span className="font-mono text-[11px] text-[#60a5fa] truncate">{tx.hash}</span>
-                    <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+                    <span className="font-mono text-[11px] text-[#90a6ff] truncate">{tx.hash}</span>
+                    <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </a>
                   </div>
                   <div>
                     <Tag variant={TX_TYPE_VARIANT[tx.type] ?? 'neutral'}>{tx.type}</Tag>
                   </div>
-                  <span className="font-mono text-[11px] text-[#6e6e6e]">{tx.block}</span>
-                  <span className="text-[11px] text-[#6e6e6e]">{tx.age}</span>
+                  <span className="font-mono text-[11px] text-[#6e7590]">{tx.block}</span>
+                  <span className="text-[11px] text-[#6e7590]">{tx.age}</span>
                   <div className="flex items-center gap-1 min-w-0 pr-1">
-                    <span className="font-mono text-[11px] text-[#6e6e6e] truncate">{tx.from}</span>
-                    <span className="text-[#6e6e6e] text-[8px] shrink-0">⊕</span>
+                    <span className="font-mono text-[11px] text-[#6e7590] truncate">{tx.from}</span>
+                    <span className="text-[#6e7590] text-[8px] shrink-0">⊕</span>
                   </div>
-                  <span className="text-[#6e6e6e] text-[10px] text-center">→</span>
+                  <span className="text-[#6e7590] text-[10px] text-center">→</span>
                   <div className="flex items-center gap-1 min-w-0 pr-1">
-                    <span className="font-mono text-[11px] text-[#6e6e6e] truncate">{tx.to}</span>
-                    <span className="text-[#6e6e6e] text-[8px] shrink-0">⊕</span>
+                    <span className="font-mono text-[11px] text-[#6e7590] truncate">{tx.to}</span>
+                    <span className="text-[#6e7590] text-[8px] shrink-0">⊕</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-[#6e6e6e] text-[9px]">◈</span>
-                    <span className="text-[11px] text-[#A1A1AA]">{tx.token}</span>
+                    <span className="text-[#6e7590] text-[9px]">◈</span>
+                    <span className="text-[11px] text-[#9298b8]">{tx.token}</span>
                   </div>
                   <span className="text-[11px] text-white tabular-nums">{tx.amount}</span>
-                  <span className="text-[11px] text-[#6e6e6e] tabular-nums">{tx.gasFee}</span>
+                  <span className="text-[11px] text-[#6e7590] tabular-nums">{tx.gasFee}</span>
                 </div>
               );
             })}
@@ -324,7 +324,7 @@ export default function PortfolioPage() {
 
           {/* View all link */}
           <div className="text-center mt-4">
-            <button className="text-[#6e6e6e] text-[11px] hover:text-[#A1A1AA] transition-colors">
+            <button className="text-[#6e7590] text-[11px] hover:text-[#9298b8] transition-colors">
               View All Transactions →
             </button>
           </div>

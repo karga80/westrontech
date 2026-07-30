@@ -26,11 +26,11 @@ const CONDITION_LABELS: Record<string, string> = {
 
 function AlertTypeBadge({ type }: { type: string }) {
   const colors: Record<string, { bg: string; border: string; text: string }> = {
-    portfolio_value: { bg: '#0a1a2e', border: '#1d4ed8', text: '#60a5fa' },
+    portfolio_value: { bg: '#0a1a2e', border: '#1d4ed8', text: '#90a6ff' },
     floor_price:     { bg: '#1a0a2e', border: '#7c3aed', text: '#a78bfa' },
-    wallet_activity: { bg: '#0a2e1a', border: '#15803d', text: '#34d399' },
+    wallet_activity: { bg: '#0a2e1a', border: '#15803d', text: '#4fe9b4' },
   };
-  const c = colors[type] ?? { bg: '#1a1a1a', border: '#333', text: '#a1a1aa' };
+  const c = colors[type] ?? { bg: '#14161f', border: '#333', text: '#9298b8' };
   return (
     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px',
       backgroundColor: c.bg, border: `1px solid ${c.border}`, color: c.text, padding: '2px 8px' }}>
@@ -41,8 +41,8 @@ function AlertTypeBadge({ type }: { type: string }) {
 
 function StatusDot({ active }: { active: boolean }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? '#34d399' : 'var(--wr-text-3)' }}>
-      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: active ? '#34d399' : '#3f3f3f', flexShrink: 0 }} />
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? '#4fe9b4' : 'var(--wr-text-3)' }}>
+      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: active ? '#4fe9b4' : '#3f3f3f', flexShrink: 0 }} />
       {active ? 'Active' : 'Paused'}
     </span>
   );
@@ -139,11 +139,11 @@ function QuickCreateForm({ walletAddress, apiKey, onCreated }: { walletAddress: 
         </div>
         {/* Create button */}
         <button onClick={handleCreate} disabled={creating}
-          style={{ backgroundColor: '#BEFF00', color: '#000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '8px 20px', border: 'none', cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+          style={{ backgroundColor: '#7c5cff', color: '#000', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '8px 20px', border: 'none', cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1, whiteSpace: 'nowrap' }}>
           {creating ? 'Creating…' : '+ Create'}
         </button>
       </div>
-      {error && <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginTop: '8px' }}>{error}</p>}
+      {error && <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginTop: '8px' }}>{error}</p>}
     </div>
   );
 }
@@ -208,7 +208,7 @@ export default function AlertsPage() {
           </p>
         </div>
         <Link href="/alerts/rules">
-          <button className="btn-cta" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, backgroundColor: '#BEFF00', color: '#000', border: 'none', padding: '8px 18px', cursor: 'pointer' }}>
+          <button className="btn-cta" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, backgroundColor: '#7c5cff', color: '#000', border: 'none', padding: '8px 18px', cursor: 'pointer' }}>
             Manage Rules →
           </button>
         </Link>
@@ -218,8 +218,8 @@ export default function AlertsPage() {
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
           { label: 'Total Alerts',   value: loading ? '—' : String(alerts.length),   color: 'var(--wr-text)' },
-          { label: 'Active',         value: loading ? '—' : String(activeCount),      color: '#34d399' },
-          { label: 'Ever Triggered', value: loading ? '—' : String(triggeredCount),   color: '#fbbf24' },
+          { label: 'Active',         value: loading ? '—' : String(activeCount),      color: '#4fe9b4' },
+          { label: 'Ever Triggered', value: loading ? '—' : String(triggeredCount),   color: '#ffb020' },
         ].map(card => (
           <div key={card.label} style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{card.label}</p>
@@ -254,13 +254,13 @@ export default function AlertsPage() {
             Recent Alerts
           </h2>
           <Link href="/alerts/rules" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textDecoration: 'none' }}
-            className="hover:text-[#a1a1aa] transition-colors">
+            className="hover:text-[#9298b8] transition-colors">
             View all →
           </Link>
         </div>
 
         <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', overflow: 'hidden' }}>
-          <div className="grid px-4 py-2.5 border-b border-[#1A1A1A]"
+          <div className="grid px-4 py-2.5 border-b border-[#14161f]"
             style={{ gridTemplateColumns: '140px 1fr 100px 100px 120px 100px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
             <span>Type</span>
             <span>Rule</span>
@@ -281,7 +281,7 @@ export default function AlertsPage() {
           ) : (
             alerts.map(alert => (
               <div key={alert.id}
-                className="grid px-4 py-3 border-b border-[#1A1A1A] last:border-b-0 items-center hover:bg-[#1a1a1a]/50 transition-colors"
+                className="grid px-4 py-3 border-b border-[#14161f] last:border-b-0 items-center hover:bg-[#14161f]/50 transition-colors"
                 style={{ gridTemplateColumns: '140px 1fr 100px 100px 120px 100px' }}>
                 <AlertTypeBadge type={alert.alert_type} />
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -293,7 +293,7 @@ export default function AlertsPage() {
                 <span className="text-right" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: 'var(--wr-text)' }}>
                   {alert.threshold_eth} ETH
                 </span>
-                <span className="text-right" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: alert.last_triggered_at ? '#fbbf24' : '#3f3f3f' }}>
+                <span className="text-right" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: alert.last_triggered_at ? '#ffb020' : '#3f3f3f' }}>
                   {alert.last_triggered_at
                     ? new Date(alert.last_triggered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                     : 'Never'}

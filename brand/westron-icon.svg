@@ -1,0 +1,21 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1E2E"/>
+      <stop offset="1" stop-color="#0B0C14"/>
+    </linearGradient>
+    <linearGradient id="wg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#C9B8FF"/>
+    </linearGradient>
+  </defs>
+  <!-- squircle background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="225" ry="225" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="1023" height="1023" rx="224.5" ry="224.5" fill="none" stroke="#F2F2F7" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- brand mark: 72x64 path scaled ~6.67x, centred -->
+  <g transform="translate(272,300) scale(6.67)">
+    <path d="M6 22 L18 46 L30 22 L42 46 L56 20 L64 28"
+          stroke="url(#wg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="64" cy="28" r="3.5" fill="#C9B8FF"/>
+  </g>
+</svg>

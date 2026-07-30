@@ -88,8 +88,8 @@ export default function PortfolioAnalyticsPage() {
         style={{ backgroundColor: 'var(--wr-border)', border: '1px solid var(--wr-border)', gap: '1px' }}>
         {[
           { label: 'Total Return',   value: totalReturn, sub: returnSub, subColor: 'var(--wr-accent)' },
-          { label: 'Best Performer', value: 'Bored Ape YC', sub: '+442.3%', subColor: '#34d399' },
-          { label: 'Worst Performer',value: 'Moonbirds',   sub: '-93.5%', subColor: '#F87171' },
+          { label: 'Best Performer', value: 'Bored Ape YC', sub: '+442.3%', subColor: '#4fe9b4' },
+          { label: 'Worst Performer',value: 'Moonbirds',   sub: '-93.5%', subColor: '#ff8a96' },
           { label: 'Avg Hold Time',  value: '47 days', sub: `${totalTrades} trades · ${winRate} win`, subColor: 'var(--wr-text-3)' },
         ].map(s => (
           <div key={s.label} style={{ backgroundColor: 'var(--wr-surface)', padding: '20px 24px' }}>
@@ -108,7 +108,7 @@ export default function PortfolioAnalyticsPage() {
         <div className="flex items-center gap-1 mb-5">
           {TIME_RANGES.map(r => (
             <button key={r} onClick={() => setRange(r)}
-              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, padding: '4px 10px', backgroundColor: range === r ? '#BEFF00' : 'var(--wr-overlay)', color: range === r ? '#000000' : 'var(--wr-text-3)', border: 'none', cursor: 'pointer' }}>
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, padding: '4px 10px', backgroundColor: range === r ? '#7c5cff' : 'var(--wr-overlay)', color: range === r ? '#0b0c14' : 'var(--wr-text-3)', border: 'none', cursor: 'pointer' }}>
               {r}
             </button>
           ))}
@@ -124,8 +124,8 @@ export default function PortfolioAnalyticsPage() {
           <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 800 160">
             <defs>
               <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#BEFF00" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#BEFF00" stopOpacity="0.02" />
+                <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#7c5cff" stopOpacity="0.02" />
               </linearGradient>
             </defs>
             <path d="M0,130 C80,110 100,80 160,60 S250,30 320,50 S420,90 480,40 S580,10 640,25 S720,15 800,20 L800,160 L0,160 Z" fill="url(#chartGrad)" />

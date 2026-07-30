@@ -80,13 +80,13 @@ export default function AlertHistoryPage() {
       </div>
 
       {/* Tab strip */}
-      <div className="flex items-center gap-0 border-b border-[#1A1A1A] mb-5">
+      <div className="flex items-center gap-0 border-b border-[#14161f] mb-5">
         {HISTORY_TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{
               fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500,
               padding: '8px 16px', marginBottom: '-1px',
-              color: tab === t ? 'var(--wr-accent)' : '#6E6E6E',
+              color: tab === t ? 'var(--wr-accent)' : '#6e7590',
               background: 'none', border: 'none',
               borderBottom: tab === t ? '2px solid var(--wr-accent)' : '2px solid transparent',
               cursor: 'pointer',
@@ -98,7 +98,7 @@ export default function AlertHistoryPage() {
 
       {/* Table */}
       <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '16px', overflow: 'hidden' }}>
-        <div className="grid px-5 py-2.5 border-b border-[#1A1A1A]"
+        <div className="grid px-5 py-2.5 border-b border-[#14161f]"
           style={{ gridTemplateColumns: '1.4fr 0.8fr 3fr 0.8fr 0.9fr', columnGap: '16px', backgroundColor: 'var(--wr-surface)', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
           <span>Triggered</span><span>Address</span><span>Rule / Name</span><span>Amount</span><span>Status</span>
         </div>
@@ -108,7 +108,7 @@ export default function AlertHistoryPage() {
         ) : visible.length === 0 ? (
           <div className="px-5 py-8 text-center" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No alert history in this category.</div>
         ) : visible.map((e, i) => (
-          <div key={i} className="grid px-5 py-4 border-b border-[#1A1A1A] last:border-b-0 hover:bg-[#111111] transition-colors"
+          <div key={i} className="grid px-5 py-4 border-b border-[#14161f] last:border-b-0 hover:bg-[#14161f] transition-colors"
             style={{ gridTemplateColumns: '1.4fr 0.8fr 3fr 0.8fr 0.9fr', columnGap: '16px', alignItems: 'center' }}>
             <span style={{ color: 'var(--wr-text-3)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{e.date}</span>
             <span style={{ color: 'var(--wr-text-2)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{e.wallet}</span>
@@ -126,7 +126,7 @@ export default function AlertHistoryPage() {
           { href: '/alerts/history', label: 'History', active: true },
         ].map(link => (
           <Link key={link.href} href={link.href}
-            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'active' in link ? 'var(--wr-accent)' : '#6E6E6E', textDecoration: 'none' }}>
+            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'active' in link ? 'var(--wr-accent)' : '#6e7590', textDecoration: 'none' }}>
             {link.label}
           </Link>
         ))}

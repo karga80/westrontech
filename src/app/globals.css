@@ -2,221 +2,199 @@
 @source "../../src";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   WESTRON — DESIGN TOKEN SYSTEM
+   WESTRON — DESIGN TOKEN SYSTEM · Brand v2 (vivid)
+   Source of truth: brand/README.md + brand/tokens.css (design handoff)
    ═══════════════════════════════════════════════════════════════════════════
 
-   NIGHT MODE (default)                DAY MODE
-   ─────────────────────────────────   ──────────────────────────────────
-   --wr-bg           #000000           #F4F4F0   Page background
-   --wr-surface      #111111           #FFFFFF   Cards, panels
-   --wr-surface-alt  #0A0A0A           #FAFAF7   Section containers
-   --wr-overlay      #1A1A1A           #F0F0EC   Hover/active surfaces
-   --wr-border       #222222           #E2E2DC   Default borders
-   --wr-border-hover #333333           #C0C0BC   Hovered borders
-   --wr-border-focus #BEFF00           #3D6000   Focused inputs
-   --wr-input-bg     #1C1C1C           #FFFFFF   Input / textarea background
-   --wr-input-border #2E2E2E           #D0D0CC   Input border (resting)
-   --wr-text         #FFFFFF           #0D0D0D   Primary text
-   --wr-text-2       #A1A1AA           #4A4A47   Secondary text
-   --wr-text-3       #6E6E6E           #8A8A85   Muted text
-   --wr-text-4       #3A3A3A           #C0C0BC   Disabled text
-   --wr-accent       #BEFF00           #BEFF00   Brand lime (unchanged)
-   --wr-accent-text  #000000           #000000   Text on lime bg
-   --wr-accent-dim   #0a1200           #E8FFCC   Lime tinted background
-   --wr-accent-nav   #BEFF00           #3D6000   Active nav indicator/text
-   --wr-nav-bg       #000000           #FFFFFF   Navbar background
-   --wr-nav-border   #1A1A1A           #E8E8E3   Navbar bottom border
-   --wr-danger       #f87171           #DC2626   Error / destructive
-   --wr-danger-bg    #450a0a           #FEE2E2   Error background
-   --wr-success      #34d399           #16A34A   Success / positive
-   --wr-success-bg   #052e16           #DCFCE7   Success background
-   --wr-warn         #FBBF24           #D97706   Warning
-   --wr-warn-bg      #2a1800           #FEF3C7   Warning background
-   --wr-info         #60a5fa           #2563EB   Info / blue
-   --wr-info-bg      #1c1c3a           #EFF6FF   Info background
-   --wr-purple       #a855f7           #7C3AED   NFT / purple accent
-   --wr-purple-bg    #1a0a2e           #F3E8FF   Purple background
+   NON-NEGOTIABLES (from the brand guideline)
+   1. Dark theme is FIXED. There is no light theme.
+   2. Purple (#7C5CFF) never carries data — brand + primary CTA only.
+   3. Green/red only carry direction (buy/sell, gain/loss). Never decorative.
+   4. Direction is never colour alone — every figure carries +/− or an arrow.
+   5. All figures: JetBrains Mono + tabular-nums, right-aligned in tables.
+   6. No card shadows. Separation = 1px borders and hairlines.
+
+   BRAND LAYER                          FINANCIAL SET
+   ─────────────────────────────        ────────────────────────────────
+   bg           #0B0C14                 buy   #00D68F  text #4FE9B4
+   surface      #14161F                 sell  #FF4D5E  text #FF8A96
+   accent-bg    #241C4D                 pend  #FFB020
+   accent       #7C5CFF                 info  #5B7CFA  text #90A6FF
+   accent-light #C9B8FF                 rows  #10121B/#161925/#1D2130
+   text         #F2F2F7 / #9298B8 / #6E7590
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Night mode tokens (default) ─────────────────────────────────────────── */
+/* ── Brand tokens — single dark theme (day attr kept as alias, same values) ── */
 :root,
-html[data-theme="night"] {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-
-  --wr-bg:           #000000;
-  --wr-surface:      #111111;
-  --wr-surface-alt:  #0A0A0A;
-  --wr-modal:        #242424;
-  --wr-overlay:      #1A1A1A;
-  --wr-border:        #222222;
-  --wr-border-hover:  #333333;
-  --wr-hover-bg:      #012a2a;
-  --wr-hover-text:    #E5E5E5;
-  --wr-border-focus:  #BEFF00;
-  --wr-input-bg:      #1C1C1C;
-  --wr-input-border:  #2E2E2E;
-  --wr-text:         #FFFFFF;
-  --wr-text-2:       #A1A1AA;
-  --wr-text-3:       #6E6E6E;
-  --wr-text-4:       #3A3A3A;
-  --wr-accent:       #BEFF00;
-  --wr-accent-text:  #000000;
-  --wr-accent-dim:   #0a1200;
-  --wr-accent-nav:   #BEFF00;
-  --wr-nav-bg:       #000000;
-  --wr-nav-border:   #1A1A1A;
-  --wr-danger:       #f87171;
-  --wr-danger-bg:    #450a0a;
-  --wr-success:      #34d399;
-  --wr-success-bg:   #052e16;
-  --wr-warn:         #FBBF24;
-  --wr-warn-bg:      #2a1800;
-  --wr-info:         #60a5fa;
-  --wr-info-bg:      #1c1c3a;
-  --wr-purple:       #a855f7;
-  --wr-purple-bg:    #1a0a2e;
-
-  /* ── Tag tokens (night) — dark bg + light text, all ≥ 7:1 contrast ── */
-  --tag-success-text: #34d399;  --tag-success-bg: #052e16;  --tag-success-border: #166534;
-  --tag-danger-text:  #f87171;  --tag-danger-bg:  #450a0a;  --tag-danger-border:  #7f1d1d;
-  --tag-warning-text: #fbbf24;  --tag-warning-bg: #2a1800;  --tag-warning-border: #4a3000;
-  --tag-info-text:    #60a5fa;  --tag-info-bg:    #1c1c3a;  --tag-info-border:    #3b3b6a;
-  --tag-purple-text:  #a855f7;  --tag-purple-bg:  #1a0a2e;  --tag-purple-border:  #3b1a5a;
-  --tag-neutral-text: #a1a1aa;  --tag-neutral-bg: #1a1a1a;  --tag-neutral-border: #2a2a2a;
-  --tag-accent-text:  #000000;  --tag-accent-bg:  #beff00;  --tag-accent-border:  #beff00;
-
-  /* ── NFT group (night) — shared purple bg, distinct text per action ── */
-  --tag-nft-buy-text:   #c084fc;  --tag-nft-buy-bg:   #1a0a2e;  --tag-nft-buy-border:   #6b21a8;
-  --tag-nft-sell-text:  #f472b6;  --tag-nft-sell-bg:  #1a0a2e;  --tag-nft-sell-border:  #9d174d;
-  --tag-nft-sent-text:  #818cf8;  --tag-nft-sent-bg:  #1a0a2e;  --tag-nft-sent-border:  #4338ca;
-  --tag-nft-offer-text: #fcd34d;  --tag-nft-offer-bg: #1a0a2e;  --tag-nft-offer-border: #854d0e;
-  --tag-nft-mint-text:  #34d399;  --tag-nft-mint-bg:  #1a0a2e;  --tag-nft-mint-border:  #166534;
-  --tag-sweep-text:     #e879f9;  --tag-sweep-bg:     #1a0a2e;  --tag-sweep-border:     #86198f;
-
-  /* ── Token group (night) — shared teal bg, distinct text per action ── */
-  --tag-token-in-text:  #34d399;  --tag-token-in-bg:  #07201a;  --tag-token-in-border:  #0f5132;
-  --tag-token-out-text: #f87171;  --tag-token-out-bg: #07201a;  --tag-token-out-border: #7f1d1d;
-  --tag-swap-text:      #22d3ee;  --tag-swap-bg:      #07201a;  --tag-swap-border:      #164e63;
-  --tag-approve-text:   #fbbf24;  --tag-approve-bg:   #07201a;  --tag-approve-border:   #4a3000;
-
-  /* ── Contract group (night) ── */
-  --tag-contract-text:  #a1a1aa;  --tag-contract-bg:  #141414;  --tag-contract-border:  #2a2a2a;
-}
-
-/* ── Day mode tokens ─────────────────────────────────────────────────────── */
+html[data-theme="night"],
 html[data-theme="day"] {
-  --background: #F4F4F0;
-  --foreground: #0D0D0D;
+  --background: #0B0C14;
+  --foreground: #F2F2F7;
 
-  --wr-bg:           #F4F4F0;
-  --wr-surface:      #FFFFFF;
-  --wr-surface-alt:  #FAFAF7;
-  --wr-modal:        #FFFFFF;
-  --wr-overlay:      #F0F0EC;
-  --wr-border:        #E2E2DC;
-  --wr-border-hover:  #C0C0BC;
-  --wr-hover-bg:      #E0EDFF;  /* light blue tint — day mode */
-  --wr-hover-text:    #111111;
-  --wr-border-focus:  #3D6000;
-  --wr-input-bg:      #FFFFFF;
-  --wr-input-border:  #D0D0CC;
-  --wr-text:         #0D0D0D;
-  --wr-text-2:       #4A4A47;
-  --wr-text-3:       #8A8A85;
-  --wr-text-4:       #C0C0BC;
-  --wr-accent:       #3D6000;
-  --wr-accent-text:  #000000;
-  --wr-accent-dim:   #E8FFCC;
-  --wr-accent-nav:   #3D6000;
-  --wr-accent-lime:  #BEFF00;
-  --wr-nav-bg:       #FFFFFF;
-  --wr-nav-border:   #E8E8E3;
-  --wr-danger:       #DC2626;
-  --wr-danger-bg:    #FEE2E2;
-  --wr-success:      #16A34A;
-  --wr-success-bg:   #DCFCE7;
-  --wr-warn:         #D97706;
-  --wr-warn-bg:      #FEF3C7;
-  --wr-info:         #2563EB;
-  --wr-info-bg:      #EFF6FF;
-  --wr-purple:       #7C3AED;
-  --wr-purple-bg:    #F3E8FF;
+  /* Brand layer */
+  --wr-bg:           #0B0C14;
+  --wr-surface:      #14161F;
+  --wr-surface-alt:  #10121B;
+  --wr-modal:        #1D2130;
+  --wr-overlay:      #161925;
+  --wr-border:        rgba(242,242,247,.12);
+  --wr-border-hover:  rgba(242,242,247,.2);
+  --wr-hairline:      rgba(242,242,247,.08);
+  --wr-divider:       rgba(242,242,247,.16);
+  --wr-hover-bg:      #1D2130;
+  --wr-hover-text:    #F2F2F7;
+  --wr-border-focus:  #7C5CFF;
+  --wr-input-bg:      #10121B;
+  --wr-input-border:  rgba(242,242,247,.12);
+  --wr-text:         #F2F2F7;
+  --wr-text-2:       #9298B8;
+  --wr-text-3:       #6E7590;
+  --wr-text-4:       #3F4457;
+  --wr-accent:       #7C5CFF;   /* primary CTA + brand only — never data */
+  --wr-accent-text:  #FFFFFF;   /* text on a purple fill */
+  --wr-accent-dim:   #241C4D;   /* accent surfaces, hero */
+  --wr-accent-nav:   #C9B8FF;   /* links, active nav, inline emphasis */
+  --wr-accent-dark:  #5B3DF0;   /* pressed CTA / logo on light */
+  --wr-gradient:     linear-gradient(90deg, #7C5CFF, #C9B8FF);
+  --wr-nav-bg:       #14161F;
+  --wr-nav-border:   rgba(242,242,247,.08);
 
-  /* ── Tag tokens (day) — light bg + dark text, all ≥ 5:1 contrast ── */
-  --tag-success-text: #166534;  --tag-success-bg: #dcfce7;  --tag-success-border: #166534;
-  --tag-danger-text:  #991b1b;  --tag-danger-bg:  #fee2e2;  --tag-danger-border:  #991b1b;
-  --tag-warning-text: #78350f;  --tag-warning-bg: #fef3c7;  --tag-warning-border: #78350f;
-  --tag-info-text:    #1e40af;  --tag-info-bg:    #eff6ff;  --tag-info-border:    #1e40af;
-  --tag-purple-text:  #5b21b6;  --tag-purple-bg:  #f3e8ff;  --tag-purple-border:  #5b21b6;
-  --tag-neutral-text: #374151;  --tag-neutral-bg: #f3f4f6;  --tag-neutral-border: #d1d5db;
-  --tag-accent-text:  #000000;  --tag-accent-bg:  #beff00;  --tag-accent-border:  #3d6000;
+  /* Financial set — direction only, never decorative */
+  --wr-buy:          #00D68F;
+  --wr-buy-hover:    #00B87A;
+  --wr-buy-tint:     rgba(0,214,143,.14);
+  --wr-buy-text:     #4FE9B4;   /* on dark surfaces — #00D68F is never body text */
+  --wr-buy-on:       #06251B;   /* text on a buy fill */
+  --wr-sell:         #FF4D5E;
+  --wr-sell-hover:   #E63950;
+  --wr-sell-tint:    rgba(255,77,94,.14);
+  --wr-sell-text:    #FF8A96;   /* on dark surfaces — #FF4D5E is never body text */
+  --wr-sell-on:      #2B070C;
+  --wr-pending:      #FFB020;
+  --wr-pending-tint: rgba(255,176,32,.14);
 
-  /* ── NFT group (day) — shared light purple bg ── */
-  --tag-nft-buy-text:   #6b21a8;  --tag-nft-buy-bg:   #f3e8ff;  --tag-nft-buy-border:   #6b21a8;
-  --tag-nft-sell-text:  #9d174d;  --tag-nft-sell-bg:  #f3e8ff;  --tag-nft-sell-border:  #9d174d;
-  --tag-nft-sent-text:  #3730a3;  --tag-nft-sent-bg:  #f3e8ff;  --tag-nft-sent-border:  #3730a3;
-  --tag-nft-offer-text: #92400e;  --tag-nft-offer-bg: #f3e8ff;  --tag-nft-offer-border: #92400e;
-  --tag-nft-mint-text:  #166534;  --tag-nft-mint-bg:  #f3e8ff;  --tag-nft-mint-border:  #166534;
-  --tag-sweep-text:     #86198f;  --tag-sweep-bg:     #f3e8ff;  --tag-sweep-border:     #86198f;
+  /* Legacy aliases (existing components reference these) */
+  --wr-danger:       #FF8A96;
+  --wr-danger-bg:    rgba(255,77,94,.14);
+  --wr-success:      #4FE9B4;
+  --wr-success-bg:   rgba(0,214,143,.14);
+  --wr-warn:         #FFB020;
+  --wr-warn-bg:      rgba(255,176,32,.14);
+  --wr-info:         #90A6FF;
+  --wr-info-bg:      rgba(91,124,250,.16);
+  --wr-purple:       #A78BFA;
+  --wr-purple-bg:    #241C4D;
 
-  /* ── Token group (day) — shared light teal bg ── */
-  --tag-token-in-text:  #166534;  --tag-token-in-bg:  #d1fae5;  --tag-token-in-border:  #166534;
-  --tag-token-out-text: #991b1b;  --tag-token-out-bg: #d1fae5;  --tag-token-out-border: #991b1b;
-  --tag-swap-text:      #155e75;  --tag-swap-bg:      #d1fae5;  --tag-swap-border:      #155e75;
-  --tag-approve-text:   #78350f;  --tag-approve-bg:   #d1fae5;  --tag-approve-border:   #78350f;
+  /* Table surfaces */
+  --wr-row:          #10121B;
+  --wr-row-zebra:    #161925;
+  --wr-row-hover:    #1D2130;
 
-  /* ── Contract group (day) ── */
-  --tag-contract-text:  #374151;  --tag-contract-bg:  #f3f4f6;  --tag-contract-border:  #d1d5db;
+  /* Series / identity colours (charts, list dots, chain dots) — never direction */
+  --wr-series-1: #7C5CFF;
+  --wr-series-2: #2FC4D6;
+  --wr-series-3: #F6C445;
+  --wr-series-4: #FF8A5B;
+  --wr-series-5: #4FE9B4;
+  --wr-series-6: #A78BFA;
+
+  /* NFT rarity — fixed ladder, one colour per tier, never green/red */
+  --wr-rarity-legendary: #F6C445;
+  --wr-rarity-epic:      #7C5CFF;
+  --wr-rarity-rare:      #2FC4D6;
+  --wr-rarity-common:    #9298B8;
+
+  /* Desktop scale (Tauri · macOS) */
+  --wr-unit:           4px;
+  --wr-text-body:      13px;
+  --wr-row-h:          44px;
+  --wr-row-h-compact:  36px;
+  --wr-sidebar-w:      208px;
+  --wr-titlebar-h:     44px;
+  --wr-btn-h:          32px;
+  --wr-radius-card:    12px;
+  --wr-radius-ctl:     8px;
+
+  /* ── Tag tokens — financial tints on dark, light text (≥ 5:1) ── */
+  --tag-success-text: #4FE9B4;  --tag-success-bg: rgba(0,214,143,.14);  --tag-success-border: rgba(0,214,143,.35);
+  --tag-danger-text:  #FF8A96;  --tag-danger-bg:  rgba(255,77,94,.14);  --tag-danger-border:  rgba(255,77,94,.35);
+  --tag-warning-text: #FFB020;  --tag-warning-bg: rgba(255,176,32,.14); --tag-warning-border: rgba(255,176,32,.35);
+  --tag-info-text:    #90A6FF;  --tag-info-bg:    rgba(91,124,250,.16); --tag-info-border:    rgba(91,124,250,.4);
+  --tag-purple-text:  #C9B8FF;  --tag-purple-bg:  #241C4D;              --tag-purple-border:  rgba(124,92,255,.45);
+  --tag-neutral-text: #9298B8;  --tag-neutral-bg: #161925;              --tag-neutral-border: rgba(242,242,247,.12);
+  --tag-accent-text:  #FFFFFF;  --tag-accent-bg:  #7C5CFF;              --tag-accent-border:  #7C5CFF;
+
+  /* ── NFT group — shared accent surface, identity hues for text ── */
+  --tag-nft-buy-text:   #C9B8FF;  --tag-nft-buy-bg:   #241C4D;  --tag-nft-buy-border:   rgba(124,92,255,.45);
+  --tag-nft-sell-text:  #FF8A96;  --tag-nft-sell-bg:  #241C4D;  --tag-nft-sell-border:  rgba(255,77,94,.4);
+  --tag-nft-sent-text:  #90A6FF;  --tag-nft-sent-bg:  #241C4D;  --tag-nft-sent-border:  rgba(91,124,250,.45);
+  --tag-nft-offer-text: #F6C445;  --tag-nft-offer-bg: #241C4D;  --tag-nft-offer-border: rgba(246,196,69,.4);
+  --tag-nft-mint-text:  #4FE9B4;  --tag-nft-mint-bg:  #241C4D;  --tag-nft-mint-border:  rgba(0,214,143,.4);
+  --tag-sweep-text:     #A78BFA;  --tag-sweep-bg:     #241C4D;  --tag-sweep-border:     rgba(167,139,250,.45);
+
+  /* ── Token group — shared dark surface, direction/action hues ── */
+  --tag-token-in-text:  #4FE9B4;  --tag-token-in-bg:  #10121B;  --tag-token-in-border:  rgba(0,214,143,.4);
+  --tag-token-out-text: #FF8A96;  --tag-token-out-bg: #10121B;  --tag-token-out-border: rgba(255,77,94,.4);
+  --tag-swap-text:      #2FC4D6;  --tag-swap-bg:      #10121B;  --tag-swap-border:      rgba(47,196,214,.4);
+  --tag-approve-text:   #FFB020;  --tag-approve-bg:   #10121B;  --tag-approve-border:   rgba(255,176,32,.4);
+
+  /* ── Contract group ── */
+  --tag-contract-text:  #9298B8;  --tag-contract-bg:  #14161F;  --tag-contract-border:  rgba(242,242,247,.12);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
   --font-jetbrains: var(--font-jetbrains);
   --font-inter: var(--font-inter);
+  --font-space: var(--font-space);
 }
 
+/* ── Base ─────────────────────────────────────────────────────────────────── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), 'Geist', system-ui, sans-serif;
+  background: var(--wr-bg);
+  color: var(--wr-text);
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-size: var(--wr-text-body);   /* desktop body is 13px, not web 15–16px */
 }
 
-/* ── Day mode: structural !important overrides ───────────────────────────── */
-/* These override the inline styles used throughout the app                   */
-
-html[data-theme="day"] body {
-  background-color: var(--wr-bg) !important;
-  color: var(--wr-text) !important;
+/* Headings + balances: Space Grotesk, tight tracking (brand §2) */
+h1, h2, h3 {
+  font-family: var(--font-space), 'Space Grotesk', var(--font-inter), sans-serif;
+  letter-spacing: -0.02em;
 }
 
-html[data-theme="day"] header {
-  background-color: var(--wr-nav-bg) !important;
-  border-color: var(--wr-nav-border) !important;
-  box-shadow: 0 1px 0 var(--wr-nav-border) !important;
+/* Every figure in the product (brand §2 rule 5) */
+.w-num {
+  font-family: var(--font-jetbrains), 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-html[data-theme="day"] main {
-  background-color: var(--wr-bg) !important;
-  color: var(--wr-text) !important;
+/* Display numbers — balances, KPI values */
+.w-display {
+  font-family: var(--font-space), 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Cards and section containers */
-html[data-theme="day"] .wr-surface {
-  background-color: var(--wr-surface) !important;
-  border-color: var(--wr-border) !important;
-  color: var(--wr-text) !important;
+/* Brand gradient text (logo/wordmark accents only) */
+.w-gradient-text {
+  background: var(--wr-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ── Scrollbars ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: var(--wr-bg); }
-::-webkit-scrollbar-thumb { background: var(--wr-border-hover); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: rgba(242,242,247,.2); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--wr-text-3); }
-* { scrollbar-width: thin; scrollbar-color: var(--wr-border-hover) var(--wr-bg); }
+* { scrollbar-width: thin; scrollbar-color: rgba(242,242,247,.2) var(--wr-bg); }
 
 /* ── Global button transitions ───────────────────────────────────────────── */
 button {
@@ -245,220 +223,32 @@ select:focus {
   border-color: var(--wr-border-focus) !important;
 }
 
-/* ── Lime CTA ────────────────────────────────────────────────────────────── */
-.btn-cta:hover  { filter: none; background-color: #d4ff2e !important; }
-.btn-cta:active { filter: none; background-color: #a8e000 !important; transform: scale(0.98); }
+/* ── Primary CTA (purple) ────────────────────────────────────────────────── */
+.btn-cta:hover  { filter: none; background-color: #8D70FF !important; }
+.btn-cta:active { filter: none; background-color: var(--wr-accent-dark) !important; transform: scale(0.98); }
 
-/* ── Day mode: CTA contrast floor ───────────────────────────────────────── */
-/* --wr-text-3 = #8A8A85 in day → 3.4:1 on white  (fails 5:1)               */
-/* --wr-text-4 = #C0C0BC in day → 1.3:1 on overlay (fails badly)            */
-/* The [style*] selector matches any button whose inline style includes the  */
-/* CSS variable reference, regardless of whether it is active or disabled.   */
-html[data-theme="day"] button[style*="--wr-text-3"],
-html[data-theme="day"] a[style*="--wr-text-3"] {
-  color: var(--wr-text-2) !important;  /* #4A4A47 → 8.1:1 on white ✓ */
-}
-html[data-theme="day"] button[style*="--wr-text-4"],
-html[data-theme="day"] a[style*="--wr-text-4"] {
-  color: var(--wr-text-2) !important;  /* readable even at opacity 0.5 */
-}
-
-/* ── Hover utility classes (use instead of hardcoded hover: classes) ─────────── */
-/* .wr-row-hover  — for table rows, list items                                    */
-/* .wr-icon-hover — for icon buttons, links                                       */
-.wr-row-hover:hover   { background-color: var(--wr-hover-bg); }
+/* ── Hover utilities ─────────────────────────────────────────────────────── */
+.wr-row-hover:hover   { background-color: var(--wr-row-hover); }
 .wr-icon-hover:hover  { color: var(--wr-hover-text); }
 
-/* ── Normalise hardcoded hover classes → CSS variable (both modes) ───────────── */
-/* Row/surface hover backgrounds */
-:root .hover\:bg-\[\#111111\]:hover,
-:root .hover\:bg-\[\#1a1a1a\]:hover,
-:root .hover\:bg-\[\#222222\]:hover,
-html[data-theme="night"] .hover\:bg-\[\#111111\]:hover,
-html[data-theme="night"] .hover\:bg-\[\#1a1a1a\]:hover,
-html[data-theme="night"] .hover\:bg-\[\#222222\]:hover,
-html[data-theme="day"]   .hover\:bg-\[\#111111\]:hover,
-html[data-theme="day"]   .hover\:bg-\[\#1a1a1a\]:hover,
-html[data-theme="day"]   .hover\:bg-\[\#222222\]:hover {
-  background-color: var(--wr-hover-bg) !important;
-}
-/* Partial-opacity row hovers */
-:root .hover\:bg-\[\#1a1a1a\]\/50:hover,
-:root .hover\:bg-\[\#1a1a1a\]\/40:hover,
-html[data-theme="night"] .hover\:bg-\[\#1a1a1a\]\/50:hover,
-html[data-theme="night"] .hover\:bg-\[\#1a1a1a\]\/40:hover,
-html[data-theme="day"]   .hover\:bg-\[\#1a1a1a\]\/50:hover,
-html[data-theme="day"]   .hover\:bg-\[\#1a1a1a\]\/40:hover {
-  background-color: color-mix(in srgb, var(--wr-hover-bg) 60%, transparent) !important;
-}
-/* Text hover colors */
-html[data-theme="day"] .hover\:text-\[\#a1a1aa\]:hover,
-html[data-theme="day"] .hover\:text-white:hover {
-  color: var(--wr-hover-text) !important;
-}
-/* Border hover */
-html[data-theme="day"] .hover\:border-\[\#333\]:hover,
-html[data-theme="day"] .hover\:border-\[\#2a2a2a\]:hover {
-  border-color: var(--wr-border-hover) !important;
+/* Normalise legacy hardcoded hover classes to brand surfaces */
+.hover\:bg-\[\#111111\]:hover,
+.hover\:bg-\[\#1a1a1a\]:hover,
+.hover\:bg-\[\#222222\]:hover,
+.hover\:bg-\[\#1a1a1a\]\/50:hover,
+.hover\:bg-\[\#1a1a1a\]\/40:hover {
+  background-color: var(--wr-row-hover) !important;
 }
 
-/* ── Day mode: lime (#BEFF00) is near-invisible on white — remap to dark olive ── */
-/* Targets elements that use var(--wr-accent) or var(--wr-accent-nav) for text/borders */
-html[data-theme="day"] a[style*="color"],
-html[data-theme="day"] span[style*="color"],
-html[data-theme="day"] div[style*="color"],
-html[data-theme="day"] p[style*="color"],
-html[data-theme="day"] button[style*="color"] {
-  /* individual overrides are handled via CSS variables — see below */
+/* ── Skeleton shimmer (calls > 200ms show skeleton rows — brand §3) ─────── */
+@keyframes wr-shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
 }
-
-/* Force lime button backgrounds to stay lime in day mode (they look fine as bg) */
-html[data-theme="day"] [style*="backgroundColor: rgb(190, 255, 0)"],
-html[data-theme="day"] [style*="background-color: rgb(190, 255, 0)"] {
-  background-color: #BEFF00 !important;
-  color: #000000 !important;
-}
-/* Semi-transparent lime (#BEFF0040) disabled buttons — keep black text */
-html[data-theme="day"] button[style*="#BEFF0040"],
-html[data-theme="day"] button[style*="#beff0040"] {
-  color: #000000 !important;
-}
-
-/* ── Day mode: remap hardcoded Tailwind dark arbitrary-value classes ─────── */
-/* These classes are used throughout pages and don't respond to CSS vars      */
-
-/* Dark backgrounds → theme-aware surfaces */
-html[data-theme="day"] .bg-\[\#000000\],
-html[data-theme="day"] .bg-\[\#0a0a0a\],
-html[data-theme="day"] .bg-\[\#0A0A0A\] {
-  background-color: var(--wr-bg) !important;
-}
-html[data-theme="day"] .bg-\[\#111111\] {
-  background-color: var(--wr-surface) !important;
-}
-html[data-theme="day"] .bg-\[\#161616\],
-html[data-theme="day"] .bg-\[\#1a1a1a\],
-html[data-theme="day"] .bg-\[\#1A1A1A\] {
-  background-color: var(--wr-overlay) !important;
-}
-html[data-theme="day"] .bg-\[\#222222\],
-html[data-theme="day"] .bg-\[\#2a2a2a\] {
-  background-color: var(--wr-border-hover) !important;
-}
-
-/* text-white → primary text token */
-html[data-theme="day"] .text-white {
-  color: var(--wr-text) !important;
-}
-
-/* Dark borders → theme-aware borders */
-html[data-theme="day"] .border-\[\#1a1a1a\],
-html[data-theme="day"] .border-\[\#1A1A1A\] {
-  border-color: var(--wr-border) !important;
-}
-html[data-theme="day"] .border-\[\#2a2a2a\] {
-  border-color: var(--wr-border-hover) !important;
-}
-html[data-theme="day"] .border-\[\#3f3f46\] {
-  border-color: var(--wr-border-hover) !important;
-}
-
-/* Active tab/button underline with lime → olive */
-html[data-theme="day"] .border-\[\#BEFF00\],
-html[data-theme="day"] .border-\[\#beff00\] {
-  border-color: var(--wr-accent) !important;
-}
-html[data-theme="day"] .text-\[\#BEFF00\],
-html[data-theme="day"] .text-\[\#beff00\] {
-  color: var(--wr-accent) !important;
-}
-/* Lime background tints → accent-dim */
-html[data-theme="day"] .bg-\[\#beff0010\],
-html[data-theme="day"] .bg-\[\#beff0011\],
-html[data-theme="day"] .bg-\[\#beff0022\] {
-  background-color: var(--wr-accent-dim) !important;
-}
-html[data-theme="day"] .border-\[\#beff0033\],
-html[data-theme="day"] .border-\[\#beff0044\] {
-  border-color: var(--wr-accent) !important;
-  opacity: 0.4;
-}
-
-/* hover:text-white → primary text token */
-html[data-theme="day"] .hover\:text-white:hover {
-  color: var(--wr-text) !important;
-}
-
-/* Hover backgrounds — all dark hover classes → unified hover token */
-html[data-theme="day"] .hover\:bg-\[\#222222\]:hover,
-html[data-theme="day"] .hover\:bg-\[\#1a1a1a\]\/50:hover,
-html[data-theme="day"] .hover\:bg-\[\#1a1a1a\]:hover,
-html[data-theme="day"] .hover\:bg-\[\#111111\]:hover {
-  background-color: var(--wr-hover-bg) !important;
-}
-/* Danger hover: dark red → light red */
-html[data-theme="day"] .hover\:bg-\[\#450a0a\]:hover {
-  background-color: var(--wr-danger-bg) !important;
-}
-
-/* Dark tinted badge/chip inline backgrounds → theme tokens */
-/* #0a1200 = lime-dim tint (rgb 10,18,0) */
-html[data-theme="day"] [style*="background-color: rgb(10, 18, 0)"],
-html[data-theme="day"] [style*="backgroundColor: '#0a1200'"] {
-  background-color: var(--wr-accent-dim) !important;
-}
-/* #1C1C3A = info-dim tint (rgb 28,28,58) */
-html[data-theme="day"] [style*="background-color: rgb(28, 28, 58)"] {
-  background-color: var(--wr-info-bg) !important;
-}
-/* #083344 = cyan-dim tint */
-html[data-theme="day"] [style*="background-color: rgb(8, 51, 68)"] {
-  background-color: var(--wr-info-bg) !important;
-}
-
-/* Inputs and selects in day mode */
-html[data-theme="day"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-html[data-theme="day"] select,
-html[data-theme="day"] textarea {
-  background-color: var(--wr-surface) !important;
-  color: var(--wr-text) !important;
-  border-color: var(--wr-border) !important;
-}
-
-@keyframes wr-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.4; transform: scale(0.75); }
-}
-
-/* ── Swap Modal layer tokens — theme-aware panel / divider colors ─────────── */
-:root,
-html[data-theme="night"] {
-  --wr-swap-panel-a: #2E2E2E;          /* sell / allocate panel */
-  --wr-swap-panel-b: #2A2A2A;          /* buy / to-buy panel */
-  --wr-swap-panel-c: #1E1E1E;          /* token picker overlay (deepest) */
-  --wr-swap-body:    #282828;          /* recurring summary expanded body */
-  --wr-swap-sep:     #383838;          /* dividers, card border, separators */
-  --wr-swap-pill:    rgba(255,255,255,0.1);  /* token selector pill bg */
-}
-html[data-theme="day"] {
-  --wr-swap-panel-a: #F2F2EE;
-  --wr-swap-panel-b: #EAEAE6;
-  --wr-swap-panel-c: #F8F8F5;          /* token picker (lighter = feels on-top) */
-  --wr-swap-body:    #E6E6E2;
-  --wr-swap-sep:     #D4D4CE;
-  --wr-swap-pill:    rgba(0,0,0,0.07);
-}
-
-/* ── Swap Modal: fix global input overrides that break transparent inputs ── */
-/* The root rule forces background-color !important; override it for the modal */
-html[data-theme="day"] .wr-swap-modal input:not([type="checkbox"]):not([type="radio"]),
-html[data-theme="day"] .wr-swap-modal textarea {
-  background-color: transparent !important;
-  border-color: var(--wr-swap-sep) !important;
-  color: var(--wr-text) !important;
-}
-html[data-theme="day"] .wr-swap-modal input::placeholder,
-html[data-theme="day"] .wr-swap-modal textarea::placeholder {
-  color: var(--wr-text-3) !important;
-  opacity: 1;
+.wr-skeleton {
+  background: linear-gradient(90deg, #161925 25%, #1D2130 50%, #161925 75%);
+  background-size: 400px 100%;
+  animation: wr-shimmer 1.2s ease-in-out infinite;
+  border-radius: 4px;
+  color: transparent !important;
 }

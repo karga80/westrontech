@@ -112,7 +112,8 @@ function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: 
   };
 }
 
-function pnlColor(n: number) { return n >= 0 ? 'var(--wr-accent)' : '#f87171'; }
+// Direction colour: green up / red down. Purple is brand-only, never data.
+function pnlColor(n: number) { return n >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)'; }
 function pnlText(n: number) {
   const abs = Math.abs(n).toLocaleString();
   return n >= 0 ? `+$${abs}` : `-$${abs}`;
@@ -214,7 +215,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
         </div>
 
         {error && (
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginBottom: '16px' }}>
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginBottom: '16px' }}>
             {error}
           </div>
         )}
@@ -227,7 +228,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
           }}>Cancel</button>
           <button onClick={handleSave} style={{
             flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-            color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+            color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
             padding: '11px 0', cursor: 'pointer',
           }}>Save Changes</button>
         </div>
@@ -333,10 +334,10 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
         </button>
         <button
           className="flex-1 h-full transition-colors cursor-pointer"
-          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
+          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2b070c'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
           onMouseDown={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? '#fecaca' : '#3d0f0f'; }}
-          onMouseUp={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; }}
+          onMouseUp={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2b070c'; }}
           onClick={onDelete}
           style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-danger)', backgroundColor: 'transparent', border: 'none', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
         >
@@ -433,7 +434,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
             <label style={LABEL}>Wallet Name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. Main Wallet"
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+              className="placeholder-[#232533] focus:border-[#7c5cff]"
               style={FIELD} />
           </div>
 
@@ -442,7 +443,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
               <label style={LABEL}>Private Key</label>
               <input type="password" value={key} onChange={e => setKey(e.target.value)}
                 placeholder="0x..."
-                className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+                className="placeholder-[#232533] focus:border-[#7c5cff]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
                 Your key never leaves this device. Stored in macOS Keychain.
@@ -453,7 +454,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
               <label style={LABEL}>Wallet Address</label>
               <input value={address} onChange={e => setAddress(e.target.value)}
                 placeholder="0x..."
-                className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+                className="placeholder-[#232533] focus:border-[#7c5cff]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
                 Watch-only wallets are read-only — no signing.
@@ -477,7 +478,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
               }}
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+                color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
                 padding: '11px 0', cursor: 'pointer',
               }}>{tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
           </div>
@@ -600,15 +601,15 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <div style={{
                     width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: active || done ? '#BEFF00' : 'var(--wr-overlay)',
+                    backgroundColor: active || done ? '#7c5cff' : 'var(--wr-overlay)',
                     border: `1px solid ${active || done ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-                    color: active || done ? '#000000' : 'var(--wr-text-3)',
+                    color: active || done ? '#0b0c14' : 'var(--wr-text-3)',
                   }}>{done ? '✓' : n}</div>
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? 'var(--wr-text)' : 'var(--wr-text-3)' }}>{label}</span>
                 </div>
-                {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#BEFF00' : 'var(--wr-border)', margin: '0 10px' }} />}
+                {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', margin: '0 10px' }} />}
               </React.Fragment>
             );
           })}
@@ -693,10 +694,10 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                       <div className="flex items-center gap-2" style={{ marginBottom: '3px' }}>
                         <div style={{
                           width: '13px', height: '13px', flexShrink: 0,
-                          backgroundColor: isChecked ? '#BEFF00' : 'transparent',
+                          backgroundColor: isChecked ? '#7c5cff' : 'transparent',
                           border: `1px solid ${isChecked ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '8px', color: '#000000',
+                          fontSize: '8px', color: '#0b0c14',
                         }}>{isChecked ? '✓' : ''}</div>
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
                       </div>
@@ -717,8 +718,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                       <button key={m} onClick={() => setAmountMode(m)} style={{
                         fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
                         padding: '3px 10px',
-                        backgroundColor: amountMode === m ? '#BEFF00' : 'var(--wr-surface-alt)',
-                        color: amountMode === m ? '#000000' : 'var(--wr-text-3)',
+                        backgroundColor: amountMode === m ? '#7c5cff' : 'var(--wr-surface-alt)',
+                        color: amountMode === m ? '#0b0c14' : 'var(--wr-text-3)',
                         border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px',
                       }}>{m === 'equal' ? 'Equal' : 'Custom'}</button>
                     ))}
@@ -730,7 +731,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
                     <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
                       <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                        placeholder="0.00" className="placeholder-[#3a3a3a]" style={AMOUNT_INPUT} />
+                        placeholder="0.00" className="placeholder-[#232533]" style={AMOUNT_INPUT} />
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>
                         <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle' }} />
                       </span>
@@ -743,7 +744,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)' }}>{w.name}</span>
                         <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
                           <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                            placeholder="0.00" className="placeholder-[#3a3a3a]" style={{ ...AMOUNT_INPUT, width: '70px' }} />
+                            placeholder="0.00" className="placeholder-[#232533]" style={{ ...AMOUNT_INPUT, width: '70px' }} />
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px' }}>
                             <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle' }} />
                           </span>
@@ -764,8 +765,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               }}>Cancel</button>
               <button onClick={() => step1Valid && setStep(2)} style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: step1Valid ? '#000000' : 'var(--wr-text-4)',
-                backgroundColor: step1Valid ? '#BEFF00' : 'var(--wr-overlay)',
+                color: step1Valid ? '#0b0c14' : 'var(--wr-text-4)',
+                backgroundColor: step1Valid ? '#7c5cff' : 'var(--wr-overlay)',
                 border: 'none', padding: '11px 0',
                 cursor: step1Valid ? 'pointer' : 'not-allowed',
               }}>
@@ -820,7 +821,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               }}>Back</button>
               <button onClick={() => setStep(3)} className="btn-cta" style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+                color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
                 padding: '11px 0', cursor: 'pointer',
               }}>Confirm & Send</button>
             </div>
@@ -839,7 +840,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
             </div>
             {selectedList.map((w, i) => {
               const status = txStatuses[i] ?? 'Pending';
-              const statusColor = status === 'Confirmed' ? 'var(--wr-accent)' : status === 'Processing' ? '#FBBF24' : 'var(--wr-text-3)';
+              const statusColor = status === 'Confirmed' ? 'var(--wr-accent)' : status === 'Processing' ? '#ffb020' : 'var(--wr-text-3)';
               return (
                 <div key={w.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
                   <div>
@@ -852,7 +853,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
             })}
             <button onClick={() => { setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); onClose(); }} style={{
               width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-              color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+              color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
               padding: '11px 0', cursor: 'pointer', marginTop: '8px',
             }}>Done</button>
           </div>
@@ -1063,7 +1064,7 @@ export default function Dashboard() {
         </h1>
       </div>
 
-      {/* Stat cards — gap-as-border: #1A1A1A bg, gap-px, cells #111111 */}
+      {/* Stat cards — gap-as-border: #14161f bg, gap-px, cells #14161f */}
       <div
         className="grid grid-cols-4 overflow-hidden gap-px"
         style={{ backgroundColor: 'var(--wr-border)', border: '1px solid var(--wr-border)' }}
@@ -1072,12 +1073,12 @@ export default function Dashboard() {
           {
             label: 'Total Portfolio',
             value: loadingData ? '—' : `$${(totalPortfolioUsd || 142834.92).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            valueColor: 'var(--wr-text)', subUp: true, subColor: 'var(--wr-accent)', sub: loadingData ? 'Loading…' : 'Across all wallets',
+            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: loadingData ? 'Loading…' : 'Across all wallets',
           },
           {
             label: '7D PnL',
             value: pnl7d >= 0 ? `+$${pnl7d.toLocaleString()}` : `-$${Math.abs(pnl7d).toLocaleString()}`,
-            valueColor: pnl7d >= 0 ? 'var(--wr-accent)' : '#f87171', subUp: pnl7d >= 0, subColor: pnl7d >= 0 ? 'var(--wr-accent)' : '#f87171', sub: '+6.10% vs last week',
+            valueColor: pnl7d >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)', subUp: pnl7d >= 0, subColor: pnl7d >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)', sub: '+6.10% vs last week',
           },
           {
             label: 'Wallets',
@@ -1129,7 +1130,7 @@ export default function Dashboard() {
               className="btn-cta"
               style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600,
-                color: '#000000', backgroundColor: '#BEFF00',
+                color: '#0b0c14', backgroundColor: '#7c5cff',
                 padding: '6px 14px', border: 'none', borderRadius: 0, cursor: 'pointer',
               }}
             >
@@ -1182,12 +1183,12 @@ export default function Dashboard() {
             style={{ gridTemplateColumns: TX_GRID, height: '40px', backgroundColor: 'var(--wr-bg)', borderBottom: '1px solid var(--wr-border)', padding: '0 20px' }}
           >
             {['Tx Hash', 'Type', 'Block', 'Age', 'From', '', 'To', 'Token', 'Amount', 'Gas Fee'].map((h, i) => (
-              <span key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: '#71717A', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</span>
+              <span key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: '#6e7590', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</span>
             ))}
           </div>
 
           {/* Rows */}
-          <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#3a3a3a #0A0A0A' } : {}}>
+          <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#232533 #0b0c14' } : {}}>
           {(txExpanded ? displayTransactions : displayTransactions.slice(0, PREVIEW_COUNT)).map((tx, i) => (
             <div
               key={i}
@@ -1198,18 +1199,18 @@ export default function Dashboard() {
             >
               <div className="flex items-center min-w-0 pr-2" style={{ gap: '5px' }}>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.hash}</span>
-                <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: 'var(--wr-text-3)', lineHeight: 1, display: 'flex' }} className="hover:text-[#a1a1aa] transition-colors">
+                <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: 'var(--wr-text-3)', lineHeight: 1, display: 'flex' }} className="hover:text-[#9298b8] transition-colors">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </a>
               </div>
               <div><TxBadge type={tx.type} /></div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#3b82f6' }}>{tx.block}</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#5b7cfa' }}>{tx.block}</span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{tx.age}</span>
               <div className="flex items-center min-w-0 pr-1">
                 <AddrCell addr={tx.from} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px' }}>
-                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 4h10M8 1l3 3-3 3" stroke="#3a3a3a" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 4h10M8 1l3 3-3 3" stroke="#232533" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
               <div className="flex items-center min-w-0 pr-1">
                 <AddrCell addr={tx.to} />

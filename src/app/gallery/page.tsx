@@ -18,7 +18,7 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
   }, [onDismiss]);
 
   return (
-    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a1a] border border-[#1a1a1a] text-white text-sm px-5 py-3 rounded-[6px] shadow-xl">
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#14161f] border border-[#14161f] text-white text-sm px-5 py-3 rounded-[6px] shadow-xl">
       {message}
     </div>
   );
@@ -42,23 +42,23 @@ const ACTION_LABELS: Record<BulkAction, string> = {
 function ActionModal({ action, count, onConfirm, onCancel }: ActionModalProps) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-[#111111] border border-[#1a1a1a] rounded-[8px] p-6 max-w-md w-full mx-4">
+      <div className="bg-[#14161f] border border-[#14161f] rounded-[8px] p-6 max-w-md w-full mx-4">
         <h2 className="text-white font-semibold text-lg mb-2">{ACTION_LABELS[action]}</h2>
-        <p className="text-[#a1a1aa] text-sm mb-6">
+        <p className="text-[#9298b8] text-sm mb-6">
           You are about to <span className="text-white font-medium">{ACTION_LABELS[action].toLowerCase()}</span>{' '}
-          <span className="text-[#34d399] font-semibold">{count} NFT{count !== 1 ? 's' : ''}</span>.
+          <span className="text-[#4fe9b4] font-semibold">{count} NFT{count !== 1 ? 's' : ''}</span>.
           Transaction signing coming soon.
         </p>
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#1a1a1a] text-[#a1a1aa] hover:bg-[#222222] transition-colors"
+            className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#14161f] text-[#9298b8] hover:bg-[#14161f] transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#beff00] text-black hover:bg-[#beff00] transition-colors"
+            className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#7c5cff] text-black hover:bg-[#7c5cff] transition-colors"
           >
             Confirm
           </button>
@@ -78,31 +78,31 @@ interface BulkActionBarProps {
 
 function BulkActionBar({ count, onAction, onClear }: BulkActionBarProps) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-black border-t border-[#1a1a1a] px-8 py-4 flex items-center gap-4">
-      <span className="text-[#a1a1aa] text-sm font-medium mr-2">
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-black border-t border-[#14161f] px-8 py-4 flex items-center gap-4">
+      <span className="text-[#9298b8] text-sm font-medium mr-2">
         {count} NFT{count !== 1 ? 's' : ''} selected
       </span>
       <button
         onClick={() => onAction('list')}
-        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#beff00] text-black hover:bg-[#beff00] transition-colors"
+        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#7c5cff] text-black hover:bg-[#7c5cff] transition-colors"
       >
         List
       </button>
       <button
         onClick={() => onAction('cancel')}
-        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#fbbf24] text-black hover:opacity-90 transition-colors"
+        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#ffb020] text-black hover:opacity-90 transition-colors"
       >
         Cancel Listing
       </button>
       <button
         onClick={() => onAction('sweep')}
-        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#60a5fa] text-white hover:opacity-90 transition-colors"
+        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#90a6ff] text-white hover:opacity-90 transition-colors"
       >
         Sweep
       </button>
       <button
         onClick={onClear}
-        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#1a1a1a] text-[#a1a1aa] hover:bg-[#222222] transition-colors ml-auto"
+        className="px-4 py-1.5 rounded-[6px] text-sm font-medium bg-[#14161f] text-[#9298b8] hover:bg-[#14161f] transition-colors ml-auto"
       >
         Clear Selection
       </button>
@@ -255,7 +255,7 @@ setToastMessage('Transaction signing coming soon');
   const allSelected = displayNfts.length > 0 && selectedIds.size === displayNfts.length;
 
   return (
-    <main className="min-h-full bg-[#0a0a0a] text-white">
+    <main className="min-h-full bg-[#0b0c14] text-white">
       <div className={`px-12 py-8 ${selectedIds.size > 0 ? 'pb-24' : ''}`}>
         {/* Wallet input */}
         <div className="mb-6 flex gap-3">
@@ -264,10 +264,10 @@ setToastMessage('Transaction signing coming soon');
             value={address}
             onChange={e => setAddress(e.target.value)}
             placeholder="0x... wallet address"
-            className={`flex-1 bg-[#111111] border rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e6e6e] focus:outline-none transition-colors ${
+            className={`flex-1 bg-[#14161f] border rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e7590] focus:outline-none transition-colors ${
               address.length >= 3 && !isValidEthAddress(address)
-                ? 'border-[#f87171] focus:border-[#f87171]'
-                : 'border-[#1a1a1a] focus:border-[#beff00]'
+                ? 'border-[#ff8a96] focus:border-[#ff8a96]'
+                : 'border-[#14161f] focus:border-[#7c5cff]'
             }`}
           />
           <input
@@ -275,19 +275,19 @@ setToastMessage('Transaction signing coming soon');
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
             placeholder="Alchemy API key"
-            className="w-48 bg-[#111111] border border-[#1a1a1a] rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e6e6e] focus:outline-none focus:border-[#beff00]"
+            className="w-48 bg-[#14161f] border border-[#14161f] rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e7590] focus:outline-none focus:border-[#7c5cff]"
           />
           <button
             onClick={fetchNfts}
             disabled={loading}
-            className="bg-[#beff00] text-black font-semibold px-6 py-2 rounded-[6px] text-sm hover:opacity-90 disabled:opacity-50 transition-colors"
+            className="bg-[#7c5cff] text-black font-semibold px-6 py-2 rounded-[6px] text-sm hover:opacity-90 disabled:opacity-50 transition-colors"
           >
             {loading ? 'Loading...' : 'Load NFTs'}
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 bg-[#f8717111] border border-[#f87171]/30 rounded-[6px] px-4 py-3 text-[#f87171] text-sm">
+          <div className="mb-4 bg-[#ff4d5e11] border border-[#ff8a96]/30 rounded-[6px] px-4 py-3 text-[#ff8a96] text-sm">
             {error}
           </div>
         )}
@@ -296,15 +296,15 @@ setToastMessage('Transaction signing coming soon');
         {nfts.length > 0 && (
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <span className="text-[#a1a1aa] text-sm">
+              <span className="text-[#9298b8] text-sm">
                 <span className="text-white font-semibold">{displayNfts.length}</span>
                 {filterCollection ? ` / ${totalCount}` : ` NFTs`}
               </span>
-              <span className="text-[#404040] text-sm">{collections.length} collections</span>
+              <span className="text-[#2b2e3f] text-sm">{collections.length} collections</span>
               {/* Select All */}
               <button
                 onClick={handleSelectAll}
-                className="text-xs text-[#a1a1aa] hover:text-white transition-colors underline underline-offset-2"
+                className="text-xs text-[#9298b8] hover:text-white transition-colors underline underline-offset-2"
               >
                 {allSelected ? 'Deselect All' : 'Select All'}
               </button>
@@ -314,7 +314,7 @@ setToastMessage('Transaction signing coming soon');
               <select
                 value={filterCollection}
                 onChange={e => setFilterCollection(e.target.value)}
-                className="rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-[#beff00]"
+                className="rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-[#7c5cff]"
                 style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', color: 'var(--wr-text)' }}
               >
                 <option value="">All collections</option>
@@ -326,7 +326,7 @@ setToastMessage('Transaction signing coming soon');
               <select
                 value={sortKey}
                 onChange={e => setSortKey(e.target.value as SortKey)}
-                className="rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-[#beff00]"
+                className="rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-[#7c5cff]"
                 style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', color: 'var(--wr-text)' }}
               >
                 <option value="collection">Sort: Collection</option>
@@ -334,16 +334,16 @@ setToastMessage('Transaction signing coming soon');
                 <option value="name">Sort: Name</option>
               </select>
               {/* View toggle */}
-              <div className="flex border border-[#1a1a1a] rounded-[6px] overflow-hidden">
+              <div className="flex border border-[#14161f] rounded-[6px] overflow-hidden">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`px-3 py-1.5 text-sm transition-colors ${viewMode === 'grid' ? 'bg-[#1a1a1a] text-white' : 'text-[#6e6e6e] hover:text-white'}`}
+                  className={`px-3 py-1.5 text-sm transition-colors ${viewMode === 'grid' ? 'bg-[#14161f] text-white' : 'text-[#6e7590] hover:text-white'}`}
                 >
                   Grid
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 text-sm transition-colors ${viewMode === 'list' ? 'bg-[#1a1a1a] text-white' : 'text-[#6e6e6e] hover:text-white'}`}
+                  className={`px-3 py-1.5 text-sm transition-colors ${viewMode === 'list' ? 'bg-[#14161f] text-white' : 'text-[#6e7590] hover:text-white'}`}
                 >
                   List
                 </button>
@@ -371,8 +371,8 @@ setToastMessage('Transaction signing coming soon');
 
         {/* List view */}
         {viewMode === 'list' && displayNfts.length > 0 && (
-          <div className="bg-[#111111] rounded-[8px] border border-[#1a1a1a] overflow-hidden">
-            <div className="grid grid-cols-12 px-4 py-2 text-xs text-[#6e6e6e] uppercase tracking-wider border-b border-[#1a1a1a]">
+          <div className="bg-[#14161f] rounded-[8px] border border-[#14161f] overflow-hidden">
+            <div className="grid grid-cols-12 px-4 py-2 text-xs text-[#6e7590] uppercase tracking-wider border-b border-[#14161f]">
               <div className="col-span-1"></div>
               <div className="col-span-1"></div>
               <div className="col-span-3">Name</div>
@@ -396,14 +396,14 @@ setToastMessage('Transaction signing coming soon');
 
         {/* Loading state */}
         {loading && (
-          <div className="text-center py-24 text-[#404040]">
+          <div className="text-center py-24 text-[#2b2e3f]">
             <p className="text-sm">Loading NFTs...</p>
           </div>
         )}
 
         {/* Empty state */}
         {!loading && nfts.length === 0 && (
-          <div className="text-center py-24 text-[#404040]">
+          <div className="text-center py-24 text-[#2b2e3f]">
             <p className="text-4xl mb-4">🖼</p>
             <p className="text-sm">Enter a wallet address to load your NFT gallery.</p>
           </div>
@@ -454,8 +454,8 @@ function NftCard({ nft, selected, onSelect }: NftCardProps) {
 
   return (
     <div
-      className={`bg-[#111111] rounded-[8px] border overflow-hidden hover:border-[#2a2a2a] transition-colors group relative ${
-        selected ? 'border-[#beff00]' : 'border-[#1a1a1a]'
+      className={`bg-[#14161f] rounded-[8px] border overflow-hidden hover:border-[#232533] transition-colors group relative ${
+        selected ? 'border-[#7c5cff]' : 'border-[#14161f]'
       }`}
     >
       {/* Checkbox */}
@@ -464,7 +464,7 @@ function NftCard({ nft, selected, onSelect }: NftCardProps) {
         aria-label={selected ? 'Deselect NFT' : 'Select NFT'}
         className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all ${
           selected
-            ? 'opacity-100 bg-[#beff00] border-[#beff00]'
+            ? 'opacity-100 bg-[#7c5cff] border-[#7c5cff]'
             : 'opacity-0 group-hover:opacity-100 bg-black/60 border-gray-400'
         }`}
       >
@@ -476,7 +476,7 @@ function NftCard({ nft, selected, onSelect }: NftCardProps) {
       </button>
 
       {/* Image */}
-      <div className="aspect-square bg-[#1a1a1a] relative overflow-hidden">
+      <div className="aspect-square bg-[#14161f] relative overflow-hidden">
         {imageUrl && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -486,13 +486,13 @@ function NftCard({ nft, selected, onSelect }: NftCardProps) {
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[#404040] text-3xl">
+          <div className="w-full h-full flex items-center justify-center text-[#2b2e3f] text-3xl">
             🖼
           </div>
         )}
         {/* Token type badge */}
         {nft.contract.token_type && (
-          <span className="absolute top-2 right-2 text-xs bg-black/60 text-[#a1a1aa] px-1.5 py-0.5 rounded">
+          <span className="absolute top-2 right-2 text-xs bg-black/60 text-[#9298b8] px-1.5 py-0.5 rounded">
             {nft.contract.token_type}
           </span>
         )}
@@ -500,12 +500,12 @@ function NftCard({ nft, selected, onSelect }: NftCardProps) {
 
       {/* Info */}
       <div className="p-3">
-        <p className="text-xs text-[#6e6e6e] truncate">{collectionName}</p>
+        <p className="text-xs text-[#6e7590] truncate">{collectionName}</p>
         <p className="text-sm font-medium truncate mt-0.5">
           {nft.name || `#${nft.token_id}`}
         </p>
         {floorPrice != null && (
-          <p className="text-xs text-[#34d399] mt-1">{floorPrice} ETH floor</p>
+          <p className="text-xs text-[#4fe9b4] mt-1">{floorPrice} ETH floor</p>
         )}
       </div>
     </div>
@@ -529,8 +529,8 @@ function NftListRow({ nft, selected, onSelect }: NftListRowProps) {
 
   return (
     <div
-      className={`grid grid-cols-12 px-4 py-3 items-center hover:bg-[#1a1a1a]/50 transition-colors border-b border-[#1a1a1a]/50 last:border-0 ${
-        selected ? 'bg-[#beff00]/5' : ''
+      className={`grid grid-cols-12 px-4 py-3 items-center hover:bg-[#14161f]/50 transition-colors border-b border-[#14161f]/50 last:border-0 ${
+        selected ? 'bg-[#7c5cff]/5' : ''
       }`}
     >
       {/* Checkbox column */}
@@ -540,8 +540,8 @@ function NftListRow({ nft, selected, onSelect }: NftListRowProps) {
           aria-label={selected ? 'Deselect NFT' : 'Select NFT'}
           className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
             selected
-              ? 'bg-[#beff00] border-[#beff00]'
-              : 'bg-transparent border-[#2a2a2a] hover:border-gray-400'
+              ? 'bg-[#7c5cff] border-[#7c5cff]'
+              : 'bg-transparent border-[#232533] hover:border-gray-400'
           }`}
         >
           {selected && (
@@ -553,7 +553,7 @@ function NftListRow({ nft, selected, onSelect }: NftListRowProps) {
       </div>
       {/* Thumbnail column */}
       <div className="col-span-1">
-        <div className="w-8 h-8 rounded bg-[#1a1a1a] overflow-hidden">
+        <div className="w-8 h-8 rounded bg-[#14161f] overflow-hidden">
           {imageUrl && !imgError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -563,18 +563,18 @@ function NftListRow({ nft, selected, onSelect }: NftListRowProps) {
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-[#404040] text-xs">🖼</div>
+            <div className="w-full h-full flex items-center justify-center text-[#2b2e3f] text-xs">🖼</div>
           )}
         </div>
       </div>
       <div className="col-span-3 text-sm truncate pr-2">{nft.name || `#${nft.token_id}`}</div>
-      <div className="col-span-3 text-sm text-[#a1a1aa] truncate pr-2">{collectionName}</div>
-      <div className="col-span-2 text-xs text-[#6e6e6e] font-mono truncate">#{nft.token_id}</div>
+      <div className="col-span-3 text-sm text-[#9298b8] truncate pr-2">{collectionName}</div>
+      <div className="col-span-2 text-xs text-[#6e7590] font-mono truncate">#{nft.token_id}</div>
       <div className="col-span-2 text-right text-sm">
         {floorPrice != null ? (
-          <span className="text-[#34d399]">{floorPrice} ETH</span>
+          <span className="text-[#4fe9b4]">{floorPrice} ETH</span>
         ) : (
-          <span className="text-[#404040]">—</span>
+          <span className="text-[#2b2e3f]">—</span>
         )}
       </div>
     </div>

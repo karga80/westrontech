@@ -23,12 +23,12 @@ function shortenAddress(addr: string): string {
 
 function formatPnl(value: number): { text: string; className: string } {
   if (value > 0) {
-    return { text: `+${value.toFixed(4)} ETH`, className: 'text-[#34d399]' };
+    return { text: `+${value.toFixed(4)} ETH`, className: 'text-[#4fe9b4]' };
   }
   if (value < 0) {
-    return { text: `${value.toFixed(4)} ETH`, className: 'text-[#f87171]' };
+    return { text: `${value.toFixed(4)} ETH`, className: 'text-[#ff8a96]' };
   }
-  return { text: `${value.toFixed(4)} ETH`, className: 'text-[#a1a1aa]' };
+  return { text: `${value.toFixed(4)} ETH`, className: 'text-[#9298b8]' };
 }
 
 export default function AnalyticsPage() {
@@ -95,16 +95,16 @@ export default function AnalyticsPage() {
 
   const addressInvalid = address.length >= 3 && !isValidEthAddress(address);
   const addressBorderClass = addressInvalid
-    ? 'border-[#f87171] focus:border-[#f87171]'
-    : 'border-[#1a1a1a] focus:border-[#beff00]';
+    ? 'border-[#ff8a96] focus:border-[#ff8a96]'
+    : 'border-[#14161f] focus:border-[#7c5cff]';
 
   return (
-    <main className="min-h-full bg-[#0a0a0a] text-white px-12 py-8">
+    <main className="min-h-full bg-[#0b0c14] text-white px-12 py-8">
 
       {/* Page header */}
       <div className="mb-6">
         <h1 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)' }}>Analytics & PnL</h1>
-        <p className="text-[#6e6e6e] text-[11px] mt-0.5">Track realized and unrealized performance across your wallets</p>
+        <p className="text-[#6e7590] text-[11px] mt-0.5">Track realized and unrealized performance across your wallets</p>
       </div>
 
       {/* Wallet + API key input */}
@@ -114,25 +114,25 @@ export default function AnalyticsPage() {
           value={address}
           onChange={e => setAddress(e.target.value)}
           placeholder="0x... wallet address"
-          className={`flex-1 bg-[#111111] border px-4 py-2 text-[13px] text-white placeholder-[#6e6e6e] focus:outline-none transition-colors ${addressBorderClass}`}
+          className={`flex-1 bg-[#14161f] border px-4 py-2 text-[13px] text-white placeholder-[#6e7590] focus:outline-none transition-colors ${addressBorderClass}`}
         />
         <input
           type="password"
           value={apiKey}
           onChange={e => setApiKey(e.target.value)}
           placeholder="Alchemy API key"
-          className="w-48 bg-[#111111] border border-[#1a1a1a] px-4 py-2 text-[13px] text-white placeholder-[#6e6e6e] focus:outline-none focus:border-[#beff00]"
+          className="w-48 bg-[#14161f] border border-[#14161f] px-4 py-2 text-[13px] text-white placeholder-[#6e7590] focus:outline-none focus:border-[#7c5cff]"
         />
         <button
           onClick={handleLoadAnalytics}
           disabled={loading}
-          className="bg-[#beff00] text-black font-semibold px-6 py-2 text-[13px] rounded-[6px] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          className="bg-[#7c5cff] text-black font-semibold px-6 py-2 text-[13px] rounded-[6px] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           style={{ fontFamily: 'var(--font-jetbrains)' }}
         >
           {loading ? 'Loading...' : 'Load Analytics'}
         </button>
         {!isTauri && (
-          <span className="flex items-center text-[#f59e0b] text-[11px] bg-[#f59e0b]/10 px-3 py-1 border border-[#f59e0b]/20">
+          <span className="flex items-center text-[#ffb020] text-[11px] bg-[#ffb020]/10 px-3 py-1 border border-[#ffb020]/20">
             Browser mode
           </span>
         )}
@@ -140,7 +140,7 @@ export default function AnalyticsPage() {
 
       {/* Error banner */}
       {error && (
-        <div className="mb-4 bg-[#f87171]/10 border border-[#f87171]/30 px-4 py-3 text-[#f87171] text-[13px]">
+        <div className="mb-4 bg-[#ff8a96]/10 border border-[#ff8a96]/30 px-4 py-3 text-[#ff8a96] text-[13px]">
           {error}
         </div>
       )}
@@ -153,7 +153,7 @@ export default function AnalyticsPage() {
           { label: 'NFT Count', value: snapshot ? String(snapshot.nft_count) : '—' },
           { label: 'ERC-20 Tokens', value: snapshot ? String(snapshot.token_count) : '—' },
         ].map(({ label, value }) => (
-          <div key={label} className="bg-[#111111] border border-[#1a1a1a] p-6">
+          <div key={label} className="bg-[#14161f] border border-[#14161f] p-6">
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>{label}</p>
             <p className="text-[22px] font-bold">{value}</p>
           </div>
@@ -164,21 +164,21 @@ export default function AnalyticsPage() {
       <div className="mb-6">
         {/* Row 1 — 3 big stats */}
         <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="bg-[#111111] border border-[#1a1a1a] p-6">
+          <div className="bg-[#14161f] border border-[#14161f] p-6">
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Realized PnL</p>
             {pnl ? (() => {
               const { text, className } = formatPnl(pnl.realized_pnl_eth);
               return <p className={`text-[22px] font-bold ${className}`}>{text}</p>;
             })() : <p className="text-[22px] font-bold">—</p>}
           </div>
-          <div className="bg-[#111111] border border-[#1a1a1a] p-6">
+          <div className="bg-[#14161f] border border-[#14161f] p-6">
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Unrealized PnL</p>
             {pnl ? (() => {
               const { text, className } = formatPnl(pnl.unrealized_pnl_eth);
               return <p className={`text-[22px] font-bold ${className}`}>{text}</p>;
             })() : <p className="text-[22px] font-bold">—</p>}
           </div>
-          <div className="bg-[#111111] border border-[#1a1a1a] p-6">
+          <div className="bg-[#14161f] border border-[#14161f] p-6">
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Total Volume</p>
             <p className="text-[22px] font-bold">
               {pnl ? `${(pnl.total_buy_volume_eth + pnl.total_sell_volume_eth).toFixed(4)} ETH` : '—'}
@@ -193,19 +193,19 @@ export default function AnalyticsPage() {
             { label: 'Total Trades', value: pnl ? String(pnl.trade_count) : '—' },
             { label: 'Gas Spent', value: pnl ? `${pnl.gas_spent_eth.toFixed(4)} ETH` : '—' },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-[#111111] border border-[#1a1a1a] p-5">
+            <div key={label} className="bg-[#14161f] border border-[#14161f] p-5">
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '6px' }}>{label}</p>
               <p className="text-[18px] font-bold">{value}</p>
             </div>
           ))}
-          <div className="bg-[#111111] border border-[#1a1a1a] p-5">
+          <div className="bg-[#14161f] border border-[#14161f] p-5">
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '6px' }}>Win / Loss</p>
             <p className="text-[18px] font-bold">
               {pnl ? (
                 <span>
-                  <span className="text-[#34d399]">{pnl.win_count}</span>
-                  <span className="text-[#6e6e6e]"> / </span>
-                  <span className="text-[#f87171]">{pnl.loss_count}</span>
+                  <span className="text-[#4fe9b4]">{pnl.win_count}</span>
+                  <span className="text-[#6e7590]"> / </span>
+                  <span className="text-[#ff8a96]">{pnl.loss_count}</span>
                 </span>
               ) : '—'}
             </p>
@@ -214,16 +214,16 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Trade History Table */}
-      <div className="bg-[#111111] border border-[#1a1a1a] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#1a1a1a] flex items-center justify-between">
-          <h2 className="text-[11px] font-semibold text-[#a1a1aa] uppercase tracking-wider">Trade History</h2>
+      <div className="bg-[#14161f] border border-[#14161f] overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#14161f] flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold text-[#9298b8] uppercase tracking-wider">Trade History</h2>
           {trades.length > 0 && (
-            <span className="text-[11px] text-[#6e6e6e]">{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
+            <span className="text-[11px] text-[#6e7590]">{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
           )}
         </div>
 
         {/* Table header */}
-        <div className="grid grid-cols-12 px-6 py-2 text-[10px] text-[#6e6e6e] uppercase tracking-wider border-b border-[#1a1a1a]">
+        <div className="grid grid-cols-12 px-6 py-2 text-[10px] text-[#6e7590] uppercase tracking-wider border-b border-[#14161f]">
           <div className="col-span-3">Contract</div>
           <div className="col-span-2">Token ID</div>
           <div className="col-span-2">Buy Price</div>
@@ -234,43 +234,43 @@ export default function AnalyticsPage() {
 
         {/* Empty/loading states */}
         {loaded && trades.length === 0 && (
-          <div className="px-6 py-12 text-center text-[#6e6e6e] text-[13px]">
+          <div className="px-6 py-12 text-center text-[#6e7590] text-[13px]">
             No trade history found.
           </div>
         )}
 
         {!loaded && !loading && (
-          <div className="px-6 py-12 text-center text-[#6e6e6e] text-[13px]">
+          <div className="px-6 py-12 text-center text-[#6e7590] text-[13px]">
             Enter a wallet address and API key, then click Load Analytics.
           </div>
         )}
 
         {loading && (
-          <div className="px-6 py-12 text-center text-[#6e6e6e] text-[13px]">
+          <div className="px-6 py-12 text-center text-[#6e7590] text-[13px]">
             Loading...
           </div>
         )}
 
         {/* Rows */}
         {trades.length > 0 && (
-          <div className="divide-y divide-[#1a1a1a]">
+          <div className="divide-y divide-[#14161f]">
             {trades.map((trade, i) => {
               const pnlDisplay = trade.pnl_eth != null ? formatPnl(trade.pnl_eth) : null;
               return (
                 <div
                   key={i}
-                  className="grid grid-cols-12 px-6 py-3 items-center hover:bg-[#1a1a1a]/50 transition-colors"
+                  className="grid grid-cols-12 px-6 py-3 items-center hover:bg-[#14161f]/50 transition-colors"
                 >
-                  <div className="col-span-3 font-mono text-[11px] text-[#6e6e6e]">
+                  <div className="col-span-3 font-mono text-[11px] text-[#6e7590]">
                     {shortenAddress(trade.contract_address)}
                   </div>
-                  <div className="col-span-2 text-[13px] text-[#a1a1aa]">
+                  <div className="col-span-2 text-[13px] text-[#9298b8]">
                     #{trade.token_id}
                   </div>
-                  <div className="col-span-2 text-[13px] text-[#a1a1aa]">
+                  <div className="col-span-2 text-[13px] text-[#9298b8]">
                     {trade.buy_price_eth.toFixed(4)} ETH
                   </div>
-                  <div className="col-span-2 text-[13px] text-[#6e6e6e]">
+                  <div className="col-span-2 text-[13px] text-[#6e7590]">
                     {trade.sell_price_eth != null
                       ? `${trade.sell_price_eth.toFixed(4)} ETH`
                       : '—'}
@@ -279,16 +279,16 @@ export default function AnalyticsPage() {
                     {pnlDisplay ? (
                       <span className={pnlDisplay.className}>{pnlDisplay.text}</span>
                     ) : (
-                      <span className="text-[#6e6e6e]">—</span>
+                      <span className="text-[#6e7590]">—</span>
                     )}
                   </div>
                   <div className="col-span-1 flex justify-end">
                     {trade.sell_price_eth != null ? (
-                      <span className="text-[10px] px-2 py-0.5 font-medium bg-[#2a2a2a] text-[#a1a1aa]">
+                      <span className="text-[10px] px-2 py-0.5 font-medium bg-[#232533] text-[#9298b8]">
                         SOLD
                       </span>
                     ) : (
-                      <span className="text-[10px] px-2 py-0.5 font-medium bg-[#60a5fa]/20 text-[#60a5fa]">
+                      <span className="text-[10px] px-2 py-0.5 font-medium bg-[#90a6ff]/20 text-[#90a6ff]">
                         HOLDING
                       </span>
                     )}

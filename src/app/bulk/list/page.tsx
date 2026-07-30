@@ -15,7 +15,7 @@ import { Tag, type TagVariant } from '@/components/Tag';
 
 type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'Confirmed' | 'Failed';
 
-const COL_COLORS = ['#f59e0b', '#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#06b6d4', '#ec4899'];
+const COL_COLORS = ['#ffb020', '#ff8a96', '#90a6ff', '#4fe9b4', '#a78bfa', '#ffb020', '#2fc4d6', '#ec4899'];
 
 function ownedNftToNFT(nft: OwnedNft, idx: number, walletId: string): NFT {
   const colName = nft.contract.opensea_collection_name || nft.contract.name || nft.contract.address;
@@ -47,21 +47,21 @@ interface NFT {
 }
 
 const STATIC_NFTS: NFT[] = [
-  { id: 1,  name: 'BAYC #3291',      collection: 'Bored Ape YC',  collectionColor: '#f59e0b', wallet: 'main', floor: 23.5, rank: '892',  emoji: '🦍', listed: false, listedPrice: null },
-  { id: 2,  name: 'BAYC #7421',      collection: 'Bored Ape YC',  collectionColor: '#f59e0b', wallet: 'main', floor: 23.5, rank: '1204', emoji: '🦍', listed: false, listedPrice: null },
-  { id: 3,  name: 'Azuki #1108',     collection: 'Azuki',          collectionColor: '#f87171', wallet: 'main', floor: 34.2, rank: '340',  emoji: '⛩', listed: true,  listedPrice: '35.0 ETH' },
-  { id: 4,  name: 'Doodles #3921',   collection: 'Doodles',        collectionColor: '#60a5fa', wallet: 'main', floor: 2.9,  rank: '5821', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 5,  name: 'Doodles #8042',   collection: 'Doodles',        collectionColor: '#60a5fa', wallet: 'main', floor: 2.9,  rank: '3244', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 6,  name: 'Pudgy #8234',     collection: 'Pudgy Penguins', collectionColor: '#34d399', wallet: 'main', floor: 4.5,  rank: '340',  emoji: '🐧', listed: false, listedPrice: null },
-  { id: 15, name: 'Doodles #0512',   collection: 'Doodles',        collectionColor: '#60a5fa', wallet: 'main', floor: 2.9,  rank: '512',  emoji: '🌈', listed: true,  listedPrice: '3.2 ETH' },
-  { id: 7,  name: 'Azuki #4492',     collection: 'Azuki',          collectionColor: '#f87171', wallet: 'defi', floor: 34.2, rank: '582',  emoji: '⛩', listed: false, listedPrice: null },
+  { id: 1,  name: 'BAYC #3291',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'main', floor: 23.5, rank: '892',  emoji: '🦍', listed: false, listedPrice: null },
+  { id: 2,  name: 'BAYC #7421',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'main', floor: 23.5, rank: '1204', emoji: '🦍', listed: false, listedPrice: null },
+  { id: 3,  name: 'Azuki #1108',     collection: 'Azuki',          collectionColor: '#ff8a96', wallet: 'main', floor: 34.2, rank: '340',  emoji: '⛩', listed: true,  listedPrice: '35.0 ETH' },
+  { id: 4,  name: 'Doodles #3921',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '5821', emoji: '🌈', listed: false, listedPrice: null },
+  { id: 5,  name: 'Doodles #8042',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '3244', emoji: '🌈', listed: false, listedPrice: null },
+  { id: 6,  name: 'Pudgy #8234',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'main', floor: 4.5,  rank: '340',  emoji: '🐧', listed: false, listedPrice: null },
+  { id: 15, name: 'Doodles #0512',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '512',  emoji: '🌈', listed: true,  listedPrice: '3.2 ETH' },
+  { id: 7,  name: 'Azuki #4492',     collection: 'Azuki',          collectionColor: '#ff8a96', wallet: 'defi', floor: 34.2, rank: '582',  emoji: '⛩', listed: false, listedPrice: null },
   { id: 8,  name: 'Clonex #9912',    collection: 'Clonex',         collectionColor: '#a78bfa', wallet: 'defi', floor: 4.1,  rank: '1892', emoji: '🤖', listed: true,  listedPrice: '4.2 ETH' },
-  { id: 9,  name: 'Pudgy #9053',     collection: 'Pudgy Penguins', collectionColor: '#34d399', wallet: 'defi', floor: 4.5,  rank: '982',  emoji: '🐧', listed: false, listedPrice: null },
-  { id: 10, name: 'BAYC #9053',      collection: 'Bored Ape YC',  collectionColor: '#f59e0b', wallet: 'cold', floor: 23.5, rank: '421',  emoji: '🦍', listed: false, listedPrice: null },
-  { id: 11, name: 'Moonbirds #1847', collection: 'Moonbirds',      collectionColor: '#fbbf24', wallet: 'cold', floor: 1.8,  rank: '2847', emoji: '🦉', listed: false, listedPrice: null },
-  { id: 12, name: 'Moonbirds #4231', collection: 'Moonbirds',      collectionColor: '#fbbf24', wallet: 'cold', floor: 1.8,  rank: '4102', emoji: '🦉', listed: false, listedPrice: null },
-  { id: 13, name: 'Doodles #7291',   collection: 'Doodles',        collectionColor: '#60a5fa', wallet: 'cold', floor: 2.9,  rank: '6710', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 14, name: 'Pudgy #4492',     collection: 'Pudgy Penguins', collectionColor: '#34d399', wallet: 'cold', floor: 4.5,  rank: '173',  emoji: '🐧', listed: false, listedPrice: null },
+  { id: 9,  name: 'Pudgy #9053',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'defi', floor: 4.5,  rank: '982',  emoji: '🐧', listed: false, listedPrice: null },
+  { id: 10, name: 'BAYC #9053',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'cold', floor: 23.5, rank: '421',  emoji: '🦍', listed: false, listedPrice: null },
+  { id: 11, name: 'Moonbirds #1847', collection: 'Moonbirds',      collectionColor: '#ffb020', wallet: 'cold', floor: 1.8,  rank: '2847', emoji: '🦉', listed: false, listedPrice: null },
+  { id: 12, name: 'Moonbirds #4231', collection: 'Moonbirds',      collectionColor: '#ffb020', wallet: 'cold', floor: 1.8,  rank: '4102', emoji: '🦉', listed: false, listedPrice: null },
+  { id: 13, name: 'Doodles #7291',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'cold', floor: 2.9,  rank: '6710', emoji: '🌈', listed: false, listedPrice: null },
+  { id: 14, name: 'Pudgy #4492',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'cold', floor: 4.5,  rank: '173',  emoji: '🐧', listed: false, listedPrice: null },
 ];
 
 // Trait data per collection — each NFT gets a seeded slice based on id.
@@ -222,13 +222,13 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
             {done ? `Done — ${confirmed} listed, ${failed} failed` : `Listing ${nftIds.length} NFTs on ${marketplace}…`}
           </div>
           <div style={{ width: '360px', height: '3px', backgroundColor: 'var(--wr-border)' }}>
-            <div style={{ height: '100%', backgroundColor: '#BEFF00', width: `${(confirmed / nftIds.length) * 100}%`, transition: 'width 0.4s ease' }} />
+            <div style={{ height: '100%', backgroundColor: '#7c5cff', width: `${(confirmed / nftIds.length) * 100}%`, transition: 'width 0.4s ease' }} />
           </div>
         </div>
         {done && (
           <button onClick={() => { if (!calledDone.current) { calledDone.current = true; onDone(new Set(nftIds.filter(id => statuses[id] === 'Confirmed'))); } }}
             className="btn-cta"
-            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '10px 22px', cursor: 'pointer' }}>
+            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '10px 22px', cursor: 'pointer' }}>
             Done ✓
           </button>
         )}
@@ -236,10 +236,10 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
 
       <div className="flex gap-2 mb-5">
         {[
-          { l: 'Total', v: nftIds.length, c: '#FFFFFF', bg: '#111111', b: '#1A1A1A' },
-          { l: 'Confirmed', v: confirmed, c: '#34d399', bg: '#052e16', b: '#166534' },
-          { l: 'Processing', v: nftIds.length - confirmed - failed, c: '#60a5fa', bg: '#1c1c3a', b: '#3b3b6a' },
-          { l: 'Failed', v: failed, c: '#f87171', bg: '#450a0a', b: '#7f1d1d' },
+          { l: 'Total', v: nftIds.length, c: '#f2f2f7', bg: '#14161f', b: '#14161f' },
+          { l: 'Confirmed', v: confirmed, c: '#4fe9b4', bg: '#06251b', b: '#06251b' },
+          { l: 'Processing', v: nftIds.length - confirmed - failed, c: '#90a6ff', bg: '#1c1c3a', b: '#3b3b6a' },
+          { l: 'Failed', v: failed, c: '#ff8a96', bg: '#2b070c', b: '#2b070c' },
         ].map(ch => (
           <div key={ch.l} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: ch.c, backgroundColor: ch.bg, border: `1px solid ${ch.b}`, padding: '4px 12px', display: 'flex', gap: '5px' }}>
             <span style={{ fontWeight: 700 }}>{ch.v}</span><span style={{ opacity: 0.65 }}>{ch.l}</span>
@@ -248,7 +248,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
       </div>
 
       <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
-        <div className="grid px-4 py-2 border-b border-[#1A1A1A]"
+        <div className="grid px-4 py-2 border-b border-[#14161f]"
           style={{ gridTemplateColumns: '2fr 1.5fr 0.9fr 0.9fr 1fr 1.8fr', backgroundColor: 'var(--wr-surface)', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>
           <span>NFT</span><span>Collection</span><span>Price</span><span>Market</span><span>Status</span><span>Tx Hash</span>
         </div>
@@ -257,7 +257,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
           const hash = hashes[nft.id];
           const txPrefix: Record<TxStatus, string> = { Pending: '', Signing: '✏ ', Broadcasting: '↑ ', Confirmed: '✓ ', Failed: '✕ ' };
           return (
-            <div key={nft.id} className="grid px-4 py-3 border-b border-[#1A1A1A] last:border-b-0 items-center"
+            <div key={nft.id} className="grid px-4 py-3 border-b border-[#14161f] last:border-b-0 items-center"
               style={{ gridTemplateColumns: '2fr 1.5fr 0.9fr 0.9fr 1fr 1.8fr' }}>
               <div className="flex items-center gap-2">
                 <div style={{ width: '28px', height: '28px', backgroundColor: nft.collectionColor + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{nft.emoji}</div>
@@ -271,7 +271,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{marketplace}</span>
               <Tag variant={TX_STATUS_VARIANT[st]} dot={st === 'Pending'} size="xs">{txPrefix[st]}{st}</Tag>
               {hash
-                ? <a href={`https://etherscan.io/tx/${hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#3b82f6', textDecoration: 'none' }}>{hash} ↗</a>
+                ? <a href={`https://etherscan.io/tx/${hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#5b7cfa', textDecoration: 'none' }}>{hash} ↗</a>
                 : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-4)' }}>—</span>
               }
             </div>
@@ -448,7 +448,7 @@ export default function BulkListPage() {
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <Link href="/bulk" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Bulk Actions</Link>
         <span>›</span>
-        <span style={{ color: tracking ? 'var(--wr-accent)' : '#FFFFFF', cursor: tracking ? 'pointer' : 'default' }}
+        <span style={{ color: tracking ? 'var(--wr-accent)' : '#f2f2f7', cursor: tracking ? 'pointer' : 'default' }}
           onClick={() => tracking && setTracking(null)}>Bulk List</span>
         {tracking && <><span>›</span><span style={{ color: 'var(--wr-text)' }}>Tracking</span></>}
       </div>
@@ -471,9 +471,9 @@ export default function BulkListPage() {
                 <button key={w.id} onClick={() => toggleWallet(w.id)}
                   style={{
                     fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600,
-                    color: on ? '#000' : '#A1A1AA',
-                    backgroundColor: on ? '#BEFF00' : 'var(--wr-surface)',
-                    border: `1px solid ${on ? 'var(--wr-accent)' : '#2a2a2a'}`,
+                    color: on ? '#000' : '#9298b8',
+                    backgroundColor: on ? '#7c5cff' : 'var(--wr-surface)',
+                    border: `1px solid ${on ? 'var(--wr-accent)' : '#232533'}`,
                     padding: '4px 12px', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: '5px',
                   }}>
@@ -515,8 +515,8 @@ export default function BulkListPage() {
                       {/* Custom checkbox */}
                       <div style={{
                         width: '13px', height: '13px', flexShrink: 0,
-                        backgroundColor: isActive ? '#BEFF00' : 'transparent',
-                        border: `1.5px solid ${isActive ? '#BEFF00' : '#555'}`,
+                        backgroundColor: isActive ? '#7c5cff' : 'transparent',
+                        border: `1.5px solid ${isActive ? '#7c5cff' : '#555'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer',
                       }}>
@@ -567,7 +567,7 @@ export default function BulkListPage() {
                 const isListed  = nft.listed || listedNfts.has(nft.id);
                 const dispPrice = listedNfts.has(nft.id) ? listedPrices[nft.id] : nft.listedPrice;
                 const rankNum   = parseInt(nft.rank.replace(/,/g, ''));
-                const rankColor = rankNum < 500 ? '#f97316' : rankNum < 1500 ? '#60a5fa' : '#6E6E6E';
+                const rankColor = rankNum < 500 ? '#f97316' : rankNum < 1500 ? '#90a6ff' : '#6e7590';
                 const isFlipped = flippedCards.has(nft.id);
                 const traits    = getNftTraits(nft);
 
@@ -584,7 +584,7 @@ export default function BulkListPage() {
                         transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
                         transition: 'transform 0.42s ease',
                         borderRadius: '10px',
-                        border: `2px solid ${isSel ? 'var(--wr-accent)' : isListed ? '#166534' : '#1f1f1f'}`,
+                        border: `2px solid ${isSel ? 'var(--wr-accent)' : isListed ? '#06251b' : '#14161f'}`,
                         cursor: 'pointer',
                         minHeight: '260px',
                       }}
@@ -596,20 +596,20 @@ export default function BulkListPage() {
                         <div style={{ position: 'relative', aspectRatio: '1', backgroundColor: nft.collectionColor + '55', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{ fontSize: '52px', lineHeight: 1 }}>{nft.emoji}</span>
                           {/* ETH badge */}
-                          <div style={{ position: 'absolute', top: '8px', left: '8px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#1a1a1a99', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'var(--wr-text-2)' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle' }} /></div>
+                          <div style={{ position: 'absolute', top: '8px', left: '8px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#14161f99', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'var(--wr-text-2)' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle' }} /></div>
                           {/* Flip hint */}
-                          <div style={{ position: 'absolute', bottom: '6px', right: '7px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#ffffff33' }}>traits ↻</div>
+                          <div style={{ position: 'absolute', bottom: '6px', right: '7px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#f2f2f733' }}>traits ↻</div>
                           {/* Checkbox — stops propagation so it selects, not flips */}
                           {!isListed && (
                             <div onClick={e => { e.stopPropagation(); toggleNft(nft); }}
-                              style={{ position: 'absolute', top: '8px', right: '8px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: isSel ? '#BEFF00' : '#1a1a1a99', backdropFilter: 'blur(4px)', border: `1.5px solid ${isSel ? 'var(--wr-accent)' : '#ffffff33'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#000', fontWeight: 700 }}>
+                              style={{ position: 'absolute', top: '8px', right: '8px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: isSel ? '#7c5cff' : '#14161f99', backdropFilter: 'blur(4px)', border: `1.5px solid ${isSel ? 'var(--wr-accent)' : '#f2f2f733'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#000', fontWeight: 700 }}>
                               {isSel ? '✓' : ''}
                             </div>
                           )}
                           {/* Listed overlay */}
                           {isListed && (
-                            <div style={{ position: 'absolute', inset: 0, backgroundColor: '#052e1666', display: 'flex', alignItems: 'flex-end', padding: '8px' }}>
-                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', fontWeight: 700, color: '#34d399', backgroundColor: '#052e16cc', border: '1px solid #166534', padding: '2px 6px', letterSpacing: '1px' }}>LISTED</span>
+                            <div style={{ position: 'absolute', inset: 0, backgroundColor: '#06251b66', display: 'flex', alignItems: 'flex-end', padding: '8px' }}>
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', fontWeight: 700, color: '#4fe9b4', backgroundColor: '#06251bcc', border: '1px solid #06251b', padding: '2px 6px', letterSpacing: '1px' }}>LISTED</span>
                             </div>
                           )}
                         </div>
@@ -624,12 +624,12 @@ export default function BulkListPage() {
                           </div>
                           <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nft.collection}</div>
                           {isListed ? (
-                            <><div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#34d399', marginBottom: '1px' }}>Listed</div><div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#34d399' }}>{dispPrice}</div></>
+                            <><div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#4fe9b4', marginBottom: '1px' }}>Listed</div><div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#4fe9b4' }}>{dispPrice}</div></>
                           ) : isSel ? (
                             <><div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-accent)', marginBottom: '3px' }}>List price</div>
                             <div onClick={e => e.stopPropagation()} className="flex items-center gap-1">
                               <input value={nftPrices[nft.id] ?? ''} onChange={e => setNftPricesMap(p => ({ ...p, [nft.id]: e.target.value }))} type="text" inputMode="decimal"
-                                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-accent)', backgroundColor: '#0a1a0a', border: '1px solid #BEFF0055', padding: '3px 6px', width: '100%', outline: 'none', borderRadius: '2px' }} />
+                                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-accent)', backgroundColor: '#0a1a0a', border: '1px solid #7c5cff55', padding: '3px 6px', width: '100%', outline: 'none', borderRadius: '2px' }} />
                               <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2, flexShrink: 0 }} />
                             </div></>
                           ) : (
@@ -657,9 +657,9 @@ export default function BulkListPage() {
                         {/* Trait rows — 2-line layout: title on top, metrics below.
                             Row 2 is a 3-col equal grid so Rarity / Floor / Offer
                             columns line up pixel-perfect across every trait. */}
-                        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#3a3a3a #0A0A0A' }}>
+                        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#232533 #0b0c14' }}>
                           {traits.map((trait, i) => {
-                            const rc = trait.rarity < 5 ? '#f97316' : trait.rarity < 15 ? '#60a5fa' : '#71717A';
+                            const rc = trait.rarity < 5 ? '#f97316' : trait.rarity < 15 ? '#90a6ff' : '#6e7590';
                             const METRIC_LABEL = { fontFamily: 'var(--font-jetbrains)', fontSize: '7px', fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase' as const, color: '#555', lineHeight: 1 };
                             const METRIC_VALUE = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, lineHeight: 1.1, marginTop: '3px' } as const;
                             return (
@@ -704,7 +704,7 @@ export default function BulkListPage() {
 
       {/* Fixed bottom action bar */}
       {!tracking && (
-        <div style={{ position: 'fixed', bottom: 0, left: '240px', right: 0, backgroundColor: 'var(--wr-surface)', borderTop: '2px solid #BEFF0033', boxShadow: '0 -12px 40px rgba(0,0,0,0.7)', padding: '14px 40px', display: 'flex', alignItems: 'center', gap: '24px', zIndex: 50 }}>
+        <div style={{ position: 'fixed', bottom: 0, left: '240px', right: 0, backgroundColor: 'var(--wr-surface)', borderTop: '2px solid #7c5cff33', boxShadow: '0 -12px 40px rgba(0,0,0,0.7)', padding: '14px 40px', display: 'flex', alignItems: 'center', gap: '24px', zIndex: 50 }}>
 
           {/* Marketplace — multi-select */}
           <div>
@@ -743,8 +743,8 @@ export default function BulkListPage() {
                   fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600,
                   padding: '5px 14px', cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
                   backgroundColor: 'transparent',
-                  color: selected.size > 0 ? 'var(--wr-text)' : '#3a3a3a',
-                  border: `1px solid ${selected.size > 0 ? 'var(--wr-border)' : '#2a2a2a'}`,
+                  color: selected.size > 0 ? 'var(--wr-text)' : '#232533',
+                  border: `1px solid ${selected.size > 0 ? 'var(--wr-border)' : '#232533'}`,
                 }}>
                 Floor
               </button>
@@ -753,8 +753,8 @@ export default function BulkListPage() {
                   fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600,
                   padding: '5px 14px', cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
                   backgroundColor: 'transparent',
-                  color: selected.size > 0 ? 'var(--wr-text)' : '#3a3a3a',
-                  border: `1px solid ${selected.size > 0 ? 'var(--wr-border)' : '#2a2a2a'}`,
+                  color: selected.size > 0 ? 'var(--wr-text)' : '#232533',
+                  border: `1px solid ${selected.size > 0 ? 'var(--wr-border)' : '#232533'}`,
                 }}>
                 Trait Floor
               </button>
@@ -805,8 +805,8 @@ export default function BulkListPage() {
               className={selected.size > 0 ? 'btn-cta' : ''}
               style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: selected.size > 0 ? '#000' : '#3a3a3a',
-                backgroundColor: selected.size > 0 ? '#BEFF00' : 'var(--wr-overlay)',
+                color: selected.size > 0 ? '#000' : '#232533',
+                backgroundColor: selected.size > 0 ? '#7c5cff' : 'var(--wr-overlay)',
                 border: 'none', padding: '12px 28px',
                 cursor: selected.size > 0 ? 'pointer' : 'not-allowed',
               }}>

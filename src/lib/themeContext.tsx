@@ -1,10 +1,12 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect } from 'react';
 
+// Brand v2: dark theme is fixed. A light ("day") theme was removed per the
+// brand handoff. The context is kept (same `theme`/`toggle` shape) so existing
+// consumers don't break, but `theme` is permanently 'night' and `toggle` is a
+// no-op. Any `isDay ? … : …` branch in the app now always resolves to dark.
 export type Theme = 'night' | 'day';
-
-const STORAGE_KEY = 'wr-theme';
 
 interface ThemeCtx {
   theme: Theme;
@@ -14,25 +16,15 @@ interface ThemeCtx {
 const Ctx = createContext<ThemeCtx>({ theme: 'night', toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('night');
-
   useEffect(() => {
-    const stored = (localStorage.getItem(STORAGE_KEY) as Theme) ?? 'night';
-    setTheme(stored);
-    // Ensure the DOM attribute is always in sync with the stored value
-    document.documentElement.setAttribute('data-theme', stored);
+    // Clear any stale day-mode preference and pin the DOM to dark.
+    try {
+      localStorage.setItem('wr-theme', 'night');
+    } catch {}
+    document.documentElement.setAttribute('data-theme', 'night');
   }, []);
 
-  const toggle = () => {
-    setTheme(prev => {
-      const next: Theme = prev === 'night' ? 'day' : 'night';
-      localStorage.setItem(STORAGE_KEY, next);
-      document.documentElement.setAttribute('data-theme', next);
-      return next;
-    });
-  };
-
-  return <Ctx.Provider value={{ theme, toggle }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ theme: 'night', toggle: () => {} }}>{children}</Ctx.Provider>;
 }
 
 export function useTheme() {

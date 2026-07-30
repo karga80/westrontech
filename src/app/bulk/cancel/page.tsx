@@ -30,11 +30,11 @@ interface Order {
   status: OrderStatus;
 }
 
-const WALLET_COLORS = ['#06B6D4', '#a855f7', '#f59e0b'];
+const WALLET_COLORS = ['#2fc4d6', '#a855f7', '#ffb020'];
 const STATIC_WALLETS = [
-  { id: 'w1', label: 'Main Wallet',   color: '#06B6D4' },
+  { id: 'w1', label: 'Main Wallet',   color: '#2fc4d6' },
   { id: 'w2', label: 'Trading Vault', color: '#a855f7' },
-  { id: 'w3', label: 'Cold Storage',  color: '#f59e0b' },
+  { id: 'w3', label: 'Cold Storage',  color: '#ffb020' },
 ];
 
 const ORDERS: Order[] = [
@@ -205,7 +205,7 @@ export default function BulkCancelPage() {
 
         {/* Progress bar */}
         <div style={{ height: '3px', backgroundColor: 'var(--wr-border)', borderRadius: '2px', marginBottom: '32px', width: '100%' }}>
-          <div style={{ height: '100%', width: `${progress}%`, backgroundColor: '#F87171', borderRadius: '2px', transition: 'width 0.35s ease' }} />
+          <div style={{ height: '100%', width: `${progress}%`, backgroundColor: '#ff8a96', borderRadius: '2px', transition: 'width 0.35s ease' }} />
         </div>
 
         {/* Tx table */}
@@ -220,7 +220,7 @@ export default function BulkCancelPage() {
             </thead>
             <tbody>
               {txRows.map(row => (
-                <tr key={row.id} style={{ borderBottom: '1px solid #0f0f0f' }}>
+                <tr key={row.id} style={{ borderBottom: '1px solid #10121b' }}>
                   <td style={{ padding: '13px 16px', fontSize: '13px', color: 'var(--wr-text)', fontWeight: 500 }}>{row.nft}</td>
                   <td style={{ padding: '13px 16px' }}>
                     <Tag variant={row.type === 'Listing' ? 'accent' : 'info'} size="xs">{row.type}</Tag>
@@ -277,9 +277,9 @@ export default function BulkCancelPage() {
                 <div style={{ padding: '4px 16px 16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {(['All', 'Active', 'Expiring Soon', 'Expired'] as const).map(s => {
                     const on = statusFilter === s;
-                    const accent = s === 'Active' ? '#34d399' : s === 'Expiring Soon' ? '#fbbf24' : s === 'Expired' ? '#71717A' : undefined;
+                    const accent = s === 'Active' ? '#4fe9b4' : s === 'Expiring Soon' ? '#ffb020' : s === 'Expired' ? '#6e7590' : undefined;
                     return (
-                      <button key={s} onClick={() => setStatusFilter(s)} style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? '#3a3a3a' : '#1f1f1f'}`, backgroundColor: on ? '#1c1c1c' : 'transparent', color: on ? (accent ?? 'var(--wr-text)') : '#555' }}>
+                      <button key={s} onClick={() => setStatusFilter(s)} style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? '#232533' : '#14161f'}`, backgroundColor: on ? '#14161f' : 'transparent', color: on ? (accent ?? 'var(--wr-text)') : '#555' }}>
                         {s}
                       </button>
                     );
@@ -301,7 +301,7 @@ export default function BulkCancelPage() {
                   {(['All', 'Listing', 'Bid'] as const).map(t => {
                     const on = typeFilter === t;
                     return (
-                      <button key={t} onClick={() => setTypeFilter(t)} style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? '#3a3a3a' : '#1f1f1f'}`, backgroundColor: on ? '#1c1c1c' : 'transparent', color: on ? 'var(--wr-text)' : '#555' }}>
+                      <button key={t} onClick={() => setTypeFilter(t)} style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? '#232533' : '#14161f'}`, backgroundColor: on ? '#14161f' : 'transparent', color: on ? 'var(--wr-text)' : '#555' }}>
                         {t}
                       </button>
                     );
@@ -322,14 +322,14 @@ export default function BulkCancelPage() {
                 <div style={{ padding: '4px 16px 16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {/* All */}
                   <button onClick={() => setActiveWallets(new Set(wallets.map(w => w.id)))}
-                    style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: activeWallets.size === wallets.length ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${activeWallets.size === wallets.length ? '#3a3a3a' : '#1f1f1f'}`, backgroundColor: activeWallets.size === wallets.length ? '#1c1c1c' : 'transparent', color: activeWallets.size === wallets.length ? 'var(--wr-text)' : '#555' }}>
+                    style={{ padding: '5px 12px', borderRadius: '7px', fontSize: '11px', fontWeight: activeWallets.size === wallets.length ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${activeWallets.size === wallets.length ? '#232533' : '#14161f'}`, backgroundColor: activeWallets.size === wallets.length ? '#14161f' : 'transparent', color: activeWallets.size === wallets.length ? 'var(--wr-text)' : '#555' }}>
                     All
                   </button>
                   {wallets.map(w => {
                     const on = activeWallets.has(w.id);
                     return (
                       <button key={w.id} onClick={() => toggleWallet(w.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 600 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? w.color + '55' : '#1f1f1f'}`, backgroundColor: on ? w.color + '15' : 'transparent', color: on ? w.color : '#555' }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '7px', fontSize: '11px', fontWeight: on ? 600 : 400, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', border: `1px solid ${on ? w.color + '55' : '#14161f'}`, backgroundColor: on ? w.color + '15' : 'transparent', color: on ? w.color : '#555' }}>
                         <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: on ? w.color : '#333', flexShrink: 0 }} />
                         {w.label}
                       </button>
@@ -349,7 +349,7 @@ export default function BulkCancelPage() {
                 {/* Select all */}
                 <th style={{ padding: '7px 12px 7px 24px', width: '36px' }}>
                   <div onClick={toggleAll}
-                    style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${allSelected ? '#F87171' : '#333'}`, backgroundColor: allSelected ? '#F87171' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${allSelected ? '#ff8a96' : '#333'}`, backgroundColor: allSelected ? '#ff8a96' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     {allSelected && <span style={{ color: '#000', fontSize: '9px', lineHeight: 1 }}>✓</span>}
                   </div>
                 </th>
@@ -377,7 +377,7 @@ export default function BulkCancelPage() {
 
       {/* ── Bottom action bar ───────────────────────────────────────────────────── */}
       {selected.size > 0 && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40, backgroundColor: 'var(--wr-surface-alt)', borderTop: '1px solid #F8717133', boxShadow: '0 -8px 32px rgba(0,0,0,0.7)', padding: '0 32px', height: '68px', display: 'flex', alignItems: 'center', gap: '24px' }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40, backgroundColor: 'var(--wr-surface-alt)', borderTop: '1px solid #ff4d5e33', boxShadow: '0 -8px 32px rgba(0,0,0,0.7)', padding: '0 32px', height: '68px', display: 'flex', alignItems: 'center', gap: '24px' }}>
           <div style={{ display: 'flex', gap: '20px', flex: 1 }}>
             <div>
               <div style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Selected</div>
@@ -390,12 +390,12 @@ export default function BulkCancelPage() {
             </div>
             <div>
               <div style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bids</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#06B6D4' }}>{selectedOrders.filter(o => o.type === 'Bid').length}</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#2fc4d6' }}>{selectedOrders.filter(o => o.type === 'Bid').length}</div>
             </div>
             <div style={{ width: '1px', backgroundColor: 'var(--wr-border)' }} />
             <div>
               <div style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. Gas</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#F87171' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{gasEst}</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#ff8a96' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{gasEst}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -404,7 +404,7 @@ export default function BulkCancelPage() {
               Clear
             </button>
             <button onClick={cancel}
-              style={{ height: '40px', padding: '0 24px', borderRadius: '7px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, backgroundColor: '#F87171', color: '#000' }}>
+              style={{ height: '40px', padding: '0 24px', borderRadius: '7px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, backgroundColor: '#ff8a96', color: '#000' }}>
               ⊗ Cancel {selected.size} Order{selected.size !== 1 ? 's' : ''}
             </button>
           </div>
@@ -428,10 +428,10 @@ function OrderRow({ order: o, sel, wallet, onToggle }: {
 
   return (
     <tr onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onToggle}
-      style={{ borderBottom: '1px solid var(--wr-border)', backgroundColor: sel ? '#F871710A' : hover ? 'var(--wr-hover-bg)' : 'transparent', transition: 'background-color 0.1s', cursor: 'pointer' }}>
+      style={{ borderBottom: '1px solid var(--wr-border)', backgroundColor: sel ? '#ff4d5e0A' : hover ? 'var(--wr-hover-bg)' : 'transparent', transition: 'background-color 0.1s', cursor: 'pointer' }}>
       {/* Checkbox */}
       <td style={{ padding: '7px 12px 7px 24px' }}>
-        <div style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${sel ? '#F87171' : '#333'}`, backgroundColor: sel ? '#F87171' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: '13px', height: '13px', borderRadius: '3px', border: `1.5px solid ${sel ? '#ff8a96' : '#333'}`, backgroundColor: sel ? '#ff8a96' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {sel && <span style={{ color: '#000', fontSize: '9px', lineHeight: 1 }}>✓</span>}
         </div>
       </td>
@@ -456,12 +456,12 @@ function OrderRow({ order: o, sel, wallet, onToggle }: {
       {/* Price */}
       <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--wr-text)', whiteSpace: 'nowrap' }}>
         <EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{o.price}
-        <span style={{ fontSize: '10px', color: above ? '#34d399' : '#f87171', marginLeft: '6px' }}>{above ? '+' : ''}{diff}%</span>
+        <span style={{ fontSize: '10px', color: above ? '#4fe9b4' : '#ff8a96', marginLeft: '6px' }}>{above ? '+' : ''}{diff}%</span>
       </td>
       {/* Floor */}
       <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{o.floor}</td>
       {/* Expiry */}
-      <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: o.status === 'Expiring Soon' ? '#fbbf24' : '#555', whiteSpace: 'nowrap' }}>{o.expiry}</td>
+      <td style={{ padding: '7px 12px', textAlign: 'right', fontSize: '12px', color: o.status === 'Expiring Soon' ? '#ffb020' : '#555', whiteSpace: 'nowrap' }}>{o.expiry}</td>
       {/* Status */}
       <td style={{ padding: '7px 12px' }}>
         <Tag variant={ORDER_STATUS_VARIANT[o.status]} size="xs">{o.status}</Tag>

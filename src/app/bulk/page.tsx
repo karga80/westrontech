@@ -19,8 +19,8 @@ interface ActionCard {
 
 const CARDS: ActionCard[] = [
   {
-    accent: '#BEFF00',
-    icon: <EthIcon size={22} color="#BEFF00" />,
+    accent: '#7c5cff',
+    icon: <EthIcon size={22} color="#7c5cff" />,
     title: 'Bulk List',
     description: 'List your bulk NFTs to marketplaces simultaneously, at one price',
     features: [
@@ -33,8 +33,8 @@ const CARDS: ActionCard[] = [
     href: '/bulk/list',
   },
   {
-    accent: '#06B6D4',
-    icon: <span style={{fontSize:'22px',color:'#06B6D4'}}>⬆</span>,
+    accent: '#2fc4d6',
+    icon: <span style={{fontSize:'22px',color:'#2fc4d6'}}>⬆</span>,
     title: 'Bulk Bid',
     description: 'Place bids on multiple listings, for the best prices simultaneously',
     features: [
@@ -47,8 +47,8 @@ const CARDS: ActionCard[] = [
     href: '/bulk/bulk-bid',
   },
   {
-    accent: '#F87171',
-    icon: <span style={{fontSize:'22px',color:'#F87171'}}>✕</span>,
+    accent: '#ff8a96',
+    icon: <span style={{fontSize:'22px',color:'#ff8a96'}}>✕</span>,
     title: 'Bulk Cancel',
     description: 'Cancel multiple active bids or lists to both receive its payment/queue',
     features: [
@@ -131,7 +131,7 @@ export default function BuildPage() {
                 height: '48px',
                 borderRadius: '8px',
                 backgroundColor: card.accent,
-                color: '#0A0A0A',
+                color: '#0b0c14',
                 fontFamily: 'var(--font-jetbrains)',
                 fontSize: '14px',
                 fontWeight: 600,

@@ -105,18 +105,18 @@ const NFT_DATA: Record<string, Array<{
   neg: boolean; topPrice: string; vol24h: string; sales24h: number; supply: number; avgPa: string;
 }>> = {
   '0': [
-    { name: 'Bored Ape YC',   color: '#f59e0b', count: 6, floor: '23.5 ETH', change: '-7.3%',  neg: true,  topPrice: '24.8 ETH', vol24h: '142.5 ETH', sales24h: 0,  supply: 10000, avgPa: '14,998' },
-    { name: 'Azuki',          color: '#f87171', count: 3, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
-    { name: 'Doodles',        color: '#60a5fa', count: 3, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
+    { name: 'Bored Ape YC',   color: '#ffb020', count: 6, floor: '23.5 ETH', change: '-7.3%',  neg: true,  topPrice: '24.8 ETH', vol24h: '142.5 ETH', sales24h: 0,  supply: 10000, avgPa: '14,998' },
+    { name: 'Azuki',          color: '#ff8a96', count: 3, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
+    { name: 'Doodles',        color: '#90a6ff', count: 3, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
   ],
   '1': [
-    { name: 'Pudgy Penguins', color: '#34d399', count: 4, floor: '7.4 ETH',  change: '+0.4%',  neg: false, topPrice: '7.2 ETH',  vol24h: '42.6 ETH',  sales24h: 14, supply: 8888,  avgPa: '3,988' },
+    { name: 'Pudgy Penguins', color: '#4fe9b4', count: 4, floor: '7.4 ETH',  change: '+0.4%',  neg: false, topPrice: '7.2 ETH',  vol24h: '42.6 ETH',  sales24h: 14, supply: 8888,  avgPa: '3,988' },
     { name: 'Clonex',         color: '#a78bfa', count: 1, floor: '4.1 ETH',  change: '-1.1%',  neg: true,  topPrice: '4.8 ETH',  vol24h: '28.4 ETH',  sales24h: 9,  supply: 9534,  avgPa: '26,008' },
   ],
   '2': [
-    { name: 'Azuki',          color: '#f87171', count: 2, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
-    { name: 'Doodles',        color: '#60a5fa', count: 4, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
-    { name: 'Moonbirds',      color: '#fbbf24', count: 2, floor: '1.8 ETH',  change: '-5.2%',  neg: true,  topPrice: '2.1 ETH',  vol24h: '9.8 ETH',   sales24h: 5,  supply: 10000, avgPa: '8,420' },
+    { name: 'Azuki',          color: '#ff8a96', count: 2, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
+    { name: 'Doodles',        color: '#90a6ff', count: 4, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
+    { name: 'Moonbirds',      color: '#ffb020', count: 2, floor: '1.8 ETH',  change: '-5.2%',  neg: true,  topPrice: '2.1 ETH',  vol24h: '9.8 ETH',   sales24h: 5,  supply: 10000, avgPa: '8,420' },
   ],
 };
 
@@ -136,7 +136,7 @@ const TOKEN_DATA: Record<string, Array<{
   '1': [
     { name: 'Ethereum',    ticker: 'ETH',  color: '#627eea', verified: true,  walletCount: 2, heldValue: '$20,100', heldQty: '7.07',     price: '$2,842',  fdv: '$340B',  change1d: '+1.4%',  change7d: '+8.2%',   vol1d: '$14.2B' },
     { name: 'Binance Coin',ticker: 'BNB',  color: '#f3ba2f', verified: true,  walletCount: 1, heldValue: '$10,200', heldQty: '24.76',    price: '$412',    fdv: '$63B',   change1d: '-0.8%',  change7d: '+4.1%',   vol1d: '$1.8B'  },
-    { name: 'Curve DAO',   ticker: 'CRV',  color: '#3a3a3a', verified: false, walletCount: 1, heldValue: '$8,190',  heldQty: '15,166',   price: '$0.54',   fdv: '$540M',  change1d: '-3.4%',  change7d: '-12.1%',  vol1d: '$88M'   },
+    { name: 'Curve DAO',   ticker: 'CRV',  color: '#232533', verified: false, walletCount: 1, heldValue: '$8,190',  heldQty: '15,166',   price: '$0.54',   fdv: '$540M',  change1d: '-3.4%',  change7d: '-12.1%',  vol1d: '$88M'   },
   ],
   '2': [
     { name: 'Polygon',     ticker: 'MATIC',color: '#8247e5', verified: true,  walletCount: 2, heldValue: '$8,400',  heldQty: '10,769',   price: '$0.78',   fdv: '$7.8B',  change1d: '+2.1%',  change7d: '+2.0%',   vol1d: '$620M'  },
@@ -151,9 +151,9 @@ const TOKEN_DATA: Record<string, Array<{
 // ── Transactions per wallet ───────────────────────────────────────────────────
 
 const TX_STYLE = {
-  Receive: { bg: '#052e16', border: '#166534', text: '#34d399' },
-  Send:    { bg: '#450a0a', border: '#7f1d1d', text: '#f87171' },
-  Swap:    { bg: '#2a1800', border: '#4a3000', text: '#fbbf24' },
+  Receive: { bg: '#06251b', border: '#06251b', text: '#4fe9b4' },
+  Send:    { bg: '#2b070c', border: '#2b070c', text: '#ff8a96' },
+  Swap:    { bg: '#2a1800', border: '#2a1e05', text: '#ffb020' },
   NFT:     { bg: '#1a0a2e', border: '#3b1a5a', text: '#a855f7' },
 } as const;
 
@@ -222,12 +222,12 @@ function AreaChart({ walletId }: { walletId: string }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: '120px' }} preserveAspectRatio="none">
       <defs>
         <linearGradient id={`cg-${walletId}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#beff00" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#beff00" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#7c5cff" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <path d={areaPath} fill={`url(#cg-${walletId})`} />
-      <path d={linePath} fill="none" stroke="#beff00" strokeWidth="1.5" />
+      <path d={linePath} fill="none" stroke="#7c5cff" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -317,7 +317,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
     });
   };
 
-  const btnPrimary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
+  const btnPrimary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
   const btnSecondary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
   const inputStyle: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 10px', width: '100%', outline: 'none', boxSizing: 'border-box' };
 
@@ -349,7 +349,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                     <div style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{wallet.name}</div>
                     <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '380px' }}>{wallet.address}</div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: '#BEFF00', letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #BEFF00', padding: '2px 8px', flexShrink: 0 }}>Active</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: '#7c5cff', letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #7c5cff', padding: '2px 8px', flexShrink: 0 }}>Active</div>
                 </div>
               </div>
 
@@ -364,9 +364,9 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                         <div
                           key={w.id}
                           onClick={() => toggleWallet(w.id)}
-                          style={{ border: `1px solid ${isSel ? '#BEFF00' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+                          style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
                         >
-                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#BEFF00' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#BEFF00' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -405,15 +405,15 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                         <div
                           key={ab.id}
                           onClick={() => toggleAb(ab.id)}
-                          style={{ border: `1px solid ${isSel ? '#BEFF00' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+                          style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
                         >
-                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#BEFF00' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#BEFF00' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{ab.name}</span>
-                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                             </div>
                             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
                           </div>
@@ -469,7 +469,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                   </div>
                   <button
                     onClick={addExternal}
-                    style={{ marginTop: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#BEFF00', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                    style={{ marginTop: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#7c5cff', letterSpacing: '0.5px', textTransform: 'uppercase' }}
                   >
                     + Add another wallet
                   </button>
@@ -522,7 +522,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{ab.name}</div>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#BEFF00', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                         </div>
                         <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
                       </div>
@@ -558,7 +558,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
 
         {/* Right column — Monitor */}
         {hasMonitor && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#0a0a0a', maxHeight: '80vh' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#0b0c14', maxHeight: '80vh' }}>
             {/* Monitor header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>Monitor</span>
@@ -569,7 +569,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
             {/* Tx list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {txStatuses.map((tx, i) => {
-                const statusColor = tx.status === 'confirmed' ? '#34d399' : tx.status === 'failed' ? '#f87171' : tx.status === 'broadcasting' ? '#BEFF00' : '#a1a1aa';
+                const statusColor = tx.status === 'confirmed' ? '#4fe9b4' : tx.status === 'failed' ? '#ff8a96' : tx.status === 'broadcasting' ? '#7c5cff' : '#9298b8';
                 const statusLabel = tx.status === 'confirmed' ? 'Confirmed' : tx.status === 'failed' ? 'Failed' : tx.status === 'broadcasting' ? 'Broadcasting…' : 'Pending';
                 return (
                   <div key={i} style={{ border: '1px solid var(--wr-border)', padding: '10px 12px', backgroundColor: 'var(--wr-surface)' }}>
@@ -587,7 +587,7 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
                           href={`https://etherscan.io/tx/${tx.hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
+                          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#5b7cfa', display: 'flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
                         >
                           {tx.hash.slice(0, 10)}… <ExternalLinkIcon />
                         </a>
@@ -693,7 +693,7 @@ function AddressBookTab() {
           <button
             onClick={handleAdd}
             disabled={!nameInput.trim() || !isValidAddress(addressInput)}
-            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 18px', border: 'none', cursor: nameInput.trim() && isValidAddress(addressInput) ? 'pointer' : 'default', backgroundColor: nameInput.trim() && isValidAddress(addressInput) ? '#BEFF00' : 'rgba(255,255,255,0.06)', color: nameInput.trim() && isValidAddress(addressInput) ? '#000' : 'var(--wr-text-3)', whiteSpace: 'nowrap' }}
+            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '8px 18px', border: 'none', cursor: nameInput.trim() && isValidAddress(addressInput) ? 'pointer' : 'default', backgroundColor: nameInput.trim() && isValidAddress(addressInput) ? '#7c5cff' : 'rgba(255,255,255,0.06)', color: nameInput.trim() && isValidAddress(addressInput) ? '#000' : 'var(--wr-text-3)', whiteSpace: 'nowrap' }}
           >
             + Add
           </button>
@@ -732,16 +732,16 @@ function AddressBookTab() {
               </div>
               {/* Address */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#9298b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {entry.address.slice(0, 10)}…{entry.address.slice(-8)}
                 </span>
                 <button
                   onClick={() => handleCopy(entry.address)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: copied === entry.address ? '#BEFF00' : 'var(--wr-text-3)', flexShrink: 0 }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: copied === entry.address ? '#7c5cff' : 'var(--wr-text-3)', flexShrink: 0 }}
                   title="Copy address"
                 >
                   {copied === entry.address ? (
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 7L5 10L11 3" stroke="#BEFF00" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 7L5 10L11 3" stroke="#7c5cff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   ) : (
                     <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="4" y="1" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.3"/><path d="M1 4v8h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                   )}
@@ -768,7 +768,7 @@ function AddressBookTab() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                 {editingId === entry.id ? (
                   <>
-                    <button onClick={() => handleSaveEdit(entry.id)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.5px' }}>Save</button>
+                    <button onClick={() => handleSaveEdit(entry.id)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.5px' }}>Save</button>
                     <button onClick={() => setEditingId(null)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel</button>
                   </>
                 ) : (
@@ -779,7 +779,7 @@ function AddressBookTab() {
                     >Edit</button>
                     <button
                       onClick={() => handleDelete(entry.id)}
-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#f87171', background: 'none', border: '1px solid rgba(248,113,113,0.3)', padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.5px' }}
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', background: 'none', border: '1px solid rgba(248,113,113,0.3)', padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.5px' }}
                     >Delete</button>
                   </>
                 )}
@@ -825,7 +825,7 @@ const INPUT_SM: React.CSSProperties = {
 const BTN_LIME: React.CSSProperties = {
   fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
   letterSpacing: '1px', textTransform: 'uppercase', padding: '9px 20px',
-  border: 'none', cursor: 'pointer', backgroundColor: '#BEFF00', color: '#000',
+  border: 'none', cursor: 'pointer', backgroundColor: '#7c5cff', color: '#000',
 };
 const BTN_GHOST: React.CSSProperties = {
   fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500,
@@ -837,7 +837,7 @@ const BTN_GHOST: React.CSSProperties = {
 function NftThumb({ nft }: { nft: OwnedNft }) {
   const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
   return (
-    <div style={{ width: '36px', height: '36px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#1a1a1a', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: '36px', height: '36px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#14161f', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {thumb
         ? <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
         : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#555' }}>{(nft.name ?? '?')[0]}</span>}
@@ -969,7 +969,7 @@ function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: (
             : <>
                 <button onClick={onClose} style={BTN_GHOST}>Back</button>
                 <button onClick={handleCancel} disabled={stage === 'submitting'}
-                  style={{ ...BTN_LIME, backgroundColor: '#f87171', color: '#fff', opacity: stage === 'submitting' ? 0.7 : 1 }}>
+                  style={{ ...BTN_LIME, backgroundColor: '#ff8a96', color: '#fff', opacity: stage === 'submitting' ? 0.7 : 1 }}>
                   {stage === 'submitting' ? 'Cancelling…' : `Cancel ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
                 </button>
               </>
@@ -1014,7 +1014,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
                   <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{n.contract.opensea_collection_name || n.contract.name || n.contract.address.slice(0, 8)}</div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#34d399' }}>{offer} <span style={{ color: 'var(--wr-text-3)', fontWeight: 400 }}>ETH</span></div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#4fe9b4' }}>{offer} <span style={{ color: 'var(--wr-text-3)', fontWeight: 400 }}>ETH</span></div>
                   {floor && <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>Floor: {floor} ETH</div>}
                 </div>
               </div>
@@ -1023,7 +1023,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
           {totalEth > 0 && (
             <div style={{ marginTop: '4px', padding: '10px 14px', backgroundColor: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Total Proceeds</span>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, color: '#34d399' }}>{totalEth.toFixed(4)} ETH</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, color: '#4fe9b4' }}>{totalEth.toFixed(4)} ETH</span>
             </div>
           )}
           <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
@@ -1096,7 +1096,7 @@ function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; wall
               style={{ ...INPUT_SM, borderColor: toAddress && !isValid ? 'rgba(248,113,113,0.6)' : 'var(--wr-border-hover)' }}
             />
             {toAddress && !isValid && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#f87171', marginTop: '4px' }}>Invalid Ethereum address</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>Invalid Ethereum address</div>
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '4px 0' }}>
@@ -1125,7 +1125,7 @@ function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; wall
 // ── Live data helpers ─────────────────────────────────────────────────────────
 
 function groupNftsByCollection(owned: OwnedNft[]) {
-  const COLORS = ['#f59e0b', '#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#06b6d4'];
+  const COLORS = ['#ffb020', '#ff8a96', '#90a6ff', '#4fe9b4', '#a78bfa', '#ffb020', '#2fc4d6'];
   const map = new Map<string, { name: string; color: string; count: number; floor: string; change: string; neg: boolean; topPrice: string; vol24h: string; sales24h: number; supply: number; avgPa: string; }>();
   let ci = 0;
   for (const nft of owned) {
@@ -1297,7 +1297,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
   const topCols = TOP_COLLECTIONS[id] ?? [];
 
   return (
-    <main className="min-h-full bg-[#000000] text-white px-12 py-8">
+    <main className="min-h-full bg-[#0b0c14] text-white px-12 py-8">
 
       {/* Breadcrumb */}
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px', display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1328,7 +1328,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
             border: '1px solid var(--wr-border)', padding: '6px 12px', textDecoration: 'none',
             display: 'flex', alignItems: 'center', gap: '6px',
           }}
-          className="hover:text-[#a1a1aa] hover:border-[var(--wr-border-hover)] transition-colors"
+          className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
         >
           Etherscan <ExternalLinkIcon />
         </a>
@@ -1367,7 +1367,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
               { label: 'Total Value',    value: displayTotalValue,                           color: 'var(--wr-text)' },
               { label: 'Total NFTs',     value: String(displayNftCount),                     color: 'var(--wr-text)' },
               { label: 'Total Tokens',   value: String(displayTokenCount),                   color: 'var(--wr-text)' },
-              { label: 'Unrealized PnL', value: wallet.unrealizedPnl, color: wallet.pnlPos ? '#34d399' : '#f87171' },
+              { label: 'Unrealized PnL', value: wallet.unrealizedPnl, color: wallet.pnlPos ? '#4fe9b4' : '#ff8a96' },
             ].map(card => (
               <div key={card.label} style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
                 <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
@@ -1389,7 +1389,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                 </h2>
                 {selectedNfts.size > 0 && (
                   <>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#BEFF00', letterSpacing: '1px' }}>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#7c5cff', letterSpacing: '1px' }}>
                       {selectedNfts.size} selected
                     </span>
                     <button
@@ -1412,7 +1412,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                     type="checkbox"
                     checked={selectedNfts.size === (liveNfts?.length ?? 0) && (liveNfts?.length ?? 0) > 0}
                     onChange={e => setSelectedNfts(e.target.checked ? new Set((liveNfts ?? []).map(n => n.contract.address + n.token_id)) : new Set())}
-                    style={{ width: '14px', height: '14px', accentColor: '#BEFF00', cursor: 'pointer' }}
+                    style={{ width: '14px', height: '14px', accentColor: '#7c5cff', cursor: 'pointer' }}
                   />
                 </div>
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>
@@ -1457,12 +1457,12 @@ export default function WalletDetailClient({ id }: { id: string }) {
                           e.target.checked ? next.add(key) : next.delete(key);
                           return next;
                         })}
-                        style={{ width: '14px', height: '14px', accentColor: '#BEFF00', cursor: 'pointer' }}
+                        style={{ width: '14px', height: '14px', accentColor: '#7c5cff', cursor: 'pointer' }}
                       />
                     </div>
                     {/* NFT identity */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                      <div style={{ width: '36px', height: '36px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', backgroundColor: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: '36px', height: '36px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', backgroundColor: '#14161f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {thumb
                           ? <img src={thumb} alt={nft.name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                           : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#555' }}>{(nft.name ?? '?')[0]}</span>
@@ -1473,7 +1473,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }}>{collectionName}</span>
                           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-                            <circle cx="7" cy="7" r="7" fill="#2563eb"/>
+                            <circle cx="7" cy="7" r="7" fill="#5b7cfa"/>
                             <path d="M4 7L6 9L10 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         </div>
@@ -1487,11 +1487,11 @@ export default function WalletDetailClient({ id }: { id: string }) {
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52px' }}>{wallet.name.split(' ')[0]}</span>
                     </div>
                     {/* Listing Price */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>–</div>
                     {/* Rarity */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>–</div>
                     {/* Floor Price */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>
                       {floorPrice ? <>{floorPrice} <span style={{ color: 'var(--wr-text-3)' }}>ETH</span></> : '–'}
                     </div>
                     {/* Top Offer */}
@@ -1499,9 +1499,9 @@ export default function WalletDetailClient({ id }: { id: string }) {
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', border: '1px solid var(--wr-border)', padding: '2px 8px', whiteSpace: 'nowrap' }}>–</span>
                     </div>
                     {/* Cost */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>–</div>
                     {/* Received */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>–</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>–</div>
                   </div>
                 );
               })}
@@ -1511,9 +1511,9 @@ export default function WalletDetailClient({ id }: { id: string }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
                 <button
                   onClick={() => setShowNftEditModal(true)}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#5b3df0'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#7c5cff'; }}
                 >
                   Edit {selectedNfts.size} listing{selectedNfts.size !== 1 ? 's' : ''}
                 </button>
@@ -1591,8 +1591,8 @@ export default function WalletDetailClient({ id }: { id: string }) {
               {tokens.map(tok => {
                 const isSelected = selectedToken === tok.ticker;
                 const neutral = (v: string) => v === '0%' || v === '+0.0%' || v === '-0%';
-                const changeColor = (v: string) => neutral(v) ? 'var(--wr-text-3)' : v.startsWith('+') ? '#34d399' : '#f87171';
-                const AVATAR_COLORS = ['#627eea', '#f59e0b', '#34d399', '#a78bfa', '#f87171'];
+                const changeColor = (v: string) => neutral(v) ? 'var(--wr-text-3)' : v.startsWith('+') ? '#4fe9b4' : '#ff8a96';
+                const AVATAR_COLORS = ['#627eea', '#ffb020', '#4fe9b4', '#a78bfa', '#ff8a96'];
                 return (
                   <div
                     key={tok.ticker}
@@ -1611,7 +1611,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                         <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap' }}>{tok.ticker}</span>
                         {tok.verified && (
                           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-                            <circle cx="7" cy="7" r="7" fill="#2563eb"/>
+                            <circle cx="7" cy="7" r="7" fill="#5b7cfa"/>
                             <path d="M4 7L6 9L10 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         )}
@@ -1626,7 +1626,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                     {/* Held Value */}
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{tok.heldValue}</div>
                     {/* Held Qty */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>{tok.heldQty}</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{tok.heldQty}</div>
                     {/* Wallets - stacked avatars */}
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <div style={{ display: 'flex' }}>
@@ -1638,15 +1638,15 @@ export default function WalletDetailClient({ id }: { id: string }) {
                       </div>
                     </div>
                     {/* Price */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>{tok.price}</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{tok.price}</div>
                     {/* FDV */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>{tok.fdv}</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{tok.fdv}</div>
                     {/* 1D Change */}
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: changeColor(tok.change1d) }}>{tok.change1d}</div>
                     {/* 7D Change */}
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: changeColor(tok.change7d) }}>{tok.change7d}</div>
                     {/* 1D Vol */}
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>{tok.vol1d}</div>
+                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{tok.vol1d}</div>
                   </div>
                 );
               })}
@@ -1658,10 +1658,10 @@ export default function WalletDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)' }}>
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', flex: 1 }}>{selTok?.name ?? selectedToken} selected</span>
                   <button
-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#BEFF00', border: 'none', padding: '7px 14px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '7px 14px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' }}
                     onClick={() => setShowTransferModal(true)}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#5b3df0'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#7c5cff'; }}
                   >
                     Transfer
                   </button>
@@ -1702,17 +1702,17 @@ export default function WalletDetailClient({ id }: { id: string }) {
                 className="grid px-4 py-3.5 border-b border-[var(--wr-border)] last:border-b-0 hover:bg-[var(--wr-surface)] transition-colors items-center"
                 style={{ gridTemplateColumns: '1.8fr 0.8fr 1fr 0.8fr 1.4fr 1.4fr 0.8fr 0.8fr 1fr', columnGap: '16px' }}>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span style={{ color: '#3b82f6', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.hash}</span>
+                  <span style={{ color: '#5b7cfa', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.hash}</span>
                   <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
-                    style={{ flexShrink: 0, color: 'var(--wr-text-3)', display: 'flex' }} className="hover:text-[#a1a1aa] transition-colors">
+                    style={{ flexShrink: 0, color: 'var(--wr-text-3)', display: 'flex' }} className="hover:text-[#9298b8] transition-colors">
                     <ExternalLinkIcon />
                   </a>
                 </div>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: ts.text, backgroundColor: ts.bg, border: `1px solid ${ts.border}`, padding: '2px 8px', display: 'inline-block' }}>{tx.type}</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#3b82f6' }}>{tx.block}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#5b7cfa' }}>{tx.block}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>{tx.age}</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#A1A1AA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.from}</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#A1A1AA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.to}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#9298b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.from}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#9298b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.to}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>{tx.token}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>{tx.amount}</span>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>{tx.gas}</span>
@@ -1730,17 +1730,17 @@ export default function WalletDetailClient({ id }: { id: string }) {
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Total Action</p>
               <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>{wallet.analytics.totalAction}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#34d399', marginTop: '4px' }}>{wallet.analytics.actionPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginTop: '4px' }}>{wallet.analytics.actionPct}</p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Best Performer</p>
               <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700 }}>{wallet.analytics.bestPerformer}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#34d399', marginTop: '4px' }}>{wallet.analytics.bestPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginTop: '4px' }}>{wallet.analytics.bestPct}</p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Worst Performer</p>
               <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700 }}>{wallet.analytics.worstPerformer}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginTop: '4px' }}>{wallet.analytics.worstPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginTop: '4px' }}>{wallet.analytics.worstPct}</p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Avg Hold Time</p>
@@ -1760,8 +1760,8 @@ export default function WalletDetailClient({ id }: { id: string }) {
                   style={{
                     fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
                     padding: '4px 10px', cursor: 'pointer',
-                    backgroundColor: timeFilter === f ? '#BEFF00' : 'transparent',
-                    color: timeFilter === f ? '#000' : '#6e6e6e',
+                    backgroundColor: timeFilter === f ? '#7c5cff' : 'transparent',
+                    color: timeFilter === f ? '#000' : '#6e7590',
                     border: 'none',
                   }}>
                   {f}
@@ -1770,7 +1770,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
             </div>
             <div className="mb-2">
               <p style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 700 }}>{wallet.analytics.portfolioValue}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#34d399' }}>{wallet.analytics.portfolioChange} (USD)</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4' }}>{wallet.analytics.portfolioChange} (USD)</p>
             </div>
             <div className="mt-4">
               <AreaChart walletId={id} />
@@ -1808,7 +1808,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
                   <div key={col.name} className="flex items-center gap-3">
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', width: '16px', flexShrink: 0 }}>{i + 1}</span>
                     <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)', flex: 1 }}>{col.name}</span>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#a1a1aa' }}>{col.eth}</span>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{col.eth}</span>
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', width: '36px', textAlign: 'right' }}>{col.pct}%</span>
                   </div>
                 ))}

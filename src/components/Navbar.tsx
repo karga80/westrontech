@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { useTheme } from '@/lib/themeContext';
 import { loadSubscription, isSubscriptionActive } from '@/lib/subscriptionStore';
+import WestronLogo from '@/components/WestronLogo';
 
 const NAV_LINKS = [
   { label: 'Dashboard', href: '/',        pro: false },
@@ -14,56 +13,10 @@ const NAV_LINKS = [
 ];
 
 
-// ─── Theme Toggle (minimal icon) ────────────────────────────────────────────
-
-function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  const isDay = theme === 'day';
-
-  return (
-    <button
-      onClick={toggle}
-      aria-label={isDay ? 'Switch to night mode' : 'Switch to day mode'}
-      style={{
-        width: '28px',
-        height: '28px',
-        border: `1px solid ${isDay ? '#D8D8D2' : '#2a2a2a'}`,
-        backgroundColor: 'transparent',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        transition: 'border-color 0.2s',
-      }}
-    >
-      {isDay ? (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#888880" strokeWidth="2" strokeLinecap="round">
-          <circle cx="12" cy="12" r="4"/>
-          <line x1="12" y1="2"  x2="12" y2="5"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-          <line x1="2"  y1="12" x2="5"  y2="12"/>
-          <line x1="19" y1="12" x2="22" y2="12"/>
-          <line x1="4.22"  y1="4.22"  x2="6.34"  y2="6.34"/>
-          <line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
-          <line x1="4.22"  y1="19.78" x2="6.34"  y2="17.66"/>
-          <line x1="17.66" y1="6.34"  x2="19.78" y2="4.22"/>
-        </svg>
-      ) : (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6E6E6E" strokeWidth="2" strokeLinecap="round">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-        </svg>
-      )}
-    </button>
-  );
-}
-
 // ─── Navbar ─────────────────────────────────────────────────────────────────
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { theme } = useTheme();
-  const isDay = theme === 'day';
   const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
@@ -76,12 +29,12 @@ export default function Navbar() {
   const isSettings = pathname === '/settings';
   if (pathname === '/login') return null;
 
-  // Explicit color values — no CSS variable indirection
-  const NAV_BG      = isDay ? '#FFFFFF' : '#000000';
-  const NAV_BORDER  = isDay ? '#E8E8E3' : '#1A1A1A';
-  const NAV_TEXT    = isDay ? '#0D0D0D' : '#FFFFFF';
-  const NAV_MUTED   = isDay ? '#8A8A85' : '#6E6E6E';
-  const NAV_ACTIVE  = isDay ? '#3D6000' : 'var(--wr-accent)';
+  // Brand v2 dark shell (fixed theme)
+  const NAV_BG      = '#0b0c14';
+  const NAV_BORDER  = '#14161f';
+  const NAV_TEXT    = '#f2f2f7';
+  const NAV_MUTED   = '#6e7590';
+  const NAV_ACTIVE  = 'var(--wr-accent)';
 
   return (
     <header
@@ -96,24 +49,8 @@ export default function Navbar() {
     >
       {/* Left: Logo + nav */}
       <div className="flex items-center" style={{ gap: '40px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Image
-            src="/icon-source.png"
-            alt=""
-            width={900}
-            height={900}
-            style={{ height: '22px', width: 'auto', display: 'block' }}
-            priority
-          />
-          <span style={{
-            fontFamily: 'var(--font-bellota)',
-            fontSize: '18px',
-            fontWeight: 700,
-            letterSpacing: '4px',
-            color: NAV_TEXT,
-            textTransform: 'uppercase',
-            lineHeight: 1,
-          }}>WESTRON</span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <WestronLogo size={22} wordmark variant="gradient" wordColor={NAV_TEXT} />
         </div>
         <nav className="flex items-center" style={{ gap: '2px' }}>
           {NAV_LINKS.map((link) => {
@@ -155,9 +92,6 @@ export default function Navbar() {
 
       {/* Right */}
       <div className="ml-auto flex items-center" style={{ gap: '12px' }}>
-        {/* Day / Night toggle */}
-        <ThemeToggle />
-
         {(() => {
           // Settings icon — always visible
           const settingsIcon = (
@@ -191,14 +125,14 @@ export default function Navbar() {
             {isPro ? (
               <span style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700,
-                color: '#000000', backgroundColor: 'var(--wr-accent)',
+                color: '#0b0c14', backgroundColor: 'var(--wr-accent)',
                 padding: '3px 8px', letterSpacing: '1px', textTransform: 'uppercase',
                 flexShrink: 0,
               }}>PRO</span>
             ) : (
               <Link href="/settings" style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
-                color: isDay ? '#FFFFFF' : '#000000',
+                color: '#0b0c14',
                 backgroundColor: NAV_ACTIVE,
                 padding: '4px 12px', letterSpacing: '0.5px',
                 textDecoration: 'none', flexShrink: 0, whiteSpace: 'nowrap',

@@ -56,3 +56,4 @@ _junk/
 _deferred/_applied-*.patch
 _deferred/*.dead
 _deferred/*.lock
+_to_delete/

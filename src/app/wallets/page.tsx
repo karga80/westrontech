@@ -43,7 +43,8 @@ function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null): Wall
   };
 }
 
-function pnlColor(n: number) { return n >= 0 ? 'var(--wr-accent)' : '#f87171'; }
+// Direction colour: green up / red down. Purple is brand-only, never data.
+function pnlColor(n: number) { return n >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)'; }
 function pnlText(n: number) {
   const abs = Math.abs(n).toLocaleString();
   return n >= 0 ? `+$${abs}` : `-$${abs}`;
@@ -85,8 +86,8 @@ function DeleteModal({ wallet, onConfirm, onClose }: {
           <br />This does not delete the wallet — your funds remain safe.
         </p>
 
-        <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid #2d0a0a', padding: '10px 14px', marginBottom: '20px' }}>
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', lineHeight: '1.6' }}>
+        <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid #2b070c', padding: '10px 14px', marginBottom: '20px' }}>
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', lineHeight: '1.6' }}>
             If you imported a private key, it will be removed from macOS Keychain.
           </div>
         </div>
@@ -99,7 +100,7 @@ function DeleteModal({ wallet, onConfirm, onClose }: {
           }}>Cancel</button>
           <button onClick={onConfirm} style={{
             flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-            color: 'var(--wr-text)', backgroundColor: '#7f1d1d', border: '1px solid #f87171',
+            color: 'var(--wr-text)', backgroundColor: '#2b070c', border: '1px solid #ff8a96',
             padding: '11px 0', cursor: 'pointer',
           }}>Remove Wallet</button>
         </div>
@@ -148,7 +149,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             <button key={t} onClick={() => setTab(t)} style={{
               fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
               padding: '8px 16px', marginBottom: '-1px',
-              color: tab === t ? 'var(--wr-accent)' : '#6E6E6E',
+              color: tab === t ? 'var(--wr-accent)' : '#6e7590',
               background: 'none', border: 'none',
               borderBottom: tab === t ? '2px solid var(--wr-accent)' : '2px solid transparent',
               cursor: 'pointer',
@@ -161,7 +162,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             <label style={LABEL}>Wallet Name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. Main Wallet"
-              className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+              className="placeholder-[#232533] focus:border-[#7c5cff]"
               style={FIELD} />
           </div>
 
@@ -171,14 +172,14 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                 <label style={LABEL}>Wallet Address</label>
                 <input value={address} onChange={e => setAddress(e.target.value)}
                   placeholder="0x..."
-                  className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+                  className="placeholder-[#232533] focus:border-[#7c5cff]"
                   style={FIELD} />
               </div>
               <div>
                 <label style={LABEL}>Private Key</label>
                 <input type="password" value={key} onChange={e => setKey(e.target.value)}
                   placeholder="0x..."
-                  className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+                  className="placeholder-[#232533] focus:border-[#7c5cff]"
                   style={FIELD} />
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
                   Your key never leaves this device.
@@ -190,7 +191,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               <label style={LABEL}>Wallet Address</label>
               <input value={address} onChange={e => setAddress(e.target.value)}
                 placeholder="0x..."
-                className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
+                className="placeholder-[#232533] focus:border-[#7c5cff]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
                 Watch-only wallets are read-only — no signing.
@@ -205,7 +206,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               padding: '11px 0', cursor: 'pointer',
             }}>Cancel</button>
             {importError && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#f87171', marginTop: '-6px' }}>{importError}</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '-6px' }}>{importError}</div>
             )}
             <button
               disabled={importing}
@@ -236,7 +237,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               }}
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: '#000000', backgroundColor: importing ? '#8aaa00' : '#BEFF00', border: 'none',
+                color: '#0b0c14', backgroundColor: importing ? '#8aaa00' : '#7c5cff', border: 'none',
                 padding: '11px 0', cursor: importing ? 'not-allowed' : 'pointer',
               }}
             >{importing ? 'Importing…' : tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
@@ -326,7 +327,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
         </div>
 
         {error && (
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginBottom: '16px' }}>
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginBottom: '16px' }}>
             {error}
           </div>
         )}
@@ -339,7 +340,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
           }}>Cancel</button>
           <button onClick={handleSave} style={{
             flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-            color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+            color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
             padding: '11px 0', cursor: 'pointer',
           }}>Save Changes</button>
         </div>
@@ -414,15 +415,15 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                 <div className="flex items-center gap-2">
                   <div style={{
                     width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: active || done ? '#BEFF00' : 'var(--wr-overlay)',
+                    backgroundColor: active || done ? '#7c5cff' : 'var(--wr-overlay)',
                     border: `1px solid ${active || done ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-                    color: active || done ? '#000000' : 'var(--wr-text-3)',
+                    color: active || done ? '#0b0c14' : 'var(--wr-text-3)',
                   }}>{done ? '✓' : n}</div>
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? 'var(--wr-text)' : 'var(--wr-text-3)' }}>{label}</span>
                 </div>
-                {i < 2 && <div style={{ width: '28px', height: '1px', backgroundColor: done ? '#BEFF00' : 'var(--wr-border)', margin: '0 8px' }} />}
+                {i < 2 && <div style={{ width: '28px', height: '1px', backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', margin: '0 8px' }} />}
               </div>
             );
           })}
@@ -435,7 +436,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
               <label style={LABEL_S}>From (funding wallet)</label>
               <div style={{ position: 'relative' }}>
                 <select value={sourceId} onChange={e => { setSourceId(e.target.value); setSelected(s => { const n = new Set(s); n.delete(e.target.value); return n; }); }}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: sourceId ? '#FFFFFF' : '#6E6E6E', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 36px 10px 12px', width: '100%', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: sourceId ? '#f2f2f7' : '#6e7590', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 36px 10px 12px', width: '100%', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
                   <option value="" disabled>Choose a wallet…</option>
                   {wallets.map(w => <option key={w.id} value={w.id}>{w.name} — {w.address}</option>)}
                 </select>
@@ -450,8 +451,8 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                   {(['equal', 'custom'] as const).map(m => (
                     <button key={m} onClick={() => setAmountMode(m)} style={{
                       fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
-                      padding: '3px 10px', backgroundColor: amountMode === m ? '#BEFF00' : 'var(--wr-surface-alt)',
-                      color: amountMode === m ? '#000000' : 'var(--wr-text-3)', border: 'none', cursor: 'pointer', textTransform: 'uppercase',
+                      padding: '3px 10px', backgroundColor: amountMode === m ? '#7c5cff' : 'var(--wr-surface-alt)',
+                      color: amountMode === m ? '#0b0c14' : 'var(--wr-text-3)', border: 'none', cursor: 'pointer', textTransform: 'uppercase',
                     }}>{m === 'equal' ? 'Equal' : 'Custom'}</button>
                   ))}
                 </div>
@@ -462,7 +463,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
                   <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
                     <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                      placeholder="0.00" className="placeholder-[#3a3a3a]" style={AMOUNT_INPUT} />
+                      placeholder="0.00" className="placeholder-[#232533]" style={AMOUNT_INPUT} />
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>ETH</span>
                   </div>
                 </div>
@@ -478,14 +479,14 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                       padding: '8px 10px', cursor: sourceId ? 'pointer' : 'not-allowed',
                     }}>
                       <div className="flex items-center gap-2" style={{ marginBottom: '3px' }}>
-                        <div style={{ width: '13px', height: '13px', flexShrink: 0, backgroundColor: isChecked ? '#BEFF00' : 'transparent', border: `1px solid ${isChecked ? 'var(--wr-accent)' : '#3a3a3a'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#000000' }}>{isChecked ? '✓' : ''}</div>
+                        <div style={{ width: '13px', height: '13px', flexShrink: 0, backgroundColor: isChecked ? '#7c5cff' : 'transparent', border: `1px solid ${isChecked ? 'var(--wr-accent)' : '#232533'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#0b0c14' }}>{isChecked ? '✓' : ''}</div>
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
                       </div>
                       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginLeft: '19px' }}>{w.address}</div>
                       {amountMode === 'custom' && isChecked && (
                         <div className="flex items-center" style={{ marginTop: '6px', border: '1px solid var(--wr-border)' }} onClick={e => e.stopPropagation()}>
                           <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                            placeholder="0.00" className="placeholder-[#3a3a3a]" style={{ ...AMOUNT_INPUT, width: '100%', flex: 1 }} />
+                            placeholder="0.00" className="placeholder-[#232533]" style={{ ...AMOUNT_INPUT, width: '100%', flex: 1 }} />
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px', whiteSpace: 'nowrap' }}>ETH</span>
                         </div>
                       )}
@@ -497,7 +498,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
 
             <div style={{ display: 'flex', gap: '8px', paddingTop: '4px', borderTop: '1px solid var(--wr-border)' }}>
               <button onClick={onClose} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => step1Valid && setStep(2)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: step1Valid ? '#000000' : 'var(--wr-text-4)', backgroundColor: step1Valid ? '#BEFF00' : 'var(--wr-overlay)', border: 'none', padding: '11px 0', cursor: step1Valid ? 'pointer' : 'not-allowed' }}>
+              <button onClick={() => step1Valid && setStep(2)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: step1Valid ? '#0b0c14' : 'var(--wr-text-4)', backgroundColor: step1Valid ? '#7c5cff' : 'var(--wr-overlay)', border: 'none', padding: '11px 0', cursor: step1Valid ? 'pointer' : 'not-allowed' }}>
                 Review {selected.size > 0 ? `(${selected.size} wallet${selected.size > 1 ? 's' : ''})` : ''}
               </button>
             </div>
@@ -540,7 +541,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button onClick={() => setStep(1)} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>Back</button>
-              <button onClick={() => setStep(3)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000000', backgroundColor: '#BEFF00', border: 'none', padding: '11px 0', cursor: 'pointer' }}>Confirm & Send</button>
+              <button onClick={() => setStep(3)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none', padding: '11px 0', cursor: 'pointer' }}>Confirm & Send</button>
             </div>
           </div>
         )}
@@ -559,7 +560,7 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                   <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.address}</div>
                   <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>{getAmount(w.id)} ETH</div>
                 </div>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#FBBF24' : '#6E6E6E' }}>{i === 0 ? 'Processing' : 'Pending'}</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#ffb020' : '#6e7590' }}>{i === 0 ? 'Processing' : 'Pending'}</span>
               </div>
             ))}
             <button onClick={() => { setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); onClose(); }}
@@ -605,7 +606,7 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
         </div>
         <div className="flex items-center gap-1" style={{ marginBottom: '8px' }}>
           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{w.address}</span>
-          <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e6e6e] hover:text-[#a1a1aa] transition-colors flex">
+          <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </a>
         </div>
@@ -668,7 +669,7 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
         <button
           className="flex-1 h-full cursor-pointer"
           onClick={e => { e.preventDefault(); onDelete(); }}
-          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
+          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2b070c'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
           style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-danger)', backgroundColor: 'transparent', border: 'none', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
         >
@@ -781,11 +782,11 @@ export default function WalletsPage() {
               onClick={() => setShowAddWallet(true)}
               style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
-                color: '#000000', backgroundColor: '#BEFF00',
+                color: '#0b0c14', backgroundColor: '#7c5cff',
                 border: 'none', padding: '10px 20px', cursor: 'pointer',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#d4e800'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#BEFF00'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#5b3df0'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#7c5cff'; }}
             >
               + Add Wallet
             </button>
@@ -800,7 +801,7 @@ export default function WalletsPage() {
             <div style={{ width: '56px', height: '56px', border: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', color: 'var(--wr-text-4)' }}>◈</div>
             <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 500, color: 'var(--wr-text-3)' }}>No wallets yet</div>
             <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-4)' }}>Add a wallet to get started</div>
-            <button onClick={() => setShowAddWallet(true)} style={{ marginTop: '8px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#000000', backgroundColor: '#BEFF00', border: 'none', padding: '10px 24px', cursor: 'pointer' }}>
+            <button onClick={() => setShowAddWallet(true)} style={{ marginTop: '8px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none', padding: '10px 24px', cursor: 'pointer' }}>
               + Add Wallet
             </button>
           </div>
