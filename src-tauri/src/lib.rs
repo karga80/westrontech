@@ -10,6 +10,7 @@ mod signing;
 mod sniping;
 mod sister;
 mod subscription;
+mod pnl;
 
 use envelope::engine::EnvelopeEngine;
 use std::sync::Arc;
@@ -415,6 +416,23 @@ async fn check_subscription(wallet_address: String) -> subscription::Subscriptio
     subscription::evaluate(&wallet_address).await
 }
 
+// ── NFT PnL: locally-stored cost basis (recorded once from marketplace sales) ──
+
+#[tauri::command]
+async fn backfill_nft_cost_basis(wallet: String, api_key: String) -> Result<pnl::BackfillResult, String> {
+    pnl::backfill_cost_basis(&wallet, &api_key).await
+}
+
+#[tauri::command]
+async fn get_nft_pnl(wallet: String, api_key: String) -> Result<pnl::NftPnlSummary, String> {
+    pnl::compute(&wallet, &api_key).await
+}
+
+#[tauri::command]
+fn set_nft_cost_basis(wallet: String, contract: String, token_id: String, price_eth: f64) -> Result<(), String> {
+    pnl::set_manual_cost(&wallet, &contract, &token_id, price_eth)
+}
+
 // ── OpenSea API key commands ──────────────────────────────────────────────────
 
 #[tauri::command]
@@ -698,6 +716,9 @@ pub fn run() {
         load_etherscan_key,
         delete_etherscan_key_cmd,
         find_sister_wallets,
+        backfill_nft_cost_basis,
+        get_nft_pnl,
+        set_nft_cost_basis,
         get_nfts_for_owner,
         get_floor_price,
         create_alert,

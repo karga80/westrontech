@@ -71,16 +71,9 @@ const NFT_ITEMS = [
 ];
 
 // ── Mock trait filters ────────────────────────────────────────────────────────
-const MOCK_TRAITS = [
-  { name: 'Background', count: 18, values: ['Blue', 'Red', 'Green', 'Yellow', 'Pink', 'Orange', 'Purple', 'White', 'Black', 'Teal', 'Grey', 'Brown', 'Navy', 'Cream', 'Gold', 'Silver', 'Holographic', 'None'] },
-  { name: 'Body',       count: 6,  values: ['Normal', 'Ape', 'Alien', 'Zombie', 'Robot', 'Gold'] },
-  { name: 'Costume',    count: 111, values: ['Suit', 'Tuxedo', 'Hoodie', 'T-Shirt', 'Leather Jacket', 'Lab Coat', 'Army', 'Sailor', 'Pirate', 'Clown'] },
-  { name: 'Mouth',      count: 43, values: ['Grin', 'Bored', 'Pipe', 'Cigarette', 'Toothpick', 'Vape', 'Dumbfounded', 'Rage', 'Discomfort', 'Small Grin'] },
-  { name: 'Eyes',       count: 31, values: ['Bored', 'Angry', 'Bloodshot', 'Blue Beams', 'Coins', 'Closed', '3d', 'Eyepatch', 'Heart', 'Laser Eyes'] },
-  { name: 'Hat',        count: 24, values: ['Beanie', 'Cowboy Hat', 'Fisherman', 'Sombrero', 'King Crown', 'Bayc Hat', 'Propeller Hat', 'Fez', 'Safari', 'Stuntman Helmet'] },
-];
+// Collection traits render from live Alchemy/OpenSea data (`liveTraits`); no mock fixtures.
 
-// ── Mock alert rules ───────────────────────────────────────────────────────────
+// ── Alert rules ────────────────────────────────────────────────────────────────
 type AlertRule = { id: number; label: string; enabled: boolean; channel: string };
 const ALERT_CHANNELS = ['macOS', 'Discord', 'macOS + Discord'] as const;
 const ALERTS: AlertRule[] = [

@@ -418,6 +418,49 @@ export async function deleteOpenSeaKey(): Promise<void> {
   return invoke('delete_opensea_key_cmd');
 }
 
+// ── NFT PnL (locally-stored cost basis) ──────────────────────────────────────
+
+export interface BackfillResult {
+  scanned: number;
+  newly_recorded: number;
+  with_price: number;
+  unknown: number;
+}
+
+export interface NftPnlItem {
+  contract: string;
+  token_id: string;
+  collection?: string | null;
+  cost_eth?: number | null;
+  floor_eth?: number | null;
+  unrealized_eth?: number | null;
+  source: string; // marketplace_sale | manual | unknown | none
+}
+
+export interface NftPnlSummary {
+  total_cost_eth: number;
+  total_floor_eth: number;
+  unrealized_eth: number;
+  priced_count: number;
+  held_count: number;
+  items: NftPnlItem[];
+}
+
+/** Record acquisition prices for any held NFTs not yet stored (one-time per token). */
+export async function backfillNftCostBasis(wallet: string, apiKey: string): Promise<BackfillResult> {
+  return invoke<BackfillResult>('backfill_nft_cost_basis', { wallet, apiKey });
+}
+
+/** Unrealized NFT PnL from locally-stored cost basis + current floors. */
+export async function getNftPnl(wallet: string, apiKey: string): Promise<NftPnlSummary> {
+  return invoke<NftPnlSummary>('get_nft_pnl', { wallet, apiKey });
+}
+
+/** Manually set/correct a token's cost basis (mints, gifts). */
+export async function setNftCostBasis(wallet: string, contract: string, tokenId: string, priceEth: number): Promise<void> {
+  return invoke('set_nft_cost_basis', { wallet, contract, tokenId, priceEth });
+}
+
 // ── Sister-wallet finder (Etherscan, ETH mainnet) ────────────────────────────
 
 export type SisterReason = 'common_funder' | 'funded_target' | 'target_funded' | 'round_trip';

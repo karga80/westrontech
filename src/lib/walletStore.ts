@@ -1,4 +1,4 @@
-// Wallet persistence — localStorage-backed, with sensible defaults for browser mode
+// Wallet persistence — localStorage-backed. Real wallets only; no seeded mock data.
 
 export interface StoredWallet {
   id: string;
@@ -8,23 +8,20 @@ export interface StoredWallet {
 
 const STORAGE_KEY = 'westron_wallets';
 
-// Default wallets used in browser/mock mode
-export const DEFAULT_WALLETS: StoredWallet[] = [
-  { id: '0', name: 'Main Wallet',   address: '0x3f4a6b2d8e1c9f7a5b3e4d6c2a1f8b3d4e5c6a91c' },
-  { id: '1', name: 'DeFi Wallet',   address: '0x1234abcd5678ef901234abcd5678ef901234567890' },
-  { id: '2', name: 'Cold Storage',  address: '0xabcdef1234567890abcdef1234567890abcdef12'   },
-];
+// Kept as an empty export for backward-compat with any importer. Westron seeds
+// NO fake wallets — the app starts empty and shows only wallets the user adds.
+export const DEFAULT_WALLETS: StoredWallet[] = [];
 
 export function loadWallets(): StoredWallet[] {
   try {
-    if (typeof window === 'undefined') return DEFAULT_WALLETS;
+    if (typeof window === 'undefined') return [];
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as StoredWallet[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
-  return DEFAULT_WALLETS;
+  return [];
 }
 
 export function saveWallets(wallets: StoredWallet[]): void {

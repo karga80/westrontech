@@ -1,0 +1,3713 @@
+diff --git a/README.md b/README.md
+index e215bc4..0e499d3 100644
+--- a/README.md
++++ b/README.md
+@@ -1,36 +1,137 @@
+-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
++# Westron
+ 
+-## Getting Started
++**Native macOS wallet manager for Ethereum investors and NFT traders.**
+ 
+-First, run the development server:
++Westron brings portfolio tracking, an NFT gallery, bulk marketplace actions,
++analytics/PnL, real-time alerts, and sniping into one desktop app. Its defining
++principle: **your wallet keys stay on your machine and never touch a server.**
++Every transaction is signed locally.
++
++> Status: Phase 1–2. Ethereum mainnet only. macOS only.
++
++---
++
++## What makes Westron different
++
++| | Westron | Typical alternatives |
++|---|---|---|
++| Runs | Native macOS app | Browser web apps |
++| Keys | Local only, never sent to a server | Often custodial or web-based |
++| Access | Subscription (crypto payment) | NFT pass / whitelist |
++| Scope | Portfolio **and** trading **and** analytics | Usually just one of these |
++
++---
++
++## Core features (v1)
++
++- **Portfolio & wallet tracking** — multiple wallets, ETH + ERC-20 balances, history
++- **NFT gallery** — ERC-721/1155 with metadata and floor/PnL view
++- **Sister Wallet Finder** — from one address, surface likely side-wallets of the
++  same owner using on-chain funding + transfer patterns (Etherscan)
++- **Bulk actions** — list, bid, cancel on OpenSea, signed locally
++- **Analytics & PnL** — realized/unrealized PnL, trade stats
++- **Alerts & monitoring** — floor price, wallet activity, portfolio value →
++  macOS notifications + Discord/Telegram webhooks
++- **Sniping & automation** — floor sniper rules, guarded by the spend-cap engine
++- **Subscription** — crypto-only payment, offline-verifiable signed license
++
++---
++
++## Architecture
++
++| Layer | Tech |
++|---|---|
++| Frontend | Next.js (React) |
++| Native shell | **Tauri** (Rust) — decision locked |
++| Blockchain data | Alchemy (RPC + NFT + Portfolio + Prices APIs) |
++| Marketplace | OpenSea (Seaport 1.6, local signing) |
++| Wallet analysis | Etherscan (sister-wallet finder) |
++| Key storage | Local, on the user's machine (see Security) |
++| Subscription | Cloudflare Worker + Ed25519 signed licenses |
++
++The Rust backend (`src-tauri/`) owns all sensitive work — key storage, transaction
++signing, the spend-cap "envelope" engine, data fetching, and license verification.
++The React frontend calls into it through Tauri commands (`src/lib/tauri.ts`).
++
++---
++
++## Getting started (development)
++
++Prerequisites: macOS, Node + npm, and the Rust toolchain (`rustup`), plus Xcode
++command-line tools.
+ 
+ ```bash
+-npm run dev
+-# or
+-yarn dev
+-# or
+-pnpm dev
+-# or
+-bun dev
++npm install
++npm run dev:tauri     # builds the Rust backend and opens the desktop app
+ ```
+ 
+-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
++The first build compiles the whole Rust project and can take several minutes.
++Web-only preview (no native features): `npm run dev`.
++
++### Required API keys
++
++Open **Settings → Security** in the app and paste:
++
++| Key | Used for | Where to get it |
++|---|---|---|
++| **Alchemy** | Balances, tokens, prices, NFTs | https://alchemy.com (free tier is plenty) |
++| **OpenSea** | NFT floor/collection data, listing/bidding | https://docs.opensea.io |
++| **Etherscan** | Sister Wallet Finder | https://etherscan.io/apis (free tier: 5 req/s) |
++
++Keys are stored locally on your machine and used directly from the app.
++
++### Add your wallets
+ 
+-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
++Settings → Security → **Import** (to sign transactions) or add a **watch-only**
++address on the Wallets page. Real balances appear once a real, funded address is
++added and the Alchemy key is set.
+ 
+-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
++---
+ 
+-## Learn More
++## Subscription setup
+ 
+-To learn more about Next.js, take a look at the following resources:
++The subscription system accepts **crypto (ETH) payments only** and issues an
++offline-verifiable signed license. Full non-developer walkthrough:
++[`subscription-worker/DEPLOY.md`](subscription-worker/DEPLOY.md).
+ 
+-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
++---
+ 
+-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
++## Security model
+ 
+-## Deploy on Vercel
++- Private keys never leave the machine and are never sent to any server.
++- All transactions are signed locally and broadcast from the app.
++- Every financial or irreversible action passes the spend-cap **envelope** engine
++  (per-transaction ceiling, hard cap, scope whitelist, TTL, kill switch, audit log).
++- The subscription license is signed by the worker's private key and verified in
++  the app with an embedded public key; the private key never ships.
++
++> **Note for maintainers:** key material is currently written to files under the
++> app data directory. Before public launch, move this to the macOS Keychain and
++> run an independent security review. Tracked as an open hardening item.
++
++---
++
++## Repository layout
++
++```
++src/                 Next.js frontend (pages, components, lib)
++src-tauri/           Rust backend
++  src/wallet/        local key storage
++  src/signing/       transaction signing
++  src/envelope/      spend-cap / kill-switch engine
++  src/data/          Alchemy data layer
++  src/marketplace/   OpenSea Seaport integration
++  src/sister/        sister-wallet finder (Etherscan)
++  src/subscription/  signed-license verification
++subscription-worker/ Cloudflare Worker (payment detection + license signing)
++_deferred/           modules parked for a later phase (see _deferred/README.md)
++```
+ 
+-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
++## Scope & non-goals (v1)
+ 
+-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
++- Ethereum mainnet only — no multi-chain.
++- macOS only — no web or mobile.
++- Deferred to later phases: Blur, Uniswap swap, the X/TikTok trends pipeline,
++  and the omni/tasks screens (all under `_deferred/`).
++- Sniping executes in **simulation** for this phase; real on-chain execution is a
++  later, separately-gated step.
+diff --git a/TESTING.md b/TESTING.md
+new file mode 100644
+index 0000000..e1c0328
+--- /dev/null
++++ b/TESTING.md
+@@ -0,0 +1,90 @@
++# Westron — Test Rehberi
++
++İki tür test var: (1) otomatik testler (kod seviyesinde, `cargo test`), ve
++(2) canlı ekran testleri (uygulamayı açıp elle kontrol). Yazılımcı olmayan
++biri için asıl işe yarayan (2). Her ekranın **gerçek API'den beslenip
++beslenmediğini** nasıl anlayacağın burada.
++
++---
++
++## 1. Otomatik testler (kod)
++
++Rust backend testleri — Terminal'de `src-tauri/` içinde:
++```
++cargo test
++```
++Beklenen: hepsi `ok`. Şu an kapsananlar:
++- **Envelope (harcama limiti) motoru** — 6 test: limit aşımı reddi, kapsam-dışı
++  adres reddi, hard-cap → otomatik kill-switch, süresi dolmuş envelope reddi,
++  kill-switch her şeyi bloke eder, limit içinde onay + harcama takibi.
++- **Sister wallet finder** — 3 test: skorlama, zayıf sinyal, tekrar eleme.
++- **Subscription (imzalı lisans)** — 3 test: sahte lisans reddi, açık anahtar
++  geçerliliği, saat-geri-alma koruması.
++
++> Bu testler mantığı doğrular. Ekranların gerçek veri gösterdiğini kanıtlamaz —
++> onun için aşağıdaki canlı testler gerekli.
++
++---
++
++## 2. Canlı ekran testleri (uygulama)
++
++### Hazırlık
++1. `npm run dev:tauri` ile uygulamayı aç (ilk derleme birkaç dakika sürebilir).
++2. Settings → Security → **Alchemy**, **OpenSea**, **Etherscan** anahtarlarını gir.
++3. Settings → Security → o an kayıtlı **sahte cüzdanları sil** (0x1234…7890 gibi),
++   **kendi gerçek adresini** ekle (watch-only yeterli).
++
++> Kritik: Gerçek rakamlar ancak gerçek, bakiyesi olan bir adres + Alchemy
++> anahtarı ile gelir. Sahte adres girersen $0 görürsün — bu bir hata değil.
++
++### Her ekran için "gerçek mi?" kontrolü
++
++Genel kural: Aynı değer birden fazla cüzdanda **birebir aynıysa** (örn. hepsi
++"6 NFT · 7 Token · $154,383"), o mock'tur. Gerçek veri cüzdandan cüzdana değişir.
++
++| # | Ekran | Ne yap | Gerçekse ne görürsün | Bozuksa/mock ise |
++|---|-------|--------|----------------------|-------------------|
++| 1 | **Dashboard** | Aç | Üst toplam = alttaki cüzdanların gerçek toplamı; sahte adreslerde $0 | Üst toplam büyük bir sayı ama cüzdanlar $0 → tutarsız |
++| 2 | **Wallets** | Gerçek adres ekle | Bakiye, token, NFT sayısı gerçek | Tüm cüzdanlar aynı sayı |
++| 3 | **Sister Wallet Finder** (Wallets sayfasında) | Bir adres yapıştır → "Find sisters" | Skorlu aday liste veya "no linked wallets"; funder satırı | "desktop app gerekli" (tarayıcıda) ya da Etherscan key hatası |
++| 4 | **Wallet detail** (bir cüzdana tıkla) | Aç | NFT'ler gerçek (galeri). **Token tablosu ve analitik bloğu şu an hâlâ mock** — bkz. aşağıda | Token listesi/analitik her cüzdanda aynı |
++| 5 | **Gallery** | Aç | Gerçek adresin NFT'leri, görselleriyle | Boşsa ve adres gerçekse: NFT yok demektir |
++| 6 | **Portfolio** (holdings/analytics/transactions) | Aç | Gerçek bakiye/işlem/PnL | Sabit rakamlar |
++| 7 | **Analytics** | Aç | PnL, trade sayıları gerçek | Sabit rakamlar |
++| 8 | **Monitor → NFT Collections** | Bir koleksiyon izle | **Gerçek** OpenSea floor/hacim/satış (LIVE) | — (bu zaten çalışıyor) |
++| 9 | **Monitor → Wallet Monitor** | Aç | Cüzdan başına farklı değerler | Hepsi aynı → mock |
++| 10 | **Alerts** (page/rules/history/feed) | Bir alert oluştur | Liste gerçek (oluşturduğun kural görünür) | Sabit örnek alert'ler |
++| 11 | **Bulk → List/Bid/Cancel** | Ucuz bir NFT ile dene | OpenSea'e gerçek imzalı order gider | Hata / işlem yok |
++| 12 | **Bulk → Distribute** | Aç | **Şu an hâlâ mock cüzdan listesi** — bkz. aşağıda | Sahte cüzdanlar |
++| 13 | **Sniping** | Kural oluştur | Kural kaydolur; floor gerçek; işlem **simüle** (`0xSIMULATED_`) | — (bu fazda simüle beklenir) |
++| 14 | **Settings** | Aç | Anahtarlar kayıtlı; profil/limitler senin girdiğin | Profil "john@example.com", limitler $1.85 → mock |
++
++### Bulk işlem (para hareketi) testi — dikkatli
++Bulk list/bid/cancel gerçek OpenSea order'ı imzalar. Test ederken:
++1. Önce **Sniping** ekranından envelope (harcama limiti) oluştur, limiti düşük tut.
++2. Ucuz, önemsiz bir NFT ile dene.
++3. Kill-switch'in çalıştığını doğrula (limit aşınca işlem durmalı).
++
++---
++
++## Bilinen kalan mock (bu fazda gerçek veriye bağlanacak)
++
++Aşağıdaki 3 ekran hâlâ yerel mock veri gösteriyor. Bunları canlı build sırasında
++gerçek veriye bağlayıp doğrulayacağız (kör bağlamak yerine ekranda gerçek verinin
++aktığını görerek):
++
++1. **Wallet detail** — token tablosu (`TOKEN_DATA`) ve analitik bloğu
++   (`syntheticConfig`: bestPerformer, winRate, avgHoldTime…). NFT galerisi gerçek.
++2. **Bulk → Distribute** — cüzdan listesi (`MOCK_WALLETS`). Gerçek cüzdan
++   store'una bağlanacak.
++3. **Monitor → Collection detail** — trait listesi (`MOCK_TRAITS`) ve örnek NFT
++   satırları. Koleksiyon istatistikleri (floor/hacim) zaten gerçek.
++
++---
++
++## Güvenlik notu (senin denetleyeceğin — madde 11)
++
++Uygulama şu an private key'leri ve API anahtarlarını macOS Keychain'de değil,
++`~/Library/Application Support/Westron/keys/` altında **düz metin dosyalar**
++olarak saklıyor. Bu, ürünün "key'ler şifreli/Keychain'de" vaadiyle çelişiyor.
++Canlıya çıkmadan önce Keychain'e taşınmalı ve bağımsız güvenlik denetimi yapılmalı.
+diff --git a/_deferred/README.md b/_deferred/README.md
+new file mode 100644
+index 0000000..c8256ff
+--- /dev/null
++++ b/_deferred/README.md
+@@ -0,0 +1,14 @@
++# _deferred — Sonraki fazlara bırakılan modüller
++
++Bu klasördeki kod Phase 1/v1 kapsamından **bilinçli olarak çıkarılmıştır**.
++Silinmedi; ileride geri alınabilsin diye burada duruyor. Aktif uygulama
++(`src/`, `src-tauri/`) bu klasöre hiçbir yerden referans vermez.
++
++| Modül | Neden ertelendi | Geri almak için |
++|-------|-----------------|-----------------|
++| `trends-pipeline/` | X/TikTok trend takibi ayrı bir üründür; ayrı sunucu + 4 ücretli API gerektirir. Wallet-management çekirdeğinin dışında. | `apps/` altına geri taşı, kendi README'sindeki setup'ı izle. |
++| `app/omni/` | Birleşik "omni" ekranı v1 kapsamı netleşene kadar bekliyor. | `src/app/omni/` altına geri taşı. |
++| `app/tasks/` | Otomasyon görev merkezi Phase 2/3'e ait (sniping/otomasyon ile gelir). | `src/app/tasks/` altına geri taşı, Navbar'a link ekle. |
++| `lib/swap.ts`, `lib/uniswap.ts` | Uniswap swap wallet-management çekirdeği değil; Uniswap'ın resmî olmayan quote API'sine bağımlı (kırılgan). | `src/lib/` altına geri taşı, WalletDetailClient'a SwapModal'ı geri bağla. |
++
++Karar tarihi: 2026-07-30 · Emir onayı ile.
+diff --git a/src/app/omni/page.tsx b/_deferred/app/omni/page.tsx
+similarity index 100%
+rename from src/app/omni/page.tsx
+rename to _deferred/app/omni/page.tsx
+diff --git a/src/app/tasks/page.tsx b/_deferred/app/tasks/page.tsx
+similarity index 100%
+rename from src/app/tasks/page.tsx
+rename to _deferred/app/tasks/page.tsx
+diff --git a/src/lib/swap.ts b/_deferred/lib/swap.ts
+similarity index 100%
+rename from src/lib/swap.ts
+rename to _deferred/lib/swap.ts
+diff --git a/src/lib/uniswap.ts b/_deferred/lib/uniswap.ts
+similarity index 100%
+rename from src/lib/uniswap.ts
+rename to _deferred/lib/uniswap.ts
+diff --git a/apps/trends-pipeline/.gitignore b/_deferred/trends-pipeline/.gitignore
+similarity index 100%
+rename from apps/trends-pipeline/.gitignore
+rename to _deferred/trends-pipeline/.gitignore
+diff --git a/apps/trends-pipeline/README.md b/_deferred/trends-pipeline/README.md
+similarity index 100%
+rename from apps/trends-pipeline/README.md
+rename to _deferred/trends-pipeline/README.md
+diff --git a/apps/trends-pipeline/bun.lock b/_deferred/trends-pipeline/bun.lock
+similarity index 100%
+rename from apps/trends-pipeline/bun.lock
+rename to _deferred/trends-pipeline/bun.lock
+diff --git a/apps/trends-pipeline/docker/docker-compose.yml b/_deferred/trends-pipeline/docker/docker-compose.yml
+similarity index 100%
+rename from apps/trends-pipeline/docker/docker-compose.yml
+rename to _deferred/trends-pipeline/docker/docker-compose.yml
+diff --git a/apps/trends-pipeline/migrations/001_initial_schema.sql b/_deferred/trends-pipeline/migrations/001_initial_schema.sql
+similarity index 100%
+rename from apps/trends-pipeline/migrations/001_initial_schema.sql
+rename to _deferred/trends-pipeline/migrations/001_initial_schema.sql
+diff --git a/apps/trends-pipeline/package.json b/_deferred/trends-pipeline/package.json
+similarity index 100%
+rename from apps/trends-pipeline/package.json
+rename to _deferred/trends-pipeline/package.json
+diff --git a/apps/trends-pipeline/scripts/resolve-callers.ts b/_deferred/trends-pipeline/scripts/resolve-callers.ts
+similarity index 100%
+rename from apps/trends-pipeline/scripts/resolve-callers.ts
+rename to _deferred/trends-pipeline/scripts/resolve-callers.ts
+diff --git a/apps/trends-pipeline/scripts/seed-influencers.ts b/_deferred/trends-pipeline/scripts/seed-influencers.ts
+similarity index 100%
+rename from apps/trends-pipeline/scripts/seed-influencers.ts
+rename to _deferred/trends-pipeline/scripts/seed-influencers.ts
+diff --git a/apps/trends-pipeline/scripts/test-alert.ts b/_deferred/trends-pipeline/scripts/test-alert.ts
+similarity index 100%
+rename from apps/trends-pipeline/scripts/test-alert.ts
+rename to _deferred/trends-pipeline/scripts/test-alert.ts
+diff --git a/apps/trends-pipeline/seeds/alpha-callers.json b/_deferred/trends-pipeline/seeds/alpha-callers.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/alpha-callers.json
+rename to _deferred/trends-pipeline/seeds/alpha-callers.json
+diff --git a/apps/trends-pipeline/seeds/dexscreener-blocklist.json b/_deferred/trends-pipeline/seeds/dexscreener-blocklist.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/dexscreener-blocklist.json
+rename to _deferred/trends-pipeline/seeds/dexscreener-blocklist.json
+diff --git a/apps/trends-pipeline/seeds/known-rugs.json b/_deferred/trends-pipeline/seeds/known-rugs.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/known-rugs.json
+rename to _deferred/trends-pipeline/seeds/known-rugs.json
+diff --git a/apps/trends-pipeline/seeds/pfp-watch-list.json b/_deferred/trends-pipeline/seeds/pfp-watch-list.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/pfp-watch-list.json
+rename to _deferred/trends-pipeline/seeds/pfp-watch-list.json
+diff --git a/apps/trends-pipeline/seeds/tiktok-watchlist.json b/_deferred/trends-pipeline/seeds/tiktok-watchlist.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/tiktok-watchlist.json
+rename to _deferred/trends-pipeline/seeds/tiktok-watchlist.json
+diff --git a/apps/trends-pipeline/seeds/watched-terms.json b/_deferred/trends-pipeline/seeds/watched-terms.json
+similarity index 100%
+rename from apps/trends-pipeline/seeds/watched-terms.json
+rename to _deferred/trends-pipeline/seeds/watched-terms.json
+diff --git a/apps/trends-pipeline/services/xmcp/Dockerfile b/_deferred/trends-pipeline/services/xmcp/Dockerfile
+similarity index 100%
+rename from apps/trends-pipeline/services/xmcp/Dockerfile
+rename to _deferred/trends-pipeline/services/xmcp/Dockerfile
+diff --git a/apps/trends-pipeline/src/alerting/alert-formatter.ts b/_deferred/trends-pipeline/src/alerting/alert-formatter.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/alerting/alert-formatter.ts
+rename to _deferred/trends-pipeline/src/alerting/alert-formatter.ts
+diff --git a/apps/trends-pipeline/src/alerting/alert-router.ts b/_deferred/trends-pipeline/src/alerting/alert-router.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/alerting/alert-router.ts
+rename to _deferred/trends-pipeline/src/alerting/alert-router.ts
+diff --git a/apps/trends-pipeline/src/alerting/dedup.ts b/_deferred/trends-pipeline/src/alerting/dedup.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/alerting/dedup.ts
+rename to _deferred/trends-pipeline/src/alerting/dedup.ts
+diff --git a/apps/trends-pipeline/src/alerting/telegram-bot.ts b/_deferred/trends-pipeline/src/alerting/telegram-bot.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/alerting/telegram-bot.ts
+rename to _deferred/trends-pipeline/src/alerting/telegram-bot.ts
+diff --git a/apps/trends-pipeline/src/alerting/websocket-server.ts b/_deferred/trends-pipeline/src/alerting/websocket-server.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/alerting/websocket-server.ts
+rename to _deferred/trends-pipeline/src/alerting/websocket-server.ts
+diff --git a/apps/trends-pipeline/src/api/health.ts b/_deferred/trends-pipeline/src/api/health.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/api/health.ts
+rename to _deferred/trends-pipeline/src/api/health.ts
+diff --git a/apps/trends-pipeline/src/config/env.ts b/_deferred/trends-pipeline/src/config/env.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/config/env.ts
+rename to _deferred/trends-pipeline/src/config/env.ts
+diff --git a/apps/trends-pipeline/src/enrichment/dexscreener-client.ts b/_deferred/trends-pipeline/src/enrichment/dexscreener-client.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/dexscreener-client.ts
+rename to _deferred/trends-pipeline/src/enrichment/dexscreener-client.ts
+diff --git a/apps/trends-pipeline/src/enrichment/memecoin-enricher.ts b/_deferred/trends-pipeline/src/enrichment/memecoin-enricher.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/memecoin-enricher.ts
+rename to _deferred/trends-pipeline/src/enrichment/memecoin-enricher.ts
+diff --git a/apps/trends-pipeline/src/enrichment/nft-enricher.ts b/_deferred/trends-pipeline/src/enrichment/nft-enricher.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/nft-enricher.ts
+rename to _deferred/trends-pipeline/src/enrichment/nft-enricher.ts
+diff --git a/apps/trends-pipeline/src/enrichment/opensea-client.ts b/_deferred/trends-pipeline/src/enrichment/opensea-client.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/opensea-client.ts
+rename to _deferred/trends-pipeline/src/enrichment/opensea-client.ts
+diff --git a/apps/trends-pipeline/src/enrichment/pfp-tracker/avatar-fetcher.ts b/_deferred/trends-pipeline/src/enrichment/pfp-tracker/avatar-fetcher.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/pfp-tracker/avatar-fetcher.ts
+rename to _deferred/trends-pipeline/src/enrichment/pfp-tracker/avatar-fetcher.ts
+diff --git a/apps/trends-pipeline/src/enrichment/pfp-tracker/collection-resolver.ts b/_deferred/trends-pipeline/src/enrichment/pfp-tracker/collection-resolver.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/pfp-tracker/collection-resolver.ts
+rename to _deferred/trends-pipeline/src/enrichment/pfp-tracker/collection-resolver.ts
+diff --git a/apps/trends-pipeline/src/enrichment/pfp-tracker/hash-comparator.ts b/_deferred/trends-pipeline/src/enrichment/pfp-tracker/hash-comparator.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/enrichment/pfp-tracker/hash-comparator.ts
+rename to _deferred/trends-pipeline/src/enrichment/pfp-tracker/hash-comparator.ts
+diff --git a/apps/trends-pipeline/src/extraction/llm-extractor.ts b/_deferred/trends-pipeline/src/extraction/llm-extractor.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/extraction/llm-extractor.ts
+rename to _deferred/trends-pipeline/src/extraction/llm-extractor.ts
+diff --git a/apps/trends-pipeline/src/extraction/regex-extractor.ts b/_deferred/trends-pipeline/src/extraction/regex-extractor.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/extraction/regex-extractor.ts
+rename to _deferred/trends-pipeline/src/extraction/regex-extractor.ts
+diff --git a/apps/trends-pipeline/src/extraction/signal-router.ts b/_deferred/trends-pipeline/src/extraction/signal-router.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/extraction/signal-router.ts
+rename to _deferred/trends-pipeline/src/extraction/signal-router.ts
+diff --git a/apps/trends-pipeline/src/index.ts b/_deferred/trends-pipeline/src/index.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/index.ts
+rename to _deferred/trends-pipeline/src/index.ts
+diff --git a/apps/trends-pipeline/src/ingestion/tiktok-client.ts b/_deferred/trends-pipeline/src/ingestion/tiktok-client.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/ingestion/tiktok-client.ts
+rename to _deferred/trends-pipeline/src/ingestion/tiktok-client.ts
+diff --git a/apps/trends-pipeline/src/ingestion/x-client.ts b/_deferred/trends-pipeline/src/ingestion/x-client.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/ingestion/x-client.ts
+rename to _deferred/trends-pipeline/src/ingestion/x-client.ts
+diff --git a/apps/trends-pipeline/src/ingestion/x-rate-budget.ts b/_deferred/trends-pipeline/src/ingestion/x-rate-budget.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/ingestion/x-rate-budget.ts
+rename to _deferred/trends-pipeline/src/ingestion/x-rate-budget.ts
+diff --git a/apps/trends-pipeline/src/scoring/confluence-detector.ts b/_deferred/trends-pipeline/src/scoring/confluence-detector.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/scoring/confluence-detector.ts
+rename to _deferred/trends-pipeline/src/scoring/confluence-detector.ts
+diff --git a/apps/trends-pipeline/src/scoring/influencer-weights.ts b/_deferred/trends-pipeline/src/scoring/influencer-weights.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/scoring/influencer-weights.ts
+rename to _deferred/trends-pipeline/src/scoring/influencer-weights.ts
+diff --git a/apps/trends-pipeline/src/scoring/sliding-window.ts b/_deferred/trends-pipeline/src/scoring/sliding-window.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/scoring/sliding-window.ts
+rename to _deferred/trends-pipeline/src/scoring/sliding-window.ts
+diff --git a/apps/trends-pipeline/src/scoring/velocity-engine.ts b/_deferred/trends-pipeline/src/scoring/velocity-engine.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/scoring/velocity-engine.ts
+rename to _deferred/trends-pipeline/src/scoring/velocity-engine.ts
+diff --git a/apps/trends-pipeline/src/shared/errors.ts b/_deferred/trends-pipeline/src/shared/errors.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/shared/errors.ts
+rename to _deferred/trends-pipeline/src/shared/errors.ts
+diff --git a/apps/trends-pipeline/src/shared/logger.ts b/_deferred/trends-pipeline/src/shared/logger.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/shared/logger.ts
+rename to _deferred/trends-pipeline/src/shared/logger.ts
+diff --git a/apps/trends-pipeline/src/shared/types.ts b/_deferred/trends-pipeline/src/shared/types.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/shared/types.ts
+rename to _deferred/trends-pipeline/src/shared/types.ts
+diff --git a/apps/trends-pipeline/src/storage/migration-runner.ts b/_deferred/trends-pipeline/src/storage/migration-runner.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/storage/migration-runner.ts
+rename to _deferred/trends-pipeline/src/storage/migration-runner.ts
+diff --git a/apps/trends-pipeline/src/storage/redis-client.ts b/_deferred/trends-pipeline/src/storage/redis-client.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/storage/redis-client.ts
+rename to _deferred/trends-pipeline/src/storage/redis-client.ts
+diff --git a/apps/trends-pipeline/src/workers/pfp-poll-worker.ts b/_deferred/trends-pipeline/src/workers/pfp-poll-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/pfp-poll-worker.ts
+rename to _deferred/trends-pipeline/src/workers/pfp-poll-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/tiktok-poll-worker.ts b/_deferred/trends-pipeline/src/workers/tiktok-poll-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/tiktok-poll-worker.ts
+rename to _deferred/trends-pipeline/src/workers/tiktok-poll-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/tiktok-transcript-worker.ts b/_deferred/trends-pipeline/src/workers/tiktok-transcript-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/tiktok-transcript-worker.ts
+rename to _deferred/trends-pipeline/src/workers/tiktok-transcript-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/x-callers-worker.ts b/_deferred/trends-pipeline/src/workers/x-callers-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/x-callers-worker.ts
+rename to _deferred/trends-pipeline/src/workers/x-callers-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/x-counts-worker.ts b/_deferred/trends-pipeline/src/workers/x-counts-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/x-counts-worker.ts
+rename to _deferred/trends-pipeline/src/workers/x-counts-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/x-posts-worker.ts b/_deferred/trends-pipeline/src/workers/x-posts-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/x-posts-worker.ts
+rename to _deferred/trends-pipeline/src/workers/x-posts-worker.ts
+diff --git a/apps/trends-pipeline/src/workers/x-trends-worker.ts b/_deferred/trends-pipeline/src/workers/x-trends-worker.ts
+similarity index 100%
+rename from apps/trends-pipeline/src/workers/x-trends-worker.ts
+rename to _deferred/trends-pipeline/src/workers/x-trends-worker.ts
+diff --git a/apps/trends-pipeline/tsconfig.json b/_deferred/trends-pipeline/tsconfig.json
+similarity index 100%
+rename from apps/trends-pipeline/tsconfig.json
+rename to _deferred/trends-pipeline/tsconfig.json
+diff --git a/src-tauri/Cargo.lock b/src-tauri/Cargo.lock
+index 4cbc799..1654dae 100644
+--- a/src-tauri/Cargo.lock
++++ b/src-tauri/Cargo.lock
+@@ -717,8 +717,10 @@ version = "0.2.0"
+ dependencies = [
+  "alloy",
+  "async-trait",
++ "base64 0.22.1",
+  "chrono",
+  "dirs-next",
++ "ed25519-dalek",
+  "futures-util",
+  "hex",
+  "log",
+@@ -1618,6 +1620,33 @@ dependencies = [
+  "syn 2.0.117",
+ ]
+ 
++[[package]]
++name = "curve25519-dalek"
++version = "4.1.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
++dependencies = [
++ "cfg-if",
++ "cpufeatures",
++ "curve25519-dalek-derive",
++ "digest 0.10.7",
++ "fiat-crypto",
++ "rustc_version 0.4.1",
++ "subtle",
++ "zeroize",
++]
++
++[[package]]
++name = "curve25519-dalek-derive"
++version = "0.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.117",
++]
++
+ [[package]]
+ name = "darling"
+ version = "0.21.3"
+@@ -1950,6 +1979,30 @@ dependencies = [
+  "spki",
+ ]
+ 
++[[package]]
++name = "ed25519"
++version = "2.2.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
++dependencies = [
++ "pkcs8",
++ "signature",
++]
++
++[[package]]
++name = "ed25519-dalek"
++version = "2.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
++dependencies = [
++ "curve25519-dalek",
++ "ed25519",
++ "serde",
++ "sha2",
++ "subtle",
++ "zeroize",
++]
++
+ [[package]]
+ name = "educe"
+ version = "0.6.0"
+@@ -2136,6 +2189,12 @@ dependencies = [
+  "subtle",
+ ]
+ 
++[[package]]
++name = "fiat-crypto"
++version = "0.2.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
++
+ [[package]]
+ name = "field-offset"
+ version = "0.3.6"
+diff --git a/src-tauri/Cargo.toml b/src-tauri/Cargo.toml
+index 287aba4..2157176 100644
+--- a/src-tauri/Cargo.toml
++++ b/src-tauri/Cargo.toml
+@@ -32,6 +32,8 @@ hex = "0.4"
+ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+ tokio = { version = "1", features = ["full"] }
+ alloy = { version = "1", features = ["signers", "signer-local", "consensus", "network", "eips"] }
++ed25519-dalek = "2"
++base64 = "0.22"
+ open = "5"
+ tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+ futures-util = "0.3"
+diff --git a/src-tauri/src/envelope/engine.rs b/src-tauri/src/envelope/engine.rs
+index d65bdb4..99e5c52 100644
+--- a/src-tauri/src/envelope/engine.rs
++++ b/src-tauri/src/envelope/engine.rs
+@@ -200,3 +200,79 @@ impl EnvelopeEngine {
+         let _ = self.audit.write_entry(&entry);
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::envelope::types::{Envelope, TransactionRequest};
++
++    const ADDR: &str = "0x000000000000000000000000000000000000dead";
++    const ETH: u128 = 1_000_000_000_000_000_000; // 1 ETH in wei
++
++    fn engine_with(per_tx: u128, hard_cap: u128, spent: u128, kill: bool, expired: bool) -> EnvelopeEngine {
++        let e = EnvelopeEngine::new();
++        let now = Utc::now().timestamp();
++        e.create_envelope(Envelope {
++            id: Uuid::new_v4(),
++            created_at: now,
++            expires_at: if expired { now - 10 } else { now + 3600 },
++            per_tx_ceiling_wei: per_tx,
++            hard_cap_wei: hard_cap,
++            spent_wei: spent,
++            scope: vec![ADDR.to_string()],
++            kill_switch_active: kill,
++        });
++        e
++    }
++
++    fn req(to: &str, value: u128) -> TransactionRequest {
++        TransactionRequest { to: to.to_string(), value_wei: value, calldata: String::new() }
++    }
++
++    #[test]
++    fn authorizes_within_limits_and_tracks_spend() {
++        let e = engine_with(2 * ETH, 5 * ETH, 0, false, false);
++        assert!(e.check_and_authorize(&req(ADDR, ETH)).is_ok());
++        let st = e.get_status().unwrap();
++        assert_eq!(st.spent_wei, ETH);
++    }
++
++    #[test]
++    fn rejects_over_per_tx_ceiling() {
++        let e = engine_with(1 * ETH, 100 * ETH, 0, false, false);
++        let err = e.check_and_authorize(&req(ADDR, 2 * ETH)).unwrap_err();
++        assert!(matches!(err, EnvelopeError::PerTxCeilingExceeded { .. }));
++    }
++
++    #[test]
++    fn rejects_out_of_scope_address() {
++        let e = engine_with(10 * ETH, 100 * ETH, 0, false, false);
++        let other = "0x1111111111111111111111111111111111111111";
++        let err = e.check_and_authorize(&req(other, ETH)).unwrap_err();
++        assert!(matches!(err, EnvelopeError::AddressOutOfScope { .. }));
++    }
++
++    #[test]
++    fn hard_cap_breach_trips_kill_switch() {
++        // ceiling high, hard cap 3 ETH, already spent 2.5 ETH -> a 1 ETH tx breaches.
++        let e = engine_with(10 * ETH, 3 * ETH, 2_500_000_000_000_000_000, false, false);
++        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
++        assert!(matches!(err, EnvelopeError::HardCapExceeded { .. }));
++        // auto kill switch must now be engaged
++        assert!(e.get_status().unwrap().kill_switch);
++    }
++
++    #[test]
++    fn expired_envelope_rejects() {
++        let e = engine_with(10 * ETH, 100 * ETH, 0, false, true);
++        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
++        assert!(matches!(err, EnvelopeError::EnvelopeExpired { .. }));
++    }
++
++    #[test]
++    fn kill_switch_blocks_all() {
++        let e = engine_with(10 * ETH, 100 * ETH, 0, true, false);
++        let err = e.check_and_authorize(&req(ADDR, ETH)).unwrap_err();
++        assert!(matches!(err, EnvelopeError::KillSwitchActive));
++    }
++}
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index ede7b10..121d667 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -8,11 +8,14 @@ mod wallet;
+ mod rpc;
+ mod signing;
+ mod sniping;
++mod sister;
++mod subscription;
+ 
+ use envelope::engine::EnvelopeEngine;
+ use std::sync::Arc;
+ use std::sync::atomic::{AtomicBool, Ordering};
+ use chrono::Utc;
++use tauri::Emitter;
+ use uuid::Uuid;
+ 
+ static POLLING_ACTIVE: AtomicBool = AtomicBool::new(false);
+@@ -483,58 +486,12 @@ fn open_external_url(url: String) -> Result<(), String> {
+     open::that(&url).map_err(|e| format!("failed to open URL: {}", e))
+ }
+ 
+-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+-pub struct SubscriptionCheckResult {
+-    pub active: bool,
+-    pub plan: Option<String>,       // "monthly" | "annual" | null
+-    pub expires_at: Option<String>, // ISO date string
+-    pub error: Option<String>,
+-}
+-
+-const SUBSCRIPTION_WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
+-
+-/// Check subscription status for a wallet address against the Westron subscription worker.
+-/// Falls back to the locally cached result if the worker is unreachable.
++/// Check subscription status for a wallet. Fetches a fresh signed license from
++/// the worker when online, verifies it with the embedded public key, caches it,
++/// and re-verifies offline with clock-rollback protection. See `subscription` module.
+ #[tauri::command]
+-async fn check_subscription(wallet_address: String) -> SubscriptionCheckResult {
+-    let addr = wallet_address.trim().to_lowercase();
+-    if addr.is_empty() {
+-        return SubscriptionCheckResult {
+-            active: false, plan: None, expires_at: None,
+-            error: Some("No wallet address provided".to_string()),
+-        };
+-    }
+-
+-    let client = reqwest::Client::builder()
+-        .timeout(std::time::Duration::from_secs(8))
+-        .build()
+-        .unwrap_or_default();
+-
+-    let resp = client
+-        .post(format!("{}/validate", SUBSCRIPTION_WORKER_URL))
+-        .header("content-type", "application/json")
+-        .json(&serde_json::json!({ "wallet": addr }))
+-        .send()
+-        .await;
+-
+-    match resp {
+-        Err(e) => {
+-            log::warn!("Subscription worker unreachable: {}", e);
+-            SubscriptionCheckResult {
+-                active: false, plan: None, expires_at: None,
+-                error: Some("Could not reach subscription server. Using cached status.".to_string()),
+-            }
+-        }
+-        Ok(r) => {
+-            let body: serde_json::Value = r.json().await.unwrap_or_default();
+-            SubscriptionCheckResult {
+-                active: body.get("active").and_then(|v| v.as_bool()).unwrap_or(false),
+-                plan: body.get("plan").and_then(|p| p.as_str()).map(str::to_string),
+-                expires_at: body.get("expires_at").and_then(|e| e.as_str()).map(str::to_string),
+-                error: None,
+-            }
+-        }
+-    }
++async fn check_subscription(wallet_address: String) -> subscription::SubscriptionCheckResult {
++    subscription::evaluate(&wallet_address).await
+ }
+ 
+ // ── OpenSea API key commands ──────────────────────────────────────────────────
+@@ -554,6 +511,32 @@ fn delete_opensea_key_cmd() -> Result<(), String> {
+     wallet::keychain::delete_opensea_key()
+ }
+ 
++// ── Etherscan API key commands (used by the sister-wallet finder) ─────────────
++
++#[tauri::command]
++fn save_etherscan_key(api_key: String) -> Result<(), String> {
++    wallet::keychain::store_etherscan_key(&api_key)
++}
++
++#[tauri::command]
++fn load_etherscan_key() -> Result<String, String> {
++    wallet::keychain::fetch_etherscan_key()
++}
++
++#[tauri::command]
++fn delete_etherscan_key_cmd() -> Result<(), String> {
++    wallet::keychain::delete_etherscan_key()
++}
++
++// ── Sister-wallet finder ──────────────────────────────────────────────────────
++
++#[tauri::command]
++async fn find_sister_wallets(address: String) -> Result<sister::types::SisterReport, String> {
++    let api_key = wallet::keychain::fetch_etherscan_key()
++        .map_err(|_| "Etherscan API key not set — add it in Settings first.".to_string())?;
++    sister::find_sisters(&address, &api_key).await
++}
++
+ // ── Marketplace commands ──────────────────────────────────────────────────────
+ 
+ #[tauri::command]
+@@ -790,6 +773,10 @@ pub fn run() {
+         save_opensea_key,
+         load_opensea_key,
+         delete_opensea_key_cmd,
++        save_etherscan_key,
++        load_etherscan_key,
++        delete_etherscan_key_cmd,
++        find_sister_wallets,
+         get_nfts_for_owner,
+         get_floor_price,
+         create_alert,
+diff --git a/src-tauri/src/sister/mod.rs b/src-tauri/src/sister/mod.rs
+new file mode 100644
+index 0000000..509e99a
+--- /dev/null
++++ b/src-tauri/src/sister/mod.rs
+@@ -0,0 +1,270 @@
++//! Sister-wallet finder.
++//!
++//! Given one Ethereum address, discovers likely "side" wallets belonging to the
++//! same person, using ONLY public Etherscan (v2, Ethereum mainnet) data.
++//!
++//! Heuristics (all on-chain, no off-chain data leaves the machine):
++//!   1. Common funder     — the wallet that first funded the target, and every
++//!                          other wallet that same funder also seeded. Strongest
++//!                          signal for "same owner", UNLESS the funder is an
++//!                          exchange/contract (filtered out — see is_probable_hub).
++//!   2. Direct transfers  — wallets that exchanged ETH directly with the target,
++//!                          especially round-trips (in AND out).
++//!   3. Downstream funding— wallets the target itself first-funded.
++//!
++//! Each candidate is returned with the reasons it matched and a confidence score
++//! so the UI can rank and explain results. Nothing here is definitive proof of
++//! common ownership; it is a lead-generation tool.
++
++pub mod types;
++
++use std::collections::HashMap;
++use std::time::Duration;
++
++use reqwest::Client;
++use types::*;
++
++const ETHERSCAN_V2: &str = "https://api.etherscan.io/v2/api";
++const CHAIN_ID: &str = "1"; // Ethereum mainnet only — Westron is single-chain v1.
++
++/// If a funder has seeded more than this many distinct wallets in the scanned
++/// window, we treat it as an exchange / bridge / disperser hub, not a person,
++/// and drop the "common funder" signal for it.
++const HUB_FUNDING_THRESHOLD: usize = 40;
++
++/// How many normal txs to pull per address (Etherscan returns newest/oldest first
++/// depending on sort; we use asc to find the earliest funding tx cheaply).
++const TX_PAGE_SIZE: usize = 1000;
++
++struct EtherscanClient {
++    http: Client,
++    api_key: String,
++}
++
++impl EtherscanClient {
++    fn new(api_key: &str) -> Self {
++        let http = Client::builder()
++            .timeout(Duration::from_secs(30))
++            .user_agent("westron-desktop/0.2")
++            .build()
++            .expect("reqwest client build");
++        Self { http, api_key: api_key.to_string() }
++    }
++
++    /// Fetch normal (external) transactions for `address`, ascending by block.
++    async fn txlist(&self, address: &str) -> Result<Vec<EtherscanTx>, String> {
++        let url = format!(
++            "{ETHERSCAN_V2}?chainid={CHAIN_ID}&module=account&action=txlist\
++             &address={address}&startblock=0&endblock=99999999\
++             &page=1&offset={TX_PAGE_SIZE}&sort=asc&apikey={key}",
++            key = self.api_key
++        );
++
++        let resp = self
++            .http
++            .get(&url)
++            .send()
++            .await
++            .map_err(|e| format!("Etherscan request failed: {e}"))?;
++
++        if resp.status().as_u16() == 429 {
++            return Err("Etherscan rate limit reached — wait a moment and retry".to_string());
++        }
++
++        let body: EtherscanResp = resp
++            .json()
++            .await
++            .map_err(|e| format!("Etherscan returned an unreadable response: {e}"))?;
++
++        // status "0" with "No transactions found" is a valid empty result, not an error.
++        if body.status == "0" {
++            let msg = body.message.to_lowercase();
++            if msg.contains("no transactions") || msg.contains("no records") {
++                return Ok(vec![]);
++            }
++            // Rate-limit / invalid-key style messages come back as status 0 too.
++            let detail = body
++                .result_message()
++                .unwrap_or_else(|| body.message.clone());
++            return Err(format!("Etherscan: {detail}"));
++        }
++
++        Ok(body.txs())
++    }
++}
++
++fn norm(addr: &str) -> String {
++    addr.trim().to_lowercase()
++}
++
++/// Is this a real ETH-value external transfer (not a 0-value contract call)?
++fn is_value_transfer(tx: &EtherscanTx) -> bool {
++    tx.is_error != "1" && tx.value.as_deref().map(|v| v != "0").unwrap_or(false)
++}
++
++/// Public entry point.
++pub async fn find_sisters(target: &str, api_key: &str) -> Result<SisterReport, String> {
++    if api_key.trim().is_empty() {
++        return Err("Etherscan API key not set — add it in Settings first.".to_string());
++    }
++    let target = norm(target);
++    if !(target.starts_with("0x") && target.len() == 42) {
++        return Err("Please enter a valid Ethereum address (0x… , 42 characters).".to_string());
++    }
++
++    let client = EtherscanClient::new(api_key);
++
++    // 1) Pull the target's own tx history.
++    let target_txs = client.txlist(&target).await?;
++    if target_txs.is_empty() {
++        return Ok(SisterReport {
++            target: target.clone(),
++            funder: None,
++            candidates: vec![],
++            note: Some("No mainnet transactions found for this address.".to_string()),
++        });
++    }
++
++    // Accumulator: candidate address -> evidence.
++    let mut cand: HashMap<String, Candidate> = HashMap::new();
++
++    // --- Heuristic 2 & 3: direct counterparties -------------------------------
++    // Track ETH sent-to and received-from, per counterparty.
++    let mut sent_to: HashMap<String, u32> = HashMap::new();
++    let mut recv_from: HashMap<String, u32> = HashMap::new();
++    let mut first_seen: HashMap<String, u64> = HashMap::new();
++    let mut last_seen: HashMap<String, u64> = HashMap::new();
++
++    for tx in &target_txs {
++        if !is_value_transfer(tx) {
++            continue;
++        }
++        let from = norm(&tx.from);
++        let to = tx.to.as_deref().map(norm).unwrap_or_default();
++        let ts = tx.timestamp();
++
++        if from == target && !to.is_empty() && to != target {
++            *sent_to.entry(to.clone()).or_default() += 1;
++            touch(&mut first_seen, &mut last_seen, &to, ts);
++        } else if to == target && from != target {
++            *recv_from.entry(from.clone()).or_default() += 1;
++            touch(&mut first_seen, &mut last_seen, &from, ts);
++        }
++    }
++
++    // --- Heuristic 1: the funder (first inbound value transfer) ----------------
++    let funder = target_txs
++        .iter()
++        .filter(|t| is_value_transfer(t))
++        .find(|t| t.to.as_deref().map(norm).as_deref() == Some(target.as_str()) && norm(&t.from) != target)
++        .map(|t| norm(&t.from));
++
++    // Record direct counterparties as candidates.
++    for (addr, n) in &sent_to {
++        let c = cand.entry(addr.clone()).or_insert_with(|| Candidate::new(addr));
++        c.direct_out = *n;
++        c.add_reason(Reason::TargetFunded);
++    }
++    for (addr, n) in &recv_from {
++        let c = cand.entry(addr.clone()).or_insert_with(|| Candidate::new(addr));
++        c.direct_in = *n;
++        c.add_reason(Reason::FundedTarget);
++    }
++    // Round-trip flag (both directions) is the strongest direct signal.
++    for c in cand.values_mut() {
++        if c.direct_in > 0 && c.direct_out > 0 {
++            c.add_reason(Reason::RoundTrip);
++        }
++        if let Some(f) = first_seen.get(&c.address) {
++            c.first_interaction = Some(*f);
++        }
++        if let Some(l) = last_seen.get(&c.address) {
++            c.last_interaction = Some(*l);
++        }
++    }
++
++    // --- Heuristic 1 continued: siblings via common funder ---------------------
++    let mut funder_is_hub = false;
++    if let Some(funder_addr) = &funder {
++        let funder_txs = client.txlist(funder_addr).await?;
++        // Everyone this funder sent ETH to (its "seed" recipients).
++        let mut seeded: HashMap<String, u64> = HashMap::new();
++        for tx in &funder_txs {
++            if !is_value_transfer(tx) {
++                continue;
++            }
++            if norm(&tx.from) == *funder_addr {
++                if let Some(to) = tx.to.as_deref().map(norm) {
++                    if to != *funder_addr && to != target {
++                        seeded.entry(to).or_insert_with(|| tx.timestamp());
++                    }
++                }
++            }
++        }
++
++        if seeded.len() > HUB_FUNDING_THRESHOLD {
++            // Funder looks like an exchange/bridge/disperser — drop this signal.
++            funder_is_hub = true;
++        } else {
++            for (addr, ts) in seeded {
++                let c = cand.entry(addr.clone()).or_insert_with(|| Candidate::new(&addr));
++                c.add_reason(Reason::CommonFunder);
++                c.first_interaction.get_or_insert(ts);
++            }
++        }
++    }
++
++    // --- Score & rank ----------------------------------------------------------
++    let mut candidates: Vec<Candidate> = cand.into_values().collect();
++    for c in &mut candidates {
++        c.score = c.compute_score();
++    }
++    // Drop the funder itself and the target from the candidate list; the funder is
++    // reported separately.
++    candidates.retain(|c| {
++        Some(&c.address) != funder.as_ref() && c.address != target && c.score > 0
++    });
++    candidates.sort_by(|a, b| b.score.cmp(&a.score).then(b.direct_in.cmp(&a.direct_in)));
++    candidates.truncate(50);
++
++    let note = if funder_is_hub {
++        Some(
++            "The wallet that first funded this address looks like an exchange or bridge, \
++             so 'same funder' matches were skipped to avoid false positives. Results below \
++             are based on direct transfers only."
++                .to_string(),
++        )
++    } else {
++        None
++    };
++
++    Ok(SisterReport {
++        target,
++        funder,
++        candidates,
++        note,
++    })
++}
++
++fn touch(
++    first: &mut HashMap<String, u64>,
++    last: &mut HashMap<String, u64>,
++    addr: &str,
++    ts: u64,
++) {
++    first
++        .entry(addr.to_string())
++        .and_modify(|v| {
++            if ts < *v {
++                *v = ts;
++            }
++        })
++        .or_insert(ts);
++    last.entry(addr.to_string())
++        .and_modify(|v| {
++            if ts > *v {
++                *v = ts;
++            }
++        })
++        .or_insert(ts);
++}
+diff --git a/src-tauri/src/sister/types.rs b/src-tauri/src/sister/types.rs
+new file mode 100644
+index 0000000..ae680da
+--- /dev/null
++++ b/src-tauri/src/sister/types.rs
+@@ -0,0 +1,156 @@
++//! Data types for the sister-wallet finder.
++
++use serde::{Deserialize, Serialize};
++
++// ── Etherscan wire types ──────────────────────────────────────────────────────
++
++#[derive(Debug, Deserialize)]
++pub struct EtherscanResp {
++    pub status: String,
++    pub message: String,
++    #[serde(default)]
++    pub result: serde_json::Value,
++}
++
++impl EtherscanResp {
++    /// When `result` is a plain string (error/ratelimit messages), return it.
++    pub fn result_message(&self) -> Option<String> {
++        self.result.as_str().map(|s| s.to_string())
++    }
++
++    /// Parse `result` into the tx array, tolerating the string-error shape.
++    pub fn txs(self) -> Vec<EtherscanTx> {
++        serde_json::from_value(self.result).unwrap_or_default()
++    }
++}
++
++#[derive(Debug, Deserialize)]
++pub struct EtherscanTx {
++    pub from: String,
++    #[serde(default)]
++    pub to: Option<String>,
++    #[serde(default)]
++    pub value: Option<String>,
++    #[serde(default, rename = "isError")]
++    pub is_error: String,
++    #[serde(default, rename = "timeStamp")]
++    pub time_stamp: String,
++}
++
++impl EtherscanTx {
++    pub fn timestamp(&self) -> u64 {
++        self.time_stamp.parse().unwrap_or(0)
++    }
++}
++
++// ── Report types (sent to the frontend) ───────────────────────────────────────
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Reason {
++    /// Seeded by the same funding wallet as the target.
++    CommonFunder,
++    /// This wallet sent ETH to the target (funded it).
++    FundedTarget,
++    /// The target sent ETH to this wallet.
++    TargetFunded,
++    /// ETH flowed both ways between this wallet and the target.
++    RoundTrip,
++}
++
++#[derive(Debug, Clone, Serialize)]
++pub struct Candidate {
++    pub address: String,
++    pub reasons: Vec<Reason>,
++    /// # of direct value transfers target → candidate.
++    pub direct_out: u32,
++    /// # of direct value transfers candidate → target.
++    pub direct_in: u32,
++    /// Unix seconds of earliest interaction/seed we observed.
++    pub first_interaction: Option<u64>,
++    /// Unix seconds of latest direct interaction.
++    pub last_interaction: Option<u64>,
++    /// 0–100 confidence heuristic (higher = stronger link).
++    pub score: u32,
++}
++
++impl Candidate {
++    pub fn new(address: &str) -> Self {
++        Self {
++            address: address.to_string(),
++            reasons: vec![],
++            direct_out: 0,
++            direct_in: 0,
++            first_interaction: None,
++            last_interaction: None,
++            score: 0,
++        }
++    }
++
++    pub fn add_reason(&mut self, r: Reason) {
++        if !self.reasons.contains(&r) {
++            self.reasons.push(r);
++        }
++    }
++
++    /// Weighted confidence. Round-trip + common-funder is the strongest combo.
++    pub fn compute_score(&self) -> u32 {
++        let mut s = 0i32;
++        for r in &self.reasons {
++            s += match r {
++                Reason::CommonFunder => 45,
++                Reason::RoundTrip => 35,
++                Reason::FundedTarget => 20,
++                Reason::TargetFunded => 15,
++            };
++        }
++        // Repeated direct interaction adds a little, capped.
++        s += ((self.direct_in + self.direct_out).min(10) as i32) * 2;
++        s.clamp(0, 100) as u32
++    }
++}
++
++#[derive(Debug, Clone, Serialize)]
++pub struct SisterReport {
++    pub target: String,
++    /// The wallet that first funded the target, if identifiable.
++    pub funder: Option<String>,
++    pub candidates: Vec<Candidate>,
++    /// Optional human-readable caveat (e.g. funder was an exchange).
++    pub note: Option<String>,
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn common_funder_plus_roundtrip_scores_high() {
++        let mut c = Candidate::new("0xabc");
++        c.direct_in = 3;
++        c.direct_out = 2;
++        c.add_reason(Reason::CommonFunder);
++        c.add_reason(Reason::RoundTrip);
++        c.add_reason(Reason::FundedTarget);
++        c.add_reason(Reason::TargetFunded);
++        // 45 + 35 + 20 + 15 = 115, + min(5,10)*2=10 -> clamps to 100
++        assert_eq!(c.compute_score(), 100);
++    }
++
++    #[test]
++    fn single_weak_signal_scores_low() {
++        let mut c = Candidate::new("0xdef");
++        c.direct_out = 1;
++        c.add_reason(Reason::TargetFunded);
++        // 15 + min(1,10)*2 = 17
++        assert_eq!(c.compute_score(), 17);
++    }
++
++    #[test]
++    fn add_reason_dedupes() {
++        let mut c = Candidate::new("0x1");
++        c.add_reason(Reason::CommonFunder);
++        c.add_reason(Reason::CommonFunder);
++        assert_eq!(c.reasons.len(), 1);
++    }
++}
+diff --git a/src-tauri/src/subscription/mod.rs b/src-tauri/src/subscription/mod.rs
+new file mode 100644
+index 0000000..0be18db
+--- /dev/null
++++ b/src-tauri/src/subscription/mod.rs
+@@ -0,0 +1,286 @@
++//! Offline-capable, tamper-resistant subscription licensing.
++//!
++//! Flow:
++//!   1. User pays ETH to the payment wallet (detected by the Cloudflare worker
++//!      via an Alchemy address-activity webhook — no server holds any keys).
++//!   2. The app asks the worker `POST /license {wallet}`. If the wallet has an
++//!      active subscription the worker returns a **signed license**:
++//!         { payload: "<json string>", sig: "<base64 ed25519 signature>" }
++//!      signed with the worker's ED25519 private key (a Cloudflare secret).
++//!   3. The app verifies the signature with the PUBLIC key embedded below,
++//!      then caches the license on disk. From then on it re-verifies the cached
++//!      license **offline** — no network needed.
++//!
++//! Why it can't be cheated:
++//!   - Editing the cached license (e.g. pushing out `expires_at`) breaks the
++//!     signature, so verification fails.
++//!   - Rolling the system clock back doesn't buy time: we clamp "now" to the
++//!     highest timestamp we've ever seen (`last_seen`), which only moves forward.
++//!
++//! The private key never ships in the app and never touches the user's machine.
++
++use std::path::PathBuf;
++use std::time::{SystemTime, UNIX_EPOCH};
++
++use base64::Engine;
++use ed25519_dalek::{Signature, VerifyingKey};
++use serde::{Deserialize, Serialize};
++
++/// ED25519 public key (raw 32 bytes, base64) matching the worker's signing key.
++///
++/// PRODUCTION: regenerate a keypair, set the private key as the worker secret
++/// `LICENSE_SIGNING_KEY`, and replace this value with the new public key.
++/// See `subscription-worker/DEPLOY.md`.
++const LICENSE_PUBLIC_KEY_B64: &str = "EQFxzxkeDSAeEoq9908geKlTC/lok9eb8o2t3rdAkHI=";
++
++/// Deployed worker base URL. Replace `YOUR_SUBDOMAIN` after `wrangler deploy`.
++pub const WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
++
++#[derive(Debug, Serialize, Deserialize)]
++pub struct SubscriptionCheckResult {
++    pub active: bool,
++    pub plan: Option<String>,
++    pub expires_at: Option<String>, // ISO 8601
++    pub error: Option<String>,
++}
++
++/// The signed envelope returned by the worker and cached on disk.
++#[derive(Debug, Serialize, Deserialize, Clone)]
++pub struct License {
++    /// Exact JSON string that was signed (verified verbatim, never re-serialized).
++    pub payload: String,
++    /// Base64 ed25519 signature over `payload`'s UTF-8 bytes.
++    pub sig: String,
++}
++
++/// Decoded license contents.
++#[derive(Debug, Serialize, Deserialize)]
++struct Payload {
++    wallet: String,
++    plan: String,
++    expires_at: i64, // unix seconds
++    #[serde(default)]
++    issued_at: i64,
++}
++
++fn now_unix() -> i64 {
++    SystemTime::now()
++        .duration_since(UNIX_EPOCH)
++        .map(|d| d.as_secs() as i64)
++        .unwrap_or(0)
++}
++
++fn data_dir() -> Result<PathBuf, String> {
++    let base = dirs_next::data_dir().ok_or("no data dir")?;
++    let dir = base.join("Westron").join("subscription");
++    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
++    Ok(dir)
++}
++
++fn license_path() -> Result<PathBuf, String> {
++    Ok(data_dir()?.join("license.json"))
++}
++
++fn seen_path() -> Result<PathBuf, String> {
++    Ok(data_dir()?.join("last_seen"))
++}
++
++/// Highest timestamp ever observed — monotonic anti-rollback anchor.
++fn last_seen() -> i64 {
++    seen_path()
++        .ok()
++        .and_then(|p| std::fs::read_to_string(p).ok())
++        .and_then(|s| s.trim().parse::<i64>().ok())
++        .unwrap_or(0)
++}
++
++/// Advance `last_seen` to max(stored, system_now). Never moves backward.
++fn record_seen() {
++    let n = now_unix();
++    let prev = last_seen();
++    let next = n.max(prev);
++    if let Ok(p) = seen_path() {
++        let _ = std::fs::write(p, next.to_string());
++    }
++}
++
++/// "Now" for expiry checks: the later of system clock and last_seen, so a
++/// rolled-back clock can never resurrect an expired license.
++fn effective_now() -> i64 {
++    now_unix().max(last_seen())
++}
++
++fn verifying_key() -> Result<VerifyingKey, String> {
++    let bytes = base64::engine::general_purpose::STANDARD
++        .decode(LICENSE_PUBLIC_KEY_B64)
++        .map_err(|e| format!("bad public key: {e}"))?;
++    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "public key must be 32 bytes")?;
++    VerifyingKey::from_bytes(&arr).map_err(|e| format!("invalid public key: {e}"))
++}
++
++/// Verify a license signature and return its decoded payload.
++fn verify(license: &License) -> Result<Payload, String> {
++    let vk = verifying_key()?;
++    let sig_bytes = base64::engine::general_purpose::STANDARD
++        .decode(&license.sig)
++        .map_err(|e| format!("bad signature encoding: {e}"))?;
++    let sig = Signature::from_slice(&sig_bytes).map_err(|e| format!("bad signature: {e}"))?;
++    vk.verify_strict(license.payload.as_bytes(), &sig)
++        .map_err(|_| "license signature does not verify".to_string())?;
++    serde_json::from_str::<Payload>(&license.payload).map_err(|e| format!("bad payload: {e}"))
++}
++
++fn iso(expires_at: i64) -> Option<String> {
++    chrono::DateTime::<chrono::Utc>::from_timestamp(expires_at, 0).map(|dt| dt.to_rfc3339())
++}
++
++/// Turn a verified payload into a status result, applying the anti-rollback clock.
++fn result_from(payload: &Payload) -> SubscriptionCheckResult {
++    let active = payload.expires_at > effective_now();
++    SubscriptionCheckResult {
++        active,
++        plan: if active { Some(payload.plan.clone()) } else { None },
++        expires_at: if active { iso(payload.expires_at) } else { None },
++        error: None,
++    }
++}
++
++fn store_license(license: &License) {
++    if let Ok(p) = license_path() {
++        if let Ok(s) = serde_json::to_string(license) {
++            let _ = std::fs::write(p, s);
++        }
++    }
++}
++
++fn load_license() -> Option<License> {
++    let p = license_path().ok()?;
++    let s = std::fs::read_to_string(p).ok()?;
++    serde_json::from_str::<License>(&s).ok()
++}
++
++/// Evaluate subscription for `wallet`: fetch a fresh signed license when online,
++/// otherwise fall back to the cached one — always verifying the signature.
++pub async fn evaluate(wallet: &str) -> SubscriptionCheckResult {
++    record_seen();
++
++    let addr = wallet.trim().to_lowercase();
++    if addr.is_empty() {
++        return SubscriptionCheckResult {
++            active: false, plan: None, expires_at: None,
++            error: Some("No wallet address provided".to_string()),
++        };
++    }
++
++    // 1) Try to fetch a fresh signed license from the worker.
++    let online = fetch_license(&addr).await;
++    match online {
++        Ok(Some(license)) => match verify(&license) {
++            Ok(payload) if payload.wallet.to_lowercase() == addr => {
++                store_license(&license);
++                result_from(&payload)
++            }
++            Ok(_) => SubscriptionCheckResult {
++                active: false, plan: None, expires_at: None,
++                error: Some("License wallet mismatch".to_string()),
++            },
++            Err(e) => SubscriptionCheckResult {
++                active: false, plan: None, expires_at: None,
++                error: Some(format!("Invalid license from server: {e}")),
++            },
++        },
++        // Worker reachable but wallet has no active subscription.
++        Ok(None) => {
++            // Clear any stale cached license for this wallet.
++            if let Some(cached) = load_license() {
++                if let Ok(p) = verify(&cached) {
++                    if p.wallet.to_lowercase() == addr {
++                        let _ = license_path().map(std::fs::remove_file);
++                    }
++                }
++            }
++            SubscriptionCheckResult { active: false, plan: None, expires_at: None, error: None }
++        }
++        // 2) Offline — fall back to the cached, signed license.
++        Err(_) => match load_license() {
++            Some(license) => match verify(&license) {
++                Ok(payload) if payload.wallet.to_lowercase() == addr => {
++                    let mut r = result_from(&payload);
++                    if !r.active {
++                        r.error = Some("Subscription expired (offline).".to_string());
++                    }
++                    r
++                }
++                _ => SubscriptionCheckResult {
++                    active: false, plan: None, expires_at: None,
++                    error: Some("Offline and no valid cached license for this wallet.".to_string()),
++                },
++            },
++            None => SubscriptionCheckResult {
++                active: false, plan: None, expires_at: None,
++                error: Some("Offline and no cached license. Connect once to activate.".to_string()),
++            },
++        },
++    }
++}
++
++/// Returns Ok(Some(license)) if the worker issued one, Ok(None) if the wallet has
++/// no active subscription, Err if the worker is unreachable.
++async fn fetch_license(addr: &str) -> Result<Option<License>, String> {
++    let client = reqwest::Client::builder()
++        .timeout(std::time::Duration::from_secs(8))
++        .build()
++        .map_err(|e| e.to_string())?;
++
++    let resp = client
++        .post(format!("{}/license", WORKER_URL))
++        .header("content-type", "application/json")
++        .json(&serde_json::json!({ "wallet": addr }))
++        .send()
++        .await
++        .map_err(|e| e.to_string())?;
++
++    if !resp.status().is_success() {
++        return Err(format!("worker status {}", resp.status()));
++    }
++
++    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
++
++    // Worker returns { active: false } when there is no subscription.
++    if body.get("active").and_then(|v| v.as_bool()) == Some(false) {
++        return Ok(None);
++    }
++
++    let payload = body.get("payload").and_then(|v| v.as_str());
++    let sig = body.get("sig").and_then(|v| v.as_str());
++    match (payload, sig) {
++        (Some(p), Some(s)) => Ok(Some(License { payload: p.to_string(), sig: s.to_string() })),
++        _ => Ok(None),
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn tampered_payload_fails_verification() {
++        // A syntactically valid but unsigned license must not verify.
++        let bad = License {
++            payload: r#"{"wallet":"0xabc","plan":"annual","expires_at":9999999999,"issued_at":0}"#.to_string(),
++            sig: base64::engine::general_purpose::STANDARD.encode([0u8; 64]),
++        };
++        assert!(verify(&bad).is_err());
++    }
++
++    #[test]
++    fn public_key_is_valid() {
++        assert!(verifying_key().is_ok());
++    }
++
++    #[test]
++    fn effective_now_never_below_last_seen() {
++        // effective_now is max(system_now, last_seen); it is always >= last_seen.
++        assert!(effective_now() >= last_seen());
++    }
++}
+diff --git a/src-tauri/src/wallet/keychain.rs b/src-tauri/src/wallet/keychain.rs
+index bb34978..36d2c23 100644
+--- a/src-tauri/src/wallet/keychain.rs
++++ b/src-tauri/src/wallet/keychain.rs
+@@ -74,3 +74,17 @@ pub fn fetch_opensea_key() -> Result<String, String> {
+ pub fn delete_opensea_key() -> Result<(), String> {
+     delete_key_file("opensea")
+ }
++
++// ── Etherscan API key ─────────────────────────────────────────────────────────
++
++pub fn store_etherscan_key(api_key: &str) -> Result<(), String> {
++    write_key("etherscan", api_key)
++}
++
++pub fn fetch_etherscan_key() -> Result<String, String> {
++    read_key("etherscan")
++}
++
++pub fn delete_etherscan_key() -> Result<(), String> {
++    delete_key_file("etherscan")
++}
+diff --git a/src/app/alerts/feed/page.tsx b/src/app/alerts/feed/page.tsx
+index e4b0a47..de9478d 100644
+--- a/src/app/alerts/feed/page.tsx
++++ b/src/app/alerts/feed/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { listAlerts, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_ALERTS } from '@/lib/mockData';
++import { EMPTY_ALERTS } from '@/lib/emptyData';
+ import ProGate from '@/components/ProGate';
+ 
+ // ─── Alerts / Feed — matches dMkWk design ────────────────────────────────────
+@@ -58,7 +58,7 @@ export default function AlertsFeedPage() {
+   useEffect(() => {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const addr = loadWallets()[0]?.address ?? '';
+-    if (!inTauri) { setAllRules(MOCK_ALERTS); setLoading(false); return; }
++    if (!inTauri) { setAllRules(EMPTY_ALERTS); setLoading(false); return; }
+     (async () => {
+       await loadAlchemyKey().catch(() => '');
+       const data = await listAlerts(addr).catch(() => [] as AlertRule[]);
+diff --git a/src/app/alerts/history/page.tsx b/src/app/alerts/history/page.tsx
+index 75d30c1..c5d2046 100644
+--- a/src/app/alerts/history/page.tsx
++++ b/src/app/alerts/history/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { listAlerts, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_ALERTS } from '@/lib/mockData';
++import { EMPTY_ALERTS } from '@/lib/emptyData';
+ import { Tag, type TagVariant } from '@/components/Tag';
+ import ProGate from '@/components/ProGate';
+ 
+@@ -47,7 +47,7 @@ export default function AlertHistoryPage() {
+   useEffect(() => {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const addr = loadWallets()[0]?.address ?? '';
+-    if (!inTauri) { setEntries(MOCK_ALERTS.map(ruleToEntry)); setLoading(false); return; }
++    if (!inTauri) { setEntries(EMPTY_ALERTS.map(ruleToEntry)); setLoading(false); return; }
+     (async () => {
+       await loadAlchemyKey().catch(() => '');
+       const rules = await listAlerts(addr).catch(() => [] as AlertRule[]);
+diff --git a/src/app/alerts/page.tsx b/src/app/alerts/page.tsx
+index be4e99b..6c45683 100644
+--- a/src/app/alerts/page.tsx
++++ b/src/app/alerts/page.tsx
+@@ -7,7 +7,7 @@ import {
+   type AlertRule, type AlertRuleInput,
+ } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_ALERTS } from '@/lib/mockData';
++import { EMPTY_ALERTS } from '@/lib/emptyData';
+ import ProGate from '@/components/ProGate';
+ import { loadNotificationPrefs } from '@/lib/notificationPrefsStore';
+ 
+@@ -163,7 +163,7 @@ export default function AlertsPage() {
+       const wallets = loadWallets();
+       const addr = wallets[0]?.address ?? '';
+       setWalletAddress(addr);
+-      setAlerts(MOCK_ALERTS);
++      setAlerts(EMPTY_ALERTS);
+       setLoading(false);
+       return;
+     }
+diff --git a/src/app/alerts/rules/page.tsx b/src/app/alerts/rules/page.tsx
+index 9862ec4..df2ac64 100644
+--- a/src/app/alerts/rules/page.tsx
++++ b/src/app/alerts/rules/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { listAlerts, setAlertActive, deleteAlert, loadAlchemyKey, type AlertRule } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_ALERTS } from '@/lib/mockData';
++import { EMPTY_ALERTS } from '@/lib/emptyData';
+ import ProGate from '@/components/ProGate';
+ 
+ // ─── Alerts / Rules — matches 5JKDK design ───────────────────────────────────
+@@ -40,7 +40,7 @@ export default function AlertRulesPage() {
+     const wallets = loadWallets();
+     const addr = wallets[0]?.address ?? '';
+     setWalletAddress(addr);
+-    if (!inTauri) { setRules(MOCK_ALERTS); setLoading(false); return; }
++    if (!inTauri) { setRules(EMPTY_ALERTS); setLoading(false); return; }
+     (async () => {
+       const key = await loadAlchemyKey().catch(() => '');
+       void key;
+diff --git a/src/app/analytics/page.tsx b/src/app/analytics/page.tsx
+index 8694903..6814b74 100644
+--- a/src/app/analytics/page.tsx
++++ b/src/app/analytics/page.tsx
+@@ -10,7 +10,7 @@ import {
+   type TradeRecord,
+   type PortfolioSnapshot,
+ } from '@/lib/tauri';
+-import { MOCK_PORTFOLIO_SNAPSHOT, MOCK_PNL_SUMMARY, MOCK_TRADES } from '@/lib/mockData';
++import { EMPTY_PNL, EMPTY_SNAPSHOT, EMPTY_TRADES } from '@/lib/emptyData';
+ 
+ const DEMO_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+ 
+@@ -56,9 +56,9 @@ export default function AnalyticsPage() {
+ 
+   const handleLoadAnalytics = async () => {
+     if (!isTauri) {
+-      setSnapshot(MOCK_PORTFOLIO_SNAPSHOT);
+-      setPnl(MOCK_PNL_SUMMARY);
+-      setTrades(MOCK_TRADES);
++      setSnapshot(EMPTY_SNAPSHOT);
++      setPnl(EMPTY_PNL);
++      setTrades(EMPTY_TRADES);
+       setLoaded(true);
+       return;
+     }
+diff --git a/src/app/bulk/list/page.tsx b/src/app/bulk/list/page.tsx
+index eb60a41..ad4bbfe 100644
+--- a/src/app/bulk/list/page.tsx
++++ b/src/app/bulk/list/page.tsx
+@@ -8,7 +8,7 @@ import ProGate from '@/components/ProGate';
+ import EthIcon from '@/components/EthIcon';
+ 
+ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+-import { MOCK_NFTS_RESPONSE } from '@/lib/mockData';
++import { EMPTY_NFTS_RESPONSE } from '@/lib/emptyData';
+ import { Tag, type TagVariant } from '@/components/Tag';
+ 
+ // ─── Types & Data ─────────────────────────────────────────────────────────────
+@@ -297,7 +297,7 @@ export default function BulkListPage() {
+         const w = stored.map((sw, i) => ({ id: sw.address, name: sw.name, address: sw.address, nftCount: 0 }));
+         setWallets(w);
+         setActiveWallets(new Set(w.map(x => x.id)));
+-        const mockNfts = (MOCK_NFTS_RESPONSE.owned_nfts as OwnedNft[]).map((n, i) => ownedNftToNFT(n, i, w[0].id));
++        const mockNfts = (EMPTY_NFTS_RESPONSE.owned_nfts as OwnedNft[]).map((n, i) => ownedNftToNFT(n, i, w[0].id));
+         setAllNfts(mockNfts.length > 0 ? mockNfts : STATIC_NFTS);
+       }
+       return;
+diff --git a/src/app/gallery/page.tsx b/src/app/gallery/page.tsx
+index 5ce5687..d88fa21 100644
+--- a/src/app/gallery/page.tsx
++++ b/src/app/gallery/page.tsx
+@@ -3,7 +3,7 @@
+ import { useState, useEffect, useCallback } from 'react';
+ import { getNftsForOwner, saveAlchemyKey, loadAlchemyKey, type OwnedNft, type NftsForOwnerResponse } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_NFTS_RESPONSE } from '@/lib/mockData';
++import { EMPTY_NFTS_RESPONSE } from '@/lib/emptyData';
+ 
+ type ViewMode = 'grid' | 'list';
+ type SortKey = 'name' | 'collection' | 'floor_price';
+@@ -142,8 +142,8 @@ export default function Gallery() {
+       const wallets = loadWallets();
+       const firstAddr = wallets[0]?.address ?? '';
+       setAddress(firstAddr);
+-      setNfts(MOCK_NFTS_RESPONSE.owned_nfts);
+-      setTotalCount(MOCK_NFTS_RESPONSE.total_count);
++      setNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
++      setTotalCount(EMPTY_NFTS_RESPONSE.total_count);
+       return;
+     }
+ 
+@@ -171,8 +171,8 @@ export default function Gallery() {
+ 
+   const fetchNfts = async () => {
+     if (!isTauri) {
+-      setNfts(MOCK_NFTS_RESPONSE.owned_nfts);
+-      setTotalCount(MOCK_NFTS_RESPONSE.total_count);
++      setNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
++      setTotalCount(EMPTY_NFTS_RESPONSE.total_count);
+       setSelectedIds(new Set());
+       return;
+     }
+diff --git a/src/app/monitor/page.tsx b/src/app/monitor/page.tsx
+index a20e1e4..4f67b81 100644
+--- a/src/app/monitor/page.tsx
++++ b/src/app/monitor/page.tsx
+@@ -10,7 +10,7 @@ import { TrackedNftNotificationModal } from '@/components/TrackedNftNotification
+ import { loadWallets, removeWallet } from '@/lib/walletStore';
+ import { loadCollections, saveCollection, removeCollection, type WatchedCollection } from '@/lib/collectionStore';
+ import { fetchCollectionByContract } from '@/lib/tauri';
+-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
+ import { useTheme } from '@/lib/themeContext';
+ import ProGate from '@/components/ProGate';
+ 
+@@ -464,7 +464,7 @@ export default function MonitorPage() {
+       const results = await Promise.allSettled(
+         stored.map(async (w) => {
+           const [snap, txs] = await Promise.all([
+-            getPortfolioSnapshot(w.address, key).catch(() => MOCK_PORTFOLIO_SNAPSHOT),
++            getPortfolioSnapshot(w.address, key).catch(() => EMPTY_SNAPSHOT),
+             getAssetTransfers(w.address, key).catch(() => [] as AssetTransfer[]),
+           ]);
+           return { w, snap: snap as PortfolioSnapshot, txCount: (txs as AssetTransfer[]).length };
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 4b11641..01a62f9 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -9,7 +9,7 @@ import {
+ } from '@/lib/tauri';
+ import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
+ import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
+-import { MOCK_TRANSFERS, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
+ import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
+ import { useTheme } from '@/lib/themeContext';
+ import EthIcon from '@/components/EthIcon';
+@@ -915,9 +915,9 @@ export default function Dashboard() {
+     } else {
+       // Browser mode — use mock data immediately
+       const mockSnaps: Record<string, PortfolioSnapshot> = {};
+-      wallets.forEach(w => { mockSnaps[w.id] = MOCK_PORTFOLIO_SNAPSHOT; });
++      wallets.forEach(w => { mockSnaps[w.id] = EMPTY_SNAPSHOT; });
+       setSnapshots(mockSnaps);
+-      setLiveTransactions(MOCK_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
++      setLiveTransactions(EMPTY_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
+       setLoadingData(false);
+     }
+   }, []);
+diff --git a/src/app/portfolio/analytics/page.tsx b/src/app/portfolio/analytics/page.tsx
+index b629ee6..0ddfdf7 100644
+--- a/src/app/portfolio/analytics/page.tsx
++++ b/src/app/portfolio/analytics/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { getPnlSummary, getPortfolioSnapshot, loadAlchemyKey, type PnlSummary, type PortfolioSnapshot } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_PNL_SUMMARY, MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_PNL, EMPTY_SNAPSHOT } from '@/lib/emptyData';
+ 
+ // ─── Portfolio / Analytics — matches WK5Xm design ────────────────────────────
+ 
+@@ -33,8 +33,8 @@ export default function PortfolioAnalyticsPage() {
+     const wallets = loadWallets();
+     if (wallets[0]) setWalletName(wallets[0].name);
+     if (!inTauri) {
+-      setPnl(MOCK_PNL_SUMMARY as PnlSummary);
+-      setSnap(MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot);
++      setPnl(EMPTY_PNL as PnlSummary);
++      setSnap(EMPTY_SNAPSHOT as PortfolioSnapshot);
+       return;
+     }
+     (async () => {
+diff --git a/src/app/portfolio/holdings/page.tsx b/src/app/portfolio/holdings/page.tsx
+index d97b6e6..80bdd58 100644
+--- a/src/app/portfolio/holdings/page.tsx
++++ b/src/app/portfolio/holdings/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { getPortfolioSnapshot, loadAlchemyKey, type PortfolioSnapshot } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
+ import { Tag, type TagVariant } from '@/components/Tag';
+ 
+ // ─── Portfolio / Holdings — matches 0G1do design ─────────────────────────────
+@@ -37,7 +37,7 @@ export default function PortfolioHoldingsPage() {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const wallets = loadWallets();
+     if (wallets[0]) setWalletName(wallets[0].name);
+-    if (!inTauri) { setSnap(MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot); return; }
++    if (!inTauri) { setSnap(EMPTY_SNAPSHOT as PortfolioSnapshot); return; }
+     (async () => {
+       const key  = await loadAlchemyKey().catch(() => '');
+       const addr = wallets[0]?.address ?? '';
+diff --git a/src/app/portfolio/page.tsx b/src/app/portfolio/page.tsx
+index f4ae706..3c227e7 100644
+--- a/src/app/portfolio/page.tsx
++++ b/src/app/portfolio/page.tsx
+@@ -3,7 +3,7 @@
+ import { useState, useEffect } from 'react';
+ import { getPortfolioSnapshot, getPnlSummary, getAssetTransfers, loadAlchemyKey, type PortfolioSnapshot, type PnlSummary, type AssetTransfer } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_PORTFOLIO_SNAPSHOT, MOCK_PNL_SUMMARY, MOCK_TRANSFERS } from '@/lib/mockData';
++import { EMPTY_PNL, EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
+ import { Tag, TX_TYPE_VARIANT } from '@/components/Tag';
+ import EthIcon from '@/components/EthIcon';
+ 
+@@ -48,11 +48,11 @@ function WalletsTab() {
+         name: w.name,
+         address: w.address.slice(0, 6) + '…' + w.address.slice(-4),
+         rawAddress: w.address,
+-        eth: MOCK_PORTFOLIO_SNAPSHOT.eth_balance,
+-        usd: MOCK_PORTFOLIO_SNAPSHOT.portfolio_value_usd,
++        eth: EMPTY_SNAPSHOT.eth_balance,
++        usd: EMPTY_SNAPSHOT.portfolio_value_usd,
+         color: WALLET_COLORS[i % WALLET_COLORS.length],
+-        nfts: MOCK_PORTFOLIO_SNAPSHOT.nft_count,
+-        tokens: MOCK_PORTFOLIO_SNAPSHOT.token_count,
++        nfts: EMPTY_SNAPSHOT.nft_count,
++        tokens: EMPTY_SNAPSHOT.token_count,
+       })));
+       setLoading(false);
+       return;
+@@ -60,10 +60,10 @@ function WalletsTab() {
+     (async () => {
+       const key = await loadAlchemyKey().catch(() => '');
+       const results = await Promise.allSettled(
+-        stored.map(w => getPortfolioSnapshot(w.address, key).catch(() => MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot))
++        stored.map(w => getPortfolioSnapshot(w.address, key).catch(() => EMPTY_SNAPSHOT as PortfolioSnapshot))
+       );
+       setWalletCards(results.map((r, i) => {
+-        const snap = r.status === 'fulfilled' ? r.value : MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot;
++        const snap = r.status === 'fulfilled' ? r.value : EMPTY_SNAPSHOT as PortfolioSnapshot;
+         return {
+           name: stored[i].name,
+           address: stored[i].address.slice(0, 6) + '…' + stored[i].address.slice(-4),
+@@ -121,14 +121,14 @@ function AnalyticsTab() {
+   useEffect(() => {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const addr = loadWallets()[0]?.address ?? '';
+-    if (!inTauri) { setPnl(MOCK_PNL_SUMMARY as PnlSummary); return; }
++    if (!inTauri) { setPnl(EMPTY_PNL as PnlSummary); return; }
+     (async () => {
+       const key = await loadAlchemyKey().catch(() => '');
+       if (addr && key) {
+-        const data = await getPnlSummary(addr, key).catch(() => MOCK_PNL_SUMMARY as PnlSummary);
++        const data = await getPnlSummary(addr, key).catch(() => EMPTY_PNL as PnlSummary);
+         setPnl(data);
+       } else {
+-        setPnl(MOCK_PNL_SUMMARY as PnlSummary);
++        setPnl(EMPTY_PNL as PnlSummary);
+       }
+     })();
+   }, []);
+@@ -197,7 +197,7 @@ export default function PortfolioPage() {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const addr = loadWallets()[0]?.address ?? '';
+     if (!inTauri) {
+-      setLiveTxs((MOCK_TRANSFERS as AssetTransfer[]).map(t => mapTransfer(t, addr)));
++      setLiveTxs((EMPTY_TRANSFERS as AssetTransfer[]).map(t => mapTransfer(t, addr)));
+       return;
+     }
+     (async () => {
+diff --git a/src/app/portfolio/transactions/page.tsx b/src/app/portfolio/transactions/page.tsx
+index b35d7ab..d30fd14 100644
+--- a/src/app/portfolio/transactions/page.tsx
++++ b/src/app/portfolio/transactions/page.tsx
+@@ -4,7 +4,7 @@ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { getAssetTransfers, loadAlchemyKey, type AssetTransfer } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_TRANSFERS } from '@/lib/mockData';
++import { EMPTY_TRANSFERS } from '@/lib/emptyData';
+ 
+ // ─── Portfolio / Transactions — matches 3qwIV design ────────────────────────
+ 
+@@ -58,7 +58,7 @@ export default function PortfolioTransactionsPage() {
+   useEffect(() => {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const addr = loadWallets()[0]?.address ?? '';
+-    if (!inTauri) { setLiveTxs((MOCK_TRANSFERS as AssetTransfer[]).map(t => mapTx(t, addr))); return; }
++    if (!inTauri) { setLiveTxs((EMPTY_TRANSFERS as AssetTransfer[]).map(t => mapTx(t, addr))); return; }
+     (async () => {
+       const key = await loadAlchemyKey().catch(() => '');
+       if (!key || !addr) { setLiveTxs(TXS as ReturnType<typeof mapTx>[]); return; }
+diff --git a/src/app/settings/page.tsx b/src/app/settings/page.tsx
+index 7582bad..37ae83a 100644
+--- a/src/app/settings/page.tsx
++++ b/src/app/settings/page.tsx
+@@ -2,7 +2,7 @@
+ 
+ import React, { useState, useEffect } from 'react';
+ import { loadWallets, addWallet, removeWallet } from '@/lib/walletStore';
+-import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, importWallet, checkSubscription } from '@/lib/tauri';
++import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription } from '@/lib/tauri';
+ import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, type SubscriptionState } from '@/lib/subscriptionStore';
+ import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
+ import { Tag } from '@/components/Tag';
+@@ -336,6 +336,10 @@ function SecuritySection() {
+   const [osKeyInput, setOsKeyInput] = useState('');
+   const [osKeySaving, setOsKeySaving] = useState(false);
+   const [osKeyMsg, setOsKeyMsg] = useState('');
++  const [esKey, setEsKey] = useState('');
++  const [esKeyInput, setEsKeyInput] = useState('');
++  const [esKeySaving, setEsKeySaving] = useState(false);
++  const [esKeyMsg, setEsKeyMsg] = useState('');
+   const [showImportModal, setShowImportModal] = useState(false);
+   const [connectedWallets, setConnectedWallets] = useState<{ id: string; short: string; rawAddress: string; chain: string; name: string; }[]>([]);
+ 
+@@ -354,6 +358,7 @@ function SecuritySection() {
+     if (isTauri) {
+       loadAlchemyKey().then(k => { if (k) { setApiKey(k); setApiKeyInput(k); } }).catch(() => {});
+       loadOpenSeaKey().then(k => { if (k) { setOsKey(k); setOsKeyInput(k); } }).catch(() => {});
++      loadEtherscanKey().then(k => { if (k) { setEsKey(k); setEsKeyInput(k); } }).catch(() => {});
+     }
+     reloadWallets();
+   }, []);
+@@ -402,6 +407,28 @@ function SecuritySection() {
+     setTimeout(() => setOsKeyMsg(''), 2000);
+   };
+ 
++  const handleSaveEsKey = async () => {
++    if (!esKeyInput.trim()) return;
++    setEsKeySaving(true);
++    try {
++      if (isTauri) await saveEtherscanKey(esKeyInput.trim());
++      setEsKey(esKeyInput.trim());
++      setEsKeyMsg('Saved.');
++    } catch (e) { setEsKeyMsg(`Error: ${e instanceof Error ? e.message : String(e)}`); }
++    setEsKeySaving(false);
++    setTimeout(() => setEsKeyMsg(''), 2000);
++  };
++
++  const handleDeleteEsKey = async () => {
++    try {
++      if (isTauri) await deleteEtherscanKey();
++      setEsKey('');
++      setEsKeyInput('');
++      setEsKeyMsg('Removed.');
++    } catch { setEsKeyMsg('Error removing key.'); }
++    setTimeout(() => setEsKeyMsg(''), 2000);
++  };
++
+   const handleRemoveWallet = (id: string) => {
+     removeWallet(id);
+     reloadWallets();
+@@ -524,7 +551,7 @@ function SecuritySection() {
+         </div>
+         {/* OpenSea row */}
+         <div>
+-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
++          <div style={rowStyle}>
+             <span style={labelStyle}>OpenSea Key</span>
+             <input
+               type="password"
+@@ -544,6 +571,29 @@ function SecuritySection() {
+             <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: osKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{osKeyMsg}</div>
+           )}
+         </div>
++
++        {/* Etherscan row (powers the Sister Wallet Finder) */}
++        <div>
++          <div style={{ ...rowStyle, borderBottom: 'none' }}>
++            <span style={labelStyle}>Etherscan Key</span>
++            <input
++              type="password"
++              value={esKeyInput}
++              onChange={e => setEsKeyInput(e.target.value)}
++              placeholder="Enter Etherscan API key…"
++              style={inputStyle}
++            />
++            <button onClick={handleSaveEsKey} disabled={esKeySaving || !esKeyInput.trim()} style={{ ...inlineBtn, opacity: esKeySaving || !esKeyInput.trim() ? 0.4 : 1, cursor: esKeySaving || !esKeyInput.trim() ? 'not-allowed' : 'pointer' }}>
++              {esKeySaving ? 'Saving…' : 'Save'}
++            </button>
++            {esKey && (
++              <button onClick={handleDeleteEsKey} style={dangerBtn}>Remove</button>
++            )}
++          </div>
++          {esKeyMsg && (
++            <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: esKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{esKeyMsg}</div>
++          )}
++        </div>
+       </div>
+ 
+       {/* Access & Limits block */}
+diff --git a/src/app/sniping/page.tsx b/src/app/sniping/page.tsx
+index 62f318e..c0e78ab 100644
+--- a/src/app/sniping/page.tsx
++++ b/src/app/sniping/page.tsx
+@@ -21,7 +21,7 @@ import {
+   type SnipeResult,
+   type SnipeOpportunity,
+ } from '@/lib/tauri';
+-import { MOCK_ENVELOPE, MOCK_SNIPE_RULES } from '@/lib/mockData';
++import { EMPTY_SNIPE_RULES } from '@/lib/emptyData';
+ import ProGate from '@/components/ProGate';
+ 
+ const isValidEthAddress = (addr: string): boolean =>
+@@ -72,7 +72,7 @@ function EnvelopePanel({ isTauri }: EnvelopePanelProps) {
+   const [createLoading, setCreateLoading] = useState(false);
+ 
+   const loadStatus = async () => {
+-    if (!isTauri) { setStatus(MOCK_ENVELOPE); return; }
++    if (!isTauri) { setStatus(null); return; }
+     setLoading(true);
+     setError(null);
+     try {
+@@ -526,7 +526,7 @@ export default function SnipingPage() {
+   }, []);
+ 
+   const loadRules = async (addr: string) => {
+-    if (!isTauri) { setRules(MOCK_SNIPE_RULES); return; }
++    if (!isTauri) { setRules(EMPTY_SNIPE_RULES); return; }
+     setListLoading(true);
+     setListError(null);
+     try {
+diff --git a/src/app/wallet/[id]/WalletDetailClient.tsx b/src/app/wallet/[id]/WalletDetailClient.tsx
+index 0a233e0..4a0598c 100644
+--- a/src/app/wallet/[id]/WalletDetailClient.tsx
++++ b/src/app/wallet/[id]/WalletDetailClient.tsx
+@@ -3,16 +3,14 @@
+ import React, { useState, useEffect } from 'react';
+ import Link from 'next/link';
+ import {
+-  getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, loadAlchemyKey, getPrivateKey,
++  getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, loadAlchemyKey,
+   type PortfolioSnapshot, type OwnedNft, type AssetTransfer,
+ } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+ import { persistTask } from '@/lib/taskStore';
+-import { getSwapQuote, type SwapQuote } from '@/lib/uniswap';
+-import { executeSwap, type SwapStatus } from '@/lib/swap';
+ import { parseUnits } from 'viem';
+ import { loadAddressBook, saveAddressEntry, deleteAddressEntry, updateAddressEntry, type AddressEntry } from '@/lib/addressBook';
+-import { MOCK_PORTFOLIO_SNAPSHOT, MOCK_NFTS_RESPONSE, MOCK_TRANSFERS } from '@/lib/mockData';
++import { EMPTY_NFTS_RESPONSE, EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
+ import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
+ 
+ // ─── Wallet Detail Client ─────────────────────────────────────────────────────
+@@ -610,34 +608,6 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
+   );
+ }
+ 
+-// ── Swap / Buy Modal ──────────────────────────────────────────────────────────
+-
+-const ETH_TOKENS = [
+-  { symbol: 'ETH',  name: 'Ethereum',        color: '#627EEA' },
+-  { symbol: 'USDC', name: 'USD Coin',         color: '#2775CA' },
+-  { symbol: 'USDT', name: 'Tether',           color: '#26A17B' },
+-  { symbol: 'WBTC', name: 'Wrapped Bitcoin',  color: '#F7931A' },
+-  { symbol: 'LINK', name: 'Chainlink',        color: '#375BD2' },
+-  { symbol: 'UNI',  name: 'Uniswap',         color: '#FF007A' },
+-  { symbol: 'AAVE', name: 'Aave',            color: '#B6509E' },
+-  { symbol: 'PEPE', name: 'Pepe',            color: '#00b04f' },
+-];
+-
+-const MOCK_RATES: Record<string, number> = {
+-  ETH: 3200, USDC: 1, USDT: 1, WBTC: 62000,
+-  LINK: 14, UNI: 8, AAVE: 95, PEPE: 0.0000142,
+-};
+-
+-function TokenIcon({ symbol, color, size = 28 }: { symbol: string; color: string; size?: number }) {
+-  return (
+-    <div style={{ width: size, height: size, borderRadius: '50%', backgroundColor: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+-      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: Math.round(size * 0.38) + 'px', fontWeight: 700, color: '#fff' }}>{symbol[0]}</span>
+-    </div>
+-  );
+-}
+-
+-// ─── Address Book ─────────────────────────────────────────────────────────────
+-
+ function AddressBookTab() {
+   const [entries, setEntries] = useState<AddressEntry[]>([]);
+   const [nameInput, setNameInput] = useState('');
+@@ -822,596 +792,6 @@ function AddressBookTab() {
+   );
+ }
+ 
+-// ─── Swap ─────────────────────────────────────────────────────────────────────
+-
+-type ExecStage = 'idle' | 'quoting' | 'ready' | 'checking-allowance' | 'approving' | 'waiting-approve' | 'swapping' | 'waiting-swap' | 'confirmed' | 'error';
+-
+-const STAGE_LABEL: Record<ExecStage, string> = {
+-  idle: '',
+-  quoting: 'Fetching best route...',
+-  ready: '',
+-  'checking-allowance': 'Checking token approval...',
+-  approving: 'Approving token spend...',
+-  'waiting-approve': 'Waiting for approval tx...',
+-  swapping: 'Sending swap transaction...',
+-  'waiting-swap': 'Waiting for confirmation...',
+-  confirmed: 'Swap confirmed',
+-  error: '',
+-};
+-
+-function SwapModal({ mode, onClose, sellTicker = 'ETH', sellColor = '#627EEA', sellName = 'Ethereum', walletAddress = '', alchemyKey = '', walletTokens = [] }: { mode: 'swap' | 'buy'; onClose: () => void; sellTicker?: string; sellColor?: string; sellName?: string; walletAddress?: string; alchemyKey?: string; walletTokens?: { symbol: string; name: string; color: string }[] }) {
+-  const [orderType, setOrderType] = useState<'market' | 'limit' | 'recurring'>('market');
+-  const [sellToken, setSellToken] = useState(sellTicker);
+-  const [buyToken, setBuyToken] = useState(sellTicker === 'USDC' ? 'ETH' : 'USDC');
+-  const [sellAmount, setSellAmount] = useState('');
+-  const [limitPrice, setLimitPrice] = useState('');
+-  const [showTokenSearch, setShowTokenSearch] = useState(false);
+-  const [showSellPicker, setShowSellPicker] = useState(false);
+-  const [tokenSearch, setTokenSearch] = useState('');
+-  const [recurringAmount, setRecurringAmount] = useState('');
+-  const [recurringFrequency, setRecurringFrequency] = useState('1');
+-  const [recurringFreqUnit, setRecurringFreqUnit] = useState<'minute' | 'hour' | 'day' | 'week'>('day');
+-  const [recurringSuborders, setRecurringSuborders] = useState('2');
+-  const [recurringPriceMin, setRecurringPriceMin] = useState('');
+-  const [recurringPriceMax, setRecurringPriceMax] = useState('');
+-  const [showRecurringSummary, setShowRecurringSummary] = useState(false);
+-  const [stage, setStage] = useState<ExecStage>('idle');
+-  const [quote, setQuote] = useState<SwapQuote | null>(null);
+-  const [quoteError, setQuoteError] = useState('');
+-  const [txHash, setTxHash] = useState('');
+-  const [approveTxHash, setApproveTxHash] = useState('');
+-  const [execError, setExecError] = useState('');
+-
+-  // Debounced quote fetch whenever amount or output token changes
+-  useEffect(() => {
+-    if (!sellAmount || parseFloat(sellAmount) <= 0 || orderType !== 'market') {
+-      setQuote(null);
+-      setStage('idle');
+-      return;
+-    }
+-    setStage('quoting');
+-    setQuoteError('');
+-    const t = setTimeout(async () => {
+-      try {
+-        const q = await getSwapQuote({ tokenIn: sellToken, tokenOut: buyToken, amountIn: sellAmount, recipient: walletAddress });
+-        setQuote(q);
+-        setStage('ready');
+-      } catch (err) {
+-        setQuoteError(err instanceof Error ? err.message : 'Failed to get quote');
+-        setQuote(null);
+-        setStage('error');
+-      }
+-    }, 600);
+-    return () => clearTimeout(t);
+-  }, [sellAmount, buyToken, sellToken, walletAddress, orderType]);
+-
+-  const sellTok = ETH_TOKENS.find(t => t.symbol === sellToken) ?? { symbol: sellToken, name: sellName, color: sellColor };
+-  const buyTok  = ETH_TOKENS.find(t => t.symbol === buyToken) ?? ETH_TOKENS[1];
+-  const sellNum = parseFloat(sellAmount) || 0;
+-  const sellUsd = sellNum * (MOCK_RATES[sellToken] ?? 0);
+-  const isDone = (stage as string) === 'confirmed';
+-  const canExecute = (stage as string) === 'ready' && !!walletAddress && !!alchemyKey;
+-  const canLimitSubmit = orderType === 'limit' && sellNum > 0 && sellToken !== buyToken && !isDone;
+-  const isExecuting = ['checking-allowance','approving','waiting-approve','swapping','waiting-swap'].includes(stage as string);
+-
+-  const filteredTokens = ETH_TOKENS.filter(t =>
+-    t.symbol !== sellToken &&
+-    (tokenSearch === '' || t.symbol.toLowerCase().includes(tokenSearch.toLowerCase()) || t.name.toLowerCase().includes(tokenSearch.toLowerCase()))
+-  );
+-  const quickTokens = ETH_TOKENS.filter(t => t.symbol !== sellToken).slice(0, 5);
+-  const sellTokenList = (walletTokens.length > 0 ? walletTokens : ETH_TOKENS).filter(t => t.symbol !== buyToken);
+-
+-  async function handleExecute() {
+-    if (!quote || !walletAddress || !alchemyKey) return;
+-    setExecError('');
+-    setApproveTxHash('');
+-    try {
+-      const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+-      let privateKeyHex = '';
+-      if (inTauri) {
+-        privateKeyHex = await getPrivateKey(walletAddress);
+-      } else {
+-        throw new Error('Swap execution requires the desktop app');
+-      }
+-      const result = await executeSwap({
+-        privateKeyHex,
+-        tokenIn: sellToken,
+-        calldata: quote.calldata,
+-        value: quote.value,
+-        routerAddress: quote.routerAddress,
+-        amountInRaw: parseUnits(sellAmount, (quote.amountInRaw.toString().length)),
+-        alchemyKey,
+-        onStatus: (s: SwapStatus) => setStage(s as ExecStage),
+-      });
+-      setTxHash(result.swapTxHash);
+-      if (result.approveTxHash) setApproveTxHash(result.approveTxHash);
+-      setStage('confirmed');
+-    } catch (err) {
+-      setExecError(err instanceof Error ? err.message : 'Transaction failed');
+-      setStage('error');
+-    }
+-  }
+-
+-  function handleLimitSubmit() {
+-    if (!canLimitSubmit) return;
+-    persistTask({
+-      id: String(Date.now()),
+-      iconChar: '⇄',
+-      iconBg: '#627EEA',
+-      label: `Limit ${sellTok.symbol} → ${buyTok.symbol} · ${sellAmount} ${sellTok.symbol}`,
+-      meta: `When 1 ${sellTok.symbol} = ${limitPrice || (MOCK_RATES[sellToken]?.toLocaleString() ?? '—')} USD`,
+-      status: 'Scheduled',
+-      tab: 'Scheduled',
+-    });
+-    setStage('confirmed');
+-    setTxHash('limit');
+-  }
+-
+-  function handleSwapDirection() {
+-    const prevBuy = buyToken;
+-    setBuyToken(sellToken);
+-    setSellToken(prevBuy);
+-    setSellAmount('');
+-    setQuote(null);
+-    setStage('idle');
+-    setQuoteError('');
+-  }
+-
+-  const recurAmtNum = parseFloat(recurringAmount) || 0;
+-  const recurSubNum = Math.max(1, parseInt(recurringSuborders) || 1);
+-  const amountPerSub = recurSubNum > 0 ? recurAmtNum / recurSubNum : 0;
+-  const canRecurring = recurAmtNum > 0 && recurSubNum >= 2 && sellToken !== buyToken && !isDone;
+-
+-  function handleRecurring() {
+-    if (!canRecurring) return;
+-    persistTask({
+-      id: String(Date.now()),
+-      iconChar: '↻',
+-      iconBg: '#8B5CF6',
+-      label: `DCA ${sellToken} → ${buyToken} · ${recurAmtNum} ${sellToken}`,
+-      meta: `Every ${recurringFrequency} ${recurringFreqUnit}(s) · ${recurSubNum} orders`,
+-      status: 'Scheduled',
+-      tab: 'Scheduled',
+-    });
+-    setStage('confirmed' as ExecStage);
+-    setTxHash('recurring');
+-  }
+-
+-  return (
+-    <div
+-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+-      onClick={e => { if (e.target === e.currentTarget) { onClose(); } }}
+-    >
+-      <div className="wr-swap-modal" style={{ backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', width: '460px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+-
+-        {/* Header */}
+-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--wr-border-hover)' }}>
+-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+-            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text)' }}>
+-              {mode === 'swap' ? 'Swap' : 'Buy'}
+-            </span>
+-            <div style={{ display: 'flex' }}>
+-              {(['market', 'limit', 'recurring'] as const).map(t => (
+-                <button key={t} onClick={() => setOrderType(t)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', padding: '4px 10px', border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', color: orderType === t ? '#BEFF00' : 'var(--wr-text-3)', borderBottom: orderType === t ? '2px solid #BEFF00' : '2px solid transparent' }}>
+-                  {t}
+-                </button>
+-              ))}
+-            </div>
+-          </div>
+-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+-        </div>
+-
+-        <div style={{ padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: '0', backgroundColor: 'var(--wr-modal)', maxHeight: '80vh', overflowY: 'auto' }}>
+-
+-          {/* ── unified swap card (market / limit) ── */}
+-          {orderType !== 'recurring' && (
+-            <div style={{ border: '1px solid var(--wr-swap-sep)' }}>
+-
+-              {/* SELL row */}
+-              <div style={{ backgroundColor: 'var(--wr-swap-panel-a)', padding: '14px 16px 16px' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Sell</div>
+-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+-                  <button onClick={() => setShowSellPicker(true)} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+-                    <TokenIcon symbol={sellTok.symbol} color={sellTok.color} size={20} />
+-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{sellTok.symbol}</span>
+-                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+-                  </button>
+-                  <input
+-                    type="text" inputMode="decimal" placeholder="0.00"
+-                    value={sellAmount} onChange={e => setSellAmount(e.target.value)}
+-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', textAlign: 'right', flex: 1, minWidth: 0, padding: 0, lineHeight: '1' }}
+-                  />
+-                </div>
+-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+-                    {sellUsd > 0 ? `$${sellUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+-                  </span>
+-                </div>
+-              </div>
+-
+-              {/* Divider + swap button */}
+-              <div style={{ position: 'relative', height: '1px', backgroundColor: 'var(--wr-swap-sep)' }}>
+-                <button
+-                  onClick={handleSwapDirection}
+-                  style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--wr-swap-panel-a)', border: '1px solid var(--wr-swap-sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 1 }}
+-                >
+-                  <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+-                    <path d="M5 1v10M2 7.5L5 11l3-3.5M2 4.5L5 1l3 3.5" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+-                  </svg>
+-                </button>
+-              </div>
+-
+-              {/* BUY row */}
+-              <div style={{ backgroundColor: 'var(--wr-swap-panel-b)', padding: '16px 16px 14px' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Buy</div>
+-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+-                  <button onClick={() => { setShowTokenSearch(true); setTokenSearch(''); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+-                    <TokenIcon symbol={buyTok.symbol} color={buyTok.color} size={20} />
+-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{buyTok.symbol}</span>
+-                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+-                  </button>
+-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, lineHeight: '1', color: quote ? 'var(--wr-text)' : (stage as string) === 'quoting' ? 'var(--wr-text-3)' : 'var(--wr-text-4)', flex: 1, minWidth: 0, textAlign: 'right' }}>
+-                    {(stage as string) === 'quoting' ? '...' : quote ? Number(quote.amountOut).toLocaleString('en-US', { maximumFractionDigits: 6 }) : '0.00'}
+-                  </div>
+-                </div>
+-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+-                    {quote ? `$${(Number(quote.amountOut) * (MOCK_RATES[buyToken] ?? 0)).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+-                  </span>
+-                </div>
+-              </div>
+-
+-            </div>
+-          )}
+-
+-          {/* ── RECURRING ── */}
+-          {orderType === 'recurring' && (<>
+-
+-            {/* Unified allocate + buy card */}
+-            <div style={{ border: '1px solid var(--wr-swap-sep)' }}>
+-
+-              {/* Allocate row */}
+-              <div style={{ backgroundColor: 'var(--wr-swap-panel-a)', padding: '14px 16px 16px' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Allocate</div>
+-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+-                  <button onClick={() => setShowSellPicker(true)} style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', border: 'none', padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>
+-                    <TokenIcon symbol={sellTok.symbol} color={sellTok.color} size={20} />
+-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{sellTok.symbol}</span>
+-                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+-                  </button>
+-                  <input
+-                    type="text" inputMode="decimal" placeholder="0.00"
+-                    value={recurringAmount} onChange={e => setRecurringAmount(e.target.value)}
+-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '26px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', textAlign: 'right', flex: 1, minWidth: 0, padding: 0, lineHeight: '1' }}
+-                  />
+-                </div>
+-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+-                    {recurAmtNum > 0 ? `$${(recurAmtNum * (MOCK_RATES[sellToken] ?? 0)).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '$0.00'}
+-                  </span>
+-                </div>
+-              </div>
+-
+-              {/* Divider + swap button */}
+-              <div style={{ position: 'relative', height: '1px', backgroundColor: 'var(--wr-swap-sep)' }}>
+-                <button onClick={handleSwapDirection} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--wr-swap-panel-a)', border: '1px solid var(--wr-swap-sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 1 }}>
+-                  <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+-                    <path d="M5 1v10M2 7.5L5 11l3-3.5M2 4.5L5 1l3 3.5" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+-                  </svg>
+-                </button>
+-              </div>
+-
+-              {/* To Buy row */}
+-              <div style={{ backgroundColor: 'var(--wr-swap-panel-b)', padding: '16px 16px 14px' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>To Buy</div>
+-                <button onClick={() => { setShowTokenSearch(true); setTokenSearch(''); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--wr-swap-pill)', padding: '6px 10px' }}>
+-                    <TokenIcon symbol={buyTok.symbol} color={buyTok.color} size={20} />
+-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{buyTok.symbol}</span>
+-                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none"><path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+-                  </div>
+-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', flex: 1, textAlign: 'right' }}>{buyTok.name}</span>
+-                </button>
+-              </div>
+-            </div>
+-
+-            {/* Frequency + Orders — inline, no boxes */}
+-            <div style={{ display: 'flex', alignItems: 'stretch', borderTop: '0', marginTop: '14px', gap: '0' }}>
+-              <div style={{ flex: 1, paddingRight: '16px', borderRight: '1px solid var(--wr-swap-sep)' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Frequency</div>
+-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+-                  <input
+-                    type="text" inputMode="numeric" value={recurringFrequency}
+-                    onChange={e => setRecurringFrequency(e.target.value.replace(/\D/g, '') || '1')}
+-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', width: '32px', padding: 0 }}
+-                  />
+-                  <div style={{ position: 'relative' }}>
+-                    <select value={recurringFreqUnit} onChange={e => setRecurringFreqUnit(e.target.value as typeof recurringFreqUnit)}
+-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', appearance: 'none', paddingRight: '14px' }}>
+-                      <option value="minute">minute</option>
+-                      <option value="hour">hour</option>
+-                      <option value="day">day</option>
+-                      <option value="week">week</option>
+-                    </select>
+-                    <svg width="8" height="4" viewBox="0 0 8 4" fill="none" style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+-                      <path d="M1 1l3 2 3-2" stroke="var(--wr-text-3)" strokeWidth="1.2" strokeLinecap="round"/>
+-                    </svg>
+-                  </div>
+-                </div>
+-              </div>
+-              <div style={{ flex: 1, paddingLeft: '16px' }}>
+-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Total Orders</div>
+-                <input
+-                  type="text" inputMode="numeric" value={recurringSuborders}
+-                  onChange={e => setRecurringSuborders(e.target.value.replace(/\D/g, '') || '2')}
+-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', width: '100%', padding: 0 }}
+-                />
+-              </div>
+-            </div>
+-
+-            {/* Price Range — inline */}
+-            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--wr-swap-sep)' }}>
+-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>Price Range <span style={{ color: '#555555', fontWeight: 400 }}>(optional)</span></span>
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>{buyTok.symbol}</span>
+-              </div>
+-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-                <input type="text" inputMode="decimal" placeholder="Min" value={recurringPriceMin} onChange={e => setRecurringPriceMin(e.target.value)}
+-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', background: 'transparent', border: '1px solid var(--wr-swap-sep)', outline: 'none', padding: '7px 10px', flex: 1 }} />
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>–</span>
+-                <input type="text" inputMode="decimal" placeholder="Max" value={recurringPriceMax} onChange={e => setRecurringPriceMax(e.target.value)}
+-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', background: 'transparent', border: '1px solid var(--wr-swap-sep)', outline: 'none', padding: '7px 10px', flex: 1 }} />
+-              </div>
+-            </div>
+-
+-            {/* Summary */}
+-            {recurAmtNum > 0 && recurSubNum >= 2 && (
+-              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--wr-swap-sep)' }}>
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', lineHeight: 1.7 }}>
+-                  Swap <strong style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{amountPerSub.toFixed(4)} {sellToken}</strong> to <strong style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{buyToken}</strong> every <strong style={{ color: '#BEFF00', fontWeight: 600 }}>{recurringFrequency} {recurringFreqUnit}(s)</strong> over <strong style={{ color: '#BEFF00', fontWeight: 600 }}>{recurSubNum} orders</strong> ({recurAmtNum} {sellToken} total).
+-                </span>
+-              </div>
+-            )}
+-
+-          </>)}
+-
+-
+-          {/* Sell token picker overlay */}
+-          {showSellPicker && (
+-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-swap-panel-c)', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
+-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--wr-border)' }}>
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Select Token to Sell</span>
+-                <button onClick={() => setShowSellPicker(false)} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+-              </div>
+-              <div style={{ flex: 1, overflowY: 'auto' }}>
+-                {sellTokenList.map(t => (
+-                  <div
+-                    key={t.symbol}
+-                    onClick={() => { setSellToken(t.symbol); setShowSellPicker(false); setSellAmount(''); setQuote(null); setStage('idle'); setQuoteError(''); }}
+-                    style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--wr-border)', backgroundColor: sellToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
+-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = sellToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent'; }}
+-                  >
+-                    <TokenIcon symbol={t.symbol} color={t.color} size={36} />
+-                    <div style={{ flex: 1 }}>
+-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{t.symbol}</span>
+-                        {sellToken === t.symbol && <span style={{ fontSize: '10px', color: '#BEFF00' }}>✓</span>}
+-                      </div>
+-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{t.name} · ETH Mainnet</div>
+-                    </div>
+-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)' }}>
+-                      ${MOCK_RATES[t.symbol]?.toLocaleString() ?? '—'}
+-                    </div>
+-                  </div>
+-                ))}
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* Buy token search overlay */}
+-          {showTokenSearch && (
+-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-swap-panel-c)', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
+-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderBottom: '1px solid var(--wr-border)' }}>
+-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0 }}>
+-                  <circle cx="6.5" cy="6.5" r="5" stroke="var(--wr-text-3)" strokeWidth="1.4"/>
+-                  <path d="M10.5 10.5L13.5 13.5" stroke="var(--wr-text-3)" strokeWidth="1.4" strokeLinecap="round"/>
+-                </svg>
+-                <input
+-                  autoFocus type="text"
+-                  placeholder='Search any token. Include " " for exact match.'
+-                  value={tokenSearch}
+-                  onChange={e => setTokenSearch(e.target.value)}
+-                  onKeyDown={e => { if (e.key === 'Escape') setShowTokenSearch(false); }}
+-                  style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', background: 'transparent', border: 'none', outline: 'none', padding: 0 }}
+-                />
+-                <button onClick={() => setShowTokenSearch(false)} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--wr-border)', padding: '4px 10px', cursor: 'pointer', letterSpacing: '1px' }}>ESC</button>
+-              </div>
+-              {tokenSearch === '' && (
+-                <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderBottom: '1px solid var(--wr-border)' }}>
+-                  {quickTokens.map(t => (
+-                    <button key={t.symbol} onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
+-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', background: buyToken === t.symbol ? 'rgba(190,255,0,0.08)' : 'rgba(255,255,255,0.04)', border: buyToken === t.symbol ? '1px solid #BEFF00' : '1px solid var(--wr-border)', padding: '5px 10px', cursor: 'pointer' }}
+-                    >
+-                      <TokenIcon symbol={t.symbol} color={t.color} size={18} />
+-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: buyToken === t.symbol ? '#BEFF00' : 'var(--wr-text)' }}>{t.symbol}</span>
+-                    </button>
+-                  ))}
+-                </div>
+-              )}
+-              <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--wr-border)' }}>
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '1px', textTransform: 'uppercase', borderBottom: '2px solid #BEFF00', paddingBottom: '8px' }}>Top</span>
+-              </div>
+-              <div style={{ flex: 1, overflowY: 'auto' }}>
+-                {filteredTokens.length === 0 ? (
+-                  <div style={{ padding: '24px 16px', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>No tokens found</div>
+-                ) : filteredTokens.map(t => (
+-                  <div key={t.symbol} onClick={() => { setBuyToken(t.symbol); setShowTokenSearch(false); }}
+-                    style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--wr-border)', backgroundColor: buyToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
+-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = buyToken === t.symbol ? 'rgba(190,255,0,0.04)' : 'transparent'; }}
+-                  >
+-                    <TokenIcon symbol={t.symbol} color={t.color} size={36} />
+-                    <div style={{ flex: 1 }}>
+-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)' }}>{t.symbol}</span>
+-                        {buyToken === t.symbol && <span style={{ fontSize: '10px', color: '#BEFF00' }}>✓</span>}
+-                      </div>
+-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{t.name} · ETH Mainnet</div>
+-                    </div>
+-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text)' }}>
+-                      ${MOCK_RATES[t.symbol]?.toLocaleString() ?? '—'}
+-                    </div>
+-                  </div>
+-                ))}
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* Limit price row */}
+-          {orderType === 'limit' && (
+-            <div style={{ border: '1px solid var(--wr-border)', padding: '11px 14px', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+-                When 1 {sellTok.symbol} =
+-              </span>
+-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+-                <input
+-                  type="text" placeholder={(MOCK_RATES[sellToken] ?? 0).toLocaleString()}
+-                  value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
+-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', outline: 'none', textAlign: 'right', width: '110px' }}
+-                />
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>USD</span>
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* Route + gas info from real quote */}
+-          {quote && orderType === 'market' && (
+-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px' }}>
+-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
+-                {quote.routeString} · Price impact {quote.priceImpact}
+-              </span>
+-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
+-                Gas ~${quote.gasEstimateUSD}
+-              </span>
+-            </div>
+-          )}
+-
+-          {/* Exec status */}
+-          {STAGE_LABEL[stage] && (
+-            <div style={{ marginTop: '10px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textAlign: 'center', letterSpacing: '0.5px' }}>
+-              {STAGE_LABEL[stage]}
+-            </div>
+-          )}
+-
+-          {/* Error */}
+-          {(quoteError || execError) && stage === 'error' && (
+-            <div style={{ marginTop: '8px', padding: '8px 12px', backgroundColor: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#f87171' }}>
+-              {quoteError || execError}
+-            </div>
+-          )}
+-
+-          {/* Confirmed */}
+-          {isDone && txHash && txHash !== 'limit' && (
+-            <div style={{ marginTop: '10px', padding: '10px 12px', backgroundColor: 'rgba(190,255,0,0.06)', border: '1px solid rgba(190,255,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#BEFF00' }}>✓ Swap confirmed</span>
+-              <a href={`https://etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+-                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#3b82f6', textDecoration: 'none' }}>
+-                View on Etherscan ↗
+-              </a>
+-            </div>
+-          )}
+-          {approveTxHash && (
+-            <div style={{ marginTop: '4px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)' }}>
+-              Approval tx: <a href={`https://etherscan.io/tx/${approveTxHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>{approveTxHash.slice(0, 12)}…</a>
+-            </div>
+-          )}
+-
+-          {/* CTA */}
+-          {orderType === 'market' ? (
+-            <button
+-              onClick={handleExecute}
+-              disabled={!canExecute || isExecuting || isDone}
+-              style={{
+-                marginTop: '14px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
+-                letterSpacing: '1.5px', textTransform: 'uppercase', padding: '14px', width: '100%', border: 'none',
+-                cursor: canExecute && !isExecuting && stage !== 'confirmed' ? 'pointer' : 'default',
+-                color: isDone ? '#BEFF00' : canExecute ? '#000' : 'var(--wr-text-3)',
+-                backgroundColor: isDone ? 'transparent' : canExecute && !isExecuting ? '#BEFF00' : 'rgba(255,255,255,0.05)',
+-                outline: isDone ? '1px solid #BEFF00' : 'none',
+-                opacity: isExecuting ? 0.7 : 1,
+-              }}
+-            >
+-              {isDone ? '✓ Swap Complete' : isExecuting ? STAGE_LABEL[stage] : mode === 'swap' ? `Swap ${sellTok.symbol} → ${buyTok.symbol}` : `Buy ${buyTok.symbol}`}
+-            </button>
+-          ) : orderType === 'limit' ? (
+-            <button
+-              onClick={handleLimitSubmit}
+-              disabled={!canLimitSubmit || isDone}
+-              style={{
+-                marginTop: '14px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
+-                letterSpacing: '1.5px', textTransform: 'uppercase', padding: '14px', width: '100%', border: 'none',
+-                cursor: canLimitSubmit && stage !== 'confirmed' ? 'pointer' : 'default',
+-                color: isDone ? '#BEFF00' : canLimitSubmit ? '#000' : 'var(--wr-text-3)',
+-                backgroundColor: isDone ? 'transparent' : canLimitSubmit ? '#BEFF00' : 'rgba(255,255,255,0.05)',
+-                outline: isDone ? '1px solid #BEFF00' : 'none',
+-              }}
+-            >
+-              {isDone ? '✓ Limit Order Scheduled' : 'Schedule Limit Order'}
+-            </button>
+-          ) : (
+-            <>
+-              <button
+-                onClick={handleRecurring}
+-                disabled={!canRecurring || isDone}
+-                style={{
+-                  marginTop: '14px', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
+-                  letterSpacing: '1.5px', textTransform: 'uppercase', padding: '14px', width: '100%', border: 'none',
+-                  cursor: canRecurring && !isDone ? 'pointer' : 'default',
+-                  color: isDone ? '#BEFF00' : canRecurring ? '#000' : 'var(--wr-text-3)',
+-                  backgroundColor: isDone ? 'transparent' : canRecurring ? '#BEFF00' : 'rgba(255,255,255,0.05)',
+-                  outline: isDone ? '1px solid #BEFF00' : 'none',
+-                }}
+-              >
+-                {isDone ? '✓ DCA Order Scheduled' : `Start DCA ${sellTok.symbol} → ${buyTok.symbol}`}
+-              </button>
+-
+-              {/* Recurring Summary collapsible */}
+-              <div style={{ marginTop: '12px', border: '1px solid var(--wr-swap-sep)' }}>
+-                <button
+-                  onClick={() => setShowRecurringSummary(v => !v)}
+-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--wr-swap-panel-a)', border: 'none', cursor: 'pointer' }}
+-                >
+-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: 'var(--wr-text)', letterSpacing: '0.5px' }}>Recurring Summary</span>
+-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: showRecurringSummary ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+-                    <path d="M1 1l4 4 4-4" stroke="var(--wr-text-3)" strokeWidth="1.4" strokeLinecap="round"/>
+-                  </svg>
+-                </button>
+-                {showRecurringSummary && (
+-                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--wr-swap-body)' }}>
+-                    {[
+-                      { label: 'Sell total',        value: `${recurAmtNum || '—'} ${sellToken}` },
+-                      { label: 'Sell per order',    value: `${amountPerSub > 0 ? amountPerSub.toFixed(4) : '—'} ${sellToken}` },
+-                      { label: 'To buy',            value: buyToken },
+-                      { label: 'Suborder interval', value: `${recurringFrequency} ${recurringFreqUnit}(s)` },
+-                      { label: 'Total orders',      value: String(recurSubNum) },
+-                    ].map(row => (
+-                      <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{row.label}</span>
+-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)', fontWeight: 600 }}>{row.value}</span>
+-                      </div>
+-                    ))}
+-                  </div>
+-                )}
+-              </div>
+-            </>
+-          )}
+-        </div>
+-      </div>
+-    </div>
+-  );
+-}
+-
+ // ── NFT Action Modals ─────────────────────────────────────────────────────────
+ 
+ const MODAL_BACKDROP: React.CSSProperties = {
+@@ -1828,8 +1208,6 @@ export default function WalletDetailClient({ id }: { id: string }) {
+   const [selectedToken, setSelectedToken] = useState<string | null>(null);
+   const [tokenSort, setTokenSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'HELD VALUE', dir: 'desc' });
+   const [showTransferModal, setShowTransferModal] = useState(false);
+-  const [showSwapModal, setShowSwapModal] = useState(false);
+-  const [showBuyModal, setShowBuyModal] = useState(false);
+   const [showNftEditModal, setShowNftEditModal] = useState(false);
+   const [showNftCancelModal, setShowNftCancelModal] = useState(false);
+   const [showNftAcceptModal, setShowNftAcceptModal] = useState(false);
+@@ -1849,12 +1227,12 @@ export default function WalletDetailClient({ id }: { id: string }) {
+     setIsTauri(inTauri);
+ 
+     if (!inTauri) {
+-      setSnapshot(MOCK_PORTFOLIO_SNAPSHOT);
+-      setLiveNfts(MOCK_NFTS_RESPONSE.owned_nfts);
++      setSnapshot(EMPTY_SNAPSHOT);
++      setLiveNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
+       const stored = loadWallets();
+       const addr = stored.find(w => w.id === id)?.address ?? wallet.address;
+       setWalletAddr(addr);
+-      setLiveTxs(MOCK_TRANSFERS.map(t => mapTransfer(t, addr)));
++      setLiveTxs(EMPTY_TRANSFERS.map(t => mapTransfer(t, addr)));
+       setLoading(false);
+       return;
+     }
+@@ -2267,22 +1645,6 @@ export default function WalletDetailClient({ id }: { id: string }) {
+                   >
+                     Transfer
+                   </button>
+-                  <button
+-                    onClick={() => setShowSwapModal(true)}
+-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+-                  >
+-                    Swap
+-                  </button>
+-                  <button
+-                    onClick={() => setShowBuyModal(true)}
+-                    style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+-                  >
+-                    Buy
+-                  </button>
+                   <button
+                     onClick={() => setSelectedToken(null)}
+                     style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '7px 4px', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+@@ -2440,8 +1802,6 @@ export default function WalletDetailClient({ id }: { id: string }) {
+       {tab === 'Address Book' && <AddressBookTab />}
+ 
+       {showTransferModal && <TransferModal wallet={wallet} onClose={() => setShowTransferModal(false)} />}
+-      {showSwapModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); const wt = tokens.map(x => ({ symbol: x.ticker, name: x.name, color: x.color })); return <SwapModal mode="swap" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} walletTokens={wt} onClose={() => setShowSwapModal(false)} />; })()}
+-      {showBuyModal && (() => { const t = tokens.find(x => x.ticker === selectedToken); const wt = tokens.map(x => ({ symbol: x.ticker, name: x.name, color: x.color })); return <SwapModal mode="buy" sellTicker={t?.ticker ?? 'ETH'} sellColor={t?.color ?? '#627EEA'} sellName={t?.name ?? 'Ethereum'} walletAddress={walletAddr} alchemyKey={alchemyKey} walletTokens={wt} onClose={() => setShowBuyModal(false)} />; })()}
+       {(() => {
+         const selNfts = (liveNfts ?? []).filter(n => selectedNfts.has(n.contract.address + n.token_id));
+         const close = (setter: (v: boolean) => void) => () => { setter(false); setSelectedNfts(new Set()); };
+diff --git a/src/app/wallet/page.tsx b/src/app/wallet/page.tsx
+index 373ccf6..b4b2669 100644
+--- a/src/app/wallet/page.tsx
++++ b/src/app/wallet/page.tsx
+@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
+ import Link from 'next/link';
+ import { getPortfolioSnapshot, getPnlSummary, loadAlchemyKey, type PortfolioSnapshot } from '@/lib/tauri';
+ import { loadWallets } from '@/lib/walletStore';
+-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
+ 
+ // ─── Wallet Detail — matches 0G1do / WK5Xm design ────────────────────────────
+ 
+@@ -83,7 +83,7 @@ export default function WalletPage() {
+     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+     const wallets = loadWallets();
+     if (wallets[0]) setWalletName(wallets[0].name);
+-    if (!inTauri) { setSnap(MOCK_PORTFOLIO_SNAPSHOT as PortfolioSnapshot); return; }
++    if (!inTauri) { setSnap(EMPTY_SNAPSHOT as PortfolioSnapshot); return; }
+     (async () => {
+       const key  = await loadAlchemyKey().catch(() => '');
+       const addr = wallets[0]?.address ?? '';
+diff --git a/src/app/wallets/page.tsx b/src/app/wallets/page.tsx
+index 1f571dd..6826775 100644
+--- a/src/app/wallets/page.tsx
++++ b/src/app/wallets/page.tsx
+@@ -10,8 +10,9 @@ import {
+   loadWallets, saveWallets, addWallet as persistWallet, removeWallet as deleteWalletFromStore,
+   updateWallet as updateWalletInStore, type StoredWallet,
+ } from '@/lib/walletStore';
+-import { MOCK_PORTFOLIO_SNAPSHOT } from '@/lib/mockData';
++import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
+ import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
++import SisterWalletFinder from '@/components/SisterWalletFinder';
+ import { useTheme } from '@/lib/themeContext';
+ 
+ // ─── Types ──────────────────────────────────────────────────────────────────
+@@ -700,7 +701,7 @@ export default function WalletsPage() {
+     if (!inTauri) {
+       // Browser mock mode
+       const mock: Record<string, PortfolioSnapshot> = {};
+-      wallets.forEach(w => { mock[w.id] = MOCK_PORTFOLIO_SNAPSHOT; });
++      wallets.forEach(w => { mock[w.id] = EMPTY_SNAPSHOT; });
+       setSnapshots(mock);
+       setLoadingData(false);
+       return;
+@@ -746,6 +747,7 @@ export default function WalletsPage() {
+     <div className="flex flex-col min-h-screen" style={{ backgroundColor: 'var(--wr-bg)' }}>
+       <div style={{ flex: 1, padding: '32px 48px' }}>
+ 
++
+         {/* Header */}
+         <div className="flex items-center justify-between" style={{ marginBottom: '28px' }}>
+           <div>
+@@ -790,6 +792,8 @@ export default function WalletsPage() {
+           </div>
+         </div>
+ 
++        <SisterWalletFinder />
++
+         {/* Wallet grid */}
+         {wallets.length === 0 ? (
+           <div className="flex flex-col items-center justify-center" style={{ paddingTop: '120px', gap: '16px' }}>
+diff --git a/src/components/Navbar.tsx b/src/components/Navbar.tsx
+index 2934e2d..f70a2fb 100644
+--- a/src/components/Navbar.tsx
++++ b/src/components/Navbar.tsx
+@@ -3,7 +3,7 @@
+ import Link from 'next/link';
+ import Image from 'next/image';
+ import { usePathname } from 'next/navigation';
+-import { useState, useRef, useEffect } from 'react';
++import { useState, useEffect } from 'react';
+ import { useTheme } from '@/lib/themeContext';
+ import { loadSubscription, isSubscriptionActive } from '@/lib/subscriptionStore';
+ 
+@@ -11,32 +11,8 @@ const NAV_LINKS = [
+   { label: 'Dashboard', href: '/',        pro: false },
+   { label: 'Monitor',   href: '/monitor', pro: true  },
+   { label: 'Bulk',      href: '/bulk',    pro: true  },
+-  { label: 'Tasks',     href: '/tasks',   pro: true  },
+ ];
+ 
+-const ACTIVE_TASKS = [
+-  {
+-    icon: '↑',
+-    title: 'List Bored Ape #3291',
+-    detail: 'Price: 12.5 ETH · Expires: 7d',
+-    status: 'Pending',
+-    statusType: 'accent' as const,
+-  },
+-  {
+-    icon: '↑',
+-    title: 'Bid on CryptoPunk #5822',
+-    detail: 'Bid: 80 ETH · Expires: 24h',
+-    status: 'Pending',
+-    statusType: 'accent' as const,
+-  },
+-  {
+-    icon: '⇄',
+-    title: 'Transfer Azuki #1108',
+-    detail: 'To: Polygon Cold · Now',
+-    status: 'Processing',
+-    statusType: 'warn' as const,
+-  },
+-];
+ 
+ // ─── Theme Toggle (minimal icon) ────────────────────────────────────────────
+ 
+@@ -88,8 +64,6 @@ export default function Navbar() {
+   const pathname = usePathname();
+   const { theme } = useTheme();
+   const isDay = theme === 'day';
+-  const [tasksOpen, setTasksOpen] = useState(false);
+-  const tasksRef = useRef<HTMLDivElement>(null);
+   const [isPro, setIsPro] = useState(false);
+ 
+   useEffect(() => {
+@@ -102,15 +76,6 @@ export default function Navbar() {
+   const isSettings = pathname === '/settings';
+   if (pathname === '/login') return null;
+ 
+-  // Close tasks dropdown on outside click
+-  useEffect(() => {
+-    function handleClick(e: MouseEvent) {
+-      if (tasksRef.current && !tasksRef.current.contains(e.target as Node)) setTasksOpen(false);
+-    }
+-    if (tasksOpen) document.addEventListener('mousedown', handleClick);
+-    return () => document.removeEventListener('mousedown', handleClick);
+-  }, [tasksOpen]);
+-
+   // Explicit color values — no CSS variable indirection
+   const NAV_BG      = isDay ? '#FFFFFF' : '#000000';
+   const NAV_BORDER  = isDay ? '#E8E8E3' : '#1A1A1A';
+@@ -221,107 +186,6 @@ export default function Navbar() {
+               </span>
+             </div>
+ 
+-            {/* Tasks indicator chip + dropdown */}
+-            <div ref={tasksRef} style={{ position: 'relative' }}>
+-              <button
+-                onClick={() => setTasksOpen(o => !o)}
+-                className="flex items-center border"
+-                style={{
+-                  borderColor: tasksOpen ? NAV_ACTIVE : NAV_BORDER,
+-                  padding: '4px 10px',
+-                  gap: '6px',
+-                  background: 'none',
+-                  cursor: 'pointer',
+-                }}
+-              >
+-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: tasksOpen ? NAV_ACTIVE : NAV_MUTED }}>Tasks</span>
+-                <span style={{
+-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+-                  backgroundColor: '#BEFF00', color: '#000000',
+-                  fontSize: '9px', fontWeight: 700,
+-                  borderRadius: '8px', padding: '1px 5px',
+-                  fontFamily: 'var(--font-jetbrains)',
+-                }}>3</span>
+-              </button>
+-
+-              {tasksOpen && (
+-                <div style={{
+-                  position: 'absolute',
+-                  top: 'calc(100% + 8px)',
+-                  right: 0,
+-                  width: '340px',
+-                  backgroundColor: 'var(--wr-surface)',
+-                  border: `1px solid ${NAV_BORDER}`,
+-                  zIndex: 200,
+-                  boxShadow: isDay ? '0 8px 32px rgba(0,0,0,0.12)' : '0 8px 32px rgba(0,0,0,0.6)',
+-                }}>
+-                  {/* Header */}
+-                  <div className="flex items-center justify-between" style={{ padding: '14px 16px', borderBottom: `1px solid ${NAV_BORDER}` }}>
+-                    <div className="flex items-center gap-2">
+-                      <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: NAV_TEXT }}>Active Tasks</span>
+-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: NAV_ACTIVE }}>3</span>
+-                    </div>
+-                    <Link
+-                      href="/tasks"
+-                      onClick={() => setTasksOpen(false)}
+-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: NAV_ACTIVE, textDecoration: 'none' }}
+-                    >
+-                      View All →
+-                    </Link>
+-                  </div>
+-
+-                  {/* Task items */}
+-                  {ACTIVE_TASKS.map((task, i) => {
+-                    const statusColor = task.statusType === 'warn'
+-                      ? (isDay ? '#D97706' : '#FBBF24')
+-                      : NAV_ACTIVE;
+-                    return (
+-                    <div key={i} style={{ padding: '12px 16px', borderBottom: i < ACTIVE_TASKS.length - 1 ? `1px solid ${NAV_BORDER}` : 'none' }}>
+-                      <div className="flex items-center justify-between mb-1.5">
+-                        <div className="flex items-center gap-2.5">
+-                          <div style={{
+-                            width: '26px', height: '26px', flexShrink: 0,
+-                            backgroundColor: task.statusType === 'warn' ? (isDay ? '#FEF3C7' : '#2a1800') : (isDay ? '#E8FFCC' : '#0a1200'),
+-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+-                            fontSize: '12px', color: statusColor, fontWeight: 700,
+-                          }}>
+-                            {task.icon}
+-                          </div>
+-                          <span style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: NAV_TEXT }}>{task.title}</span>
+-                        </div>
+-                        <span style={{
+-                          fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
+-                          color: statusColor, border: `1px solid ${statusColor}`,
+-                          padding: '2px 7px', borderRadius: '20px',
+-                          display: 'flex', alignItems: 'center', gap: '4px',
+-                        }}>
+-                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusColor, display: 'inline-block', flexShrink: 0 }} />
+-                          {task.status}
+-                        </span>
+-                      </div>
+-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: NAV_MUTED, marginBottom: '10px', marginLeft: '34px' }}>
+-                        {task.detail}
+-                      </div>
+-                      <div className="flex items-center gap-2" style={{ marginLeft: '34px' }}>
+-                        {['Pause', 'Edit'].map(action => (
+-                          <button key={action} style={{
+-                            fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 500,
+-                            color: NAV_MUTED, backgroundColor: 'transparent',
+-                            border: `1px solid ${NAV_BORDER}`, padding: '3px 10px', cursor: 'pointer',
+-                          }}>{action}</button>
+-                        ))}
+-                        <button style={{
+-                          fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
+-                          color: isDay ? '#DC2626' : '#F87171', backgroundColor: 'transparent',
+-                          border: `1px solid ${isDay ? '#DC2626' : '#F87171'}`, padding: '3px 10px', cursor: 'pointer',
+-                        }}>Cancel</button>
+-                      </div>
+-                    </div>
+-                    );
+-                  })}
+-                </div>
+-              )}
+-            </div>
+ 
+             {/* Subscribe CTA / PRO badge */}
+             {isPro ? (
+diff --git a/src/components/SisterWalletFinder.tsx b/src/components/SisterWalletFinder.tsx
+new file mode 100644
+index 0000000..dfe2136
+--- /dev/null
++++ b/src/components/SisterWalletFinder.tsx
+@@ -0,0 +1,194 @@
++'use client';
++
++import { useState } from 'react';
++import {
++  findSisterWallets,
++  type SisterReport,
++  type SisterCandidate,
++  type SisterReason,
++} from '@/lib/tauri';
++
++// Human-readable labels for each match reason.
++const REASON_LABEL: Record<SisterReason, string> = {
++  common_funder: 'Same funder',
++  round_trip:    'Two-way transfers',
++  funded_target: 'Funded this wallet',
++  target_funded: 'Funded by this wallet',
++};
++
++const REASON_COLOR: Record<SisterReason, string> = {
++  common_funder: '#BEFF00',
++  round_trip:    '#7DD3FC',
++  funded_target: '#FBBF24',
++  target_funded: '#C4B5FD',
++};
++
++function short(addr: string) {
++  return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
++}
++
++function fmtDate(ts?: number | null) {
++  if (!ts) return '—';
++  return new Date(ts * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
++}
++
++function scoreColor(s: number) {
++  if (s >= 70) return '#BEFF00';
++  if (s >= 40) return '#FBBF24';
++  return 'var(--wr-text-3)';
++}
++
++const LABEL: React.CSSProperties = {
++  fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
++  letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)',
++};
++
++const INPUT: React.CSSProperties = {
++  fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text)',
++  backgroundColor: 'var(--wr-bg)', border: '1px solid var(--wr-border)',
++  outline: 'none', padding: '10px 12px', flex: 1, minWidth: 0,
++};
++
++export default function SisterWalletFinder() {
++  const [address, setAddress] = useState('');
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [report, setReport] = useState<SisterReport | null>(null);
++
++  const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
++
++  async function run() {
++    const addr = address.trim();
++    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
++      setError('Enter a valid Ethereum address (0x… , 42 characters).');
++      return;
++    }
++    if (!inTauri) {
++      setError('The sister-wallet finder needs the desktop app (it queries Etherscan directly).');
++      return;
++    }
++    setLoading(true);
++    setError(null);
++    setReport(null);
++    try {
++      const r = await findSisterWallets(addr);
++      setReport(r);
++    } catch (e) {
++      setError(String(e instanceof Error ? e.message : e));
++    } finally {
++      setLoading(false);
++    }
++  }
++
++  return (
++    <div style={{ border: '1px solid var(--wr-border)', backgroundColor: 'var(--wr-surface)', padding: '20px 22px', marginBottom: '28px' }}>
++      <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
++        <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '15px', fontWeight: 600, color: 'var(--wr-text)' }}>
++          Sister Wallet Finder
++        </h2>
++        <span style={{ ...LABEL, color: 'var(--wr-text-3)' }}>Etherscan · ETH mainnet</span>
++      </div>
++      <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '16px', lineHeight: 1.5 }}>
++        Enter any address to find likely side wallets of the same owner — based on shared funding
++        source and direct on-chain transfers. Leads, not proof.
++      </p>
++
++      <div className="flex items-center" style={{ gap: '8px', marginBottom: report || error ? '18px' : 0 }}>
++        <input
++          value={address}
++          onChange={e => setAddress(e.target.value)}
++          onKeyDown={e => { if (e.key === 'Enter') run(); }}
++          placeholder="0x…"
++          spellCheck={false}
++          style={INPUT}
++        />
++        <button
++          onClick={run}
++          disabled={loading}
++          style={{
++            fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
++            color: '#000', backgroundColor: loading ? 'var(--wr-text-3)' : '#BEFF00',
++            border: 'none', padding: '10px 20px', cursor: loading ? 'default' : 'pointer',
++            letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap',
++          }}
++        >
++          {loading ? 'Scanning…' : 'Find sisters'}
++        </button>
++      </div>
++
++      {error && (
++        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#F87171', border: '1px solid #F87171', padding: '10px 12px' }}>
++          {error}
++        </div>
++      )}
++
++      {report && (
++        <div>
++          {report.funder && (
++            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '10px' }}>
++              First funded by{' '}
++              <span style={{ color: 'var(--wr-text)' }}>{short(report.funder)}</span>
++            </div>
++          )}
++          {report.note && (
++            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#FBBF24', border: '1px solid #4a3000', backgroundColor: '#1a1200', padding: '8px 10px', marginBottom: '14px', lineHeight: 1.5 }}>
++              {report.note}
++            </div>
++          )}
++
++          {report.candidates.length === 0 ? (
++            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', padding: '12px 0' }}>
++              No linked wallets found from on-chain activity.
++            </div>
++          ) : (
++            <>
++              <div style={{ ...LABEL, marginBottom: '10px' }}>
++                {report.candidates.length} candidate{report.candidates.length !== 1 ? 's' : ''}
++              </div>
++              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', backgroundColor: 'var(--wr-border)' }}>
++                {report.candidates.map((c: SisterCandidate) => (
++                  <div key={c.address} className="flex items-center" style={{ gap: '14px', backgroundColor: 'var(--wr-surface)', padding: '11px 12px' }}>
++                    <div style={{ width: '42px', textAlign: 'center', flexShrink: 0 }}>
++                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 700, color: scoreColor(c.score), lineHeight: 1 }}>
++                        {c.score}
++                      </div>
++                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '8px', color: 'var(--wr-text-3)', letterSpacing: '0.5px' }}>SCORE</div>
++                    </div>
++                    <div style={{ flex: 1, minWidth: 0 }}>
++                      <div className="flex items-center" style={{ gap: '8px', marginBottom: '5px' }}>
++                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text)' }}>{short(c.address)}</span>
++                        <a
++                          href={`https://etherscan.io/address/${c.address}`}
++                          target="_blank"
++                          rel="noreferrer"
++                          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textDecoration: 'none' }}
++                        >
++                          etherscan ↗
++                        </a>
++                      </div>
++                      <div className="flex items-center" style={{ gap: '6px', flexWrap: 'wrap' }}>
++                        {c.reasons.map(r => (
++                          <span key={r} style={{
++                            fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700,
++                            color: REASON_COLOR[r], border: `1px solid ${REASON_COLOR[r]}`,
++                            padding: '2px 6px', letterSpacing: '0.3px',
++                          }}>
++                            {REASON_LABEL[r]}
++                          </span>
++                        ))}
++                      </div>
++                    </div>
++                    <div style={{ textAlign: 'right', flexShrink: 0, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
++                      <div>{c.direct_in + c.direct_out} direct tx</div>
++                      <div>{fmtDate(c.first_interaction)}</div>
++                    </div>
++                  </div>
++                ))}
++              </div>
++            </>
++          )}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/lib/emptyData.ts b/src/lib/emptyData.ts
+new file mode 100644
+index 0000000..27b83c5
+--- /dev/null
++++ b/src/lib/emptyData.ts
+@@ -0,0 +1,44 @@
++// Typed empty defaults used when real data is unavailable (e.g. running in a
++// plain browser during development, or a data call that failed). Westron shows
++// ONLY real on-chain data — these render clean empty states instead of the
++// fabricated numbers the old mock fixtures produced. Never put fake values here.
++
++import type {
++  PortfolioSnapshot,
++  PnlSummary,
++  NftsForOwnerResponse,
++  AssetTransfer,
++  TradeRecord,
++  AlertRule,
++  SnipeRule,
++} from './tauri';
++
++export const EMPTY_SNAPSHOT: PortfolioSnapshot = {
++  eth_balance: 0,
++  eth_price_usd: 0,
++  portfolio_value_usd: 0,
++  token_count: 0,
++  nft_count: 0,
++};
++
++export const EMPTY_PNL: PnlSummary = {
++  wallet_address: '',
++  realized_pnl_eth: 0,
++  unrealized_pnl_eth: 0,
++  total_buy_volume_eth: 0,
++  total_sell_volume_eth: 0,
++  gas_spent_eth: 0,
++  trade_count: 0,
++  win_count: 0,
++  loss_count: 0,
++};
++
++export const EMPTY_NFTS_RESPONSE: NftsForOwnerResponse = {
++  owned_nfts: [],
++  total_count: 0,
++};
++
++export const EMPTY_TRANSFERS: AssetTransfer[] = [];
++export const EMPTY_TRADES: TradeRecord[] = [];
++export const EMPTY_ALERTS: AlertRule[] = [];
++export const EMPTY_SNIPE_RULES: SnipeRule[] = [];
+diff --git a/src/lib/mockData.ts b/src/lib/mockData.ts
+deleted file mode 100644
+index bceea08..0000000
+--- a/src/lib/mockData.ts
++++ /dev/null
+@@ -1,179 +0,0 @@
+-// Mock data for browser-mode testing (no Tauri / no API key required)
+-import type {
+-  EthBalance,
+-  AssetTransfer,
+-  OwnedNft,
+-  NftsForOwnerResponse,
+-  PortfolioSnapshot,
+-  PnlSummary,
+-  TradeRecord,
+-  AlertRule,
+-  EnvelopeStatus,
+-  SnipeRule,
+-} from './tauri';
+-
+-export const MOCK_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+-
+-// ─── Portfolio ────────────────────────────────────────────────────────────────
+-
+-export const MOCK_ETH_BALANCE: EthBalance = {
+-  address: MOCK_ADDRESS,
+-  wei: '45234100000000000000',
+-  eth: 45.2341,
+-};
+-
+-export const MOCK_TRANSFERS: AssetTransfer[] = [
+-  { hash: '0xabc123def456789012345678901234567890abcd', from: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', to: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e', value: 5.0, asset: 'ETH', category: 'external', block_num: '0x1312D00' },
+-  { hash: '0xdef456abc789012345678901234567890abcdef', from: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e', to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 1200.0, asset: 'USDC', category: 'erc20', block_num: '0x1312C80' },
+-  { hash: '0x111aaa222bbb333ccc444ddd555eee666fff0001', from: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', to: '0x00000000006c3852cbef3e08e8df289169ede581', value: 12.5, asset: 'ETH', category: 'erc721', block_num: '0x1312B00' },
+-  { hash: '0x222bbb333ccc444ddd555eee666fff0001aaa222', from: '0x00000000006c3852cbef3e08e8df289169ede581', to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 1.0, asset: 'ETH', category: 'erc1155', block_num: '0x1312A00' },
+-  { hash: '0x333ccc444ddd555eee666fff0001aaa222bbb333', from: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', to: '0x7a250d5630b4cf539739df2c5dacb4c659f2488d', value: 2.3, asset: 'ETH', category: 'external', block_num: '0x1312900' },
+-  { hash: '0x444ddd555eee666fff0001aaa222bbb333ccc444', from: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', to: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', value: 500.0, asset: 'USDC', category: 'erc20', block_num: '0x1312800' },
+-  { hash: '0x555eee666fff0001aaa222bbb333ccc444ddd555', from: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d', to: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', value: 0.0, asset: 'BAYC', category: 'erc721', block_num: '0x1312700' },
+-  { hash: '0x666fff0001aaa222bbb333ccc444ddd555eee666', from: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', to: '0xdef1c0ded9bec7f1a1670819833240f027b25eff', value: 0.15, asset: 'ETH', category: 'external', block_num: '0x1312600' },
+-];
+-
+-// ─── Gallery ──────────────────────────────────────────────────────────────────
+-
+-export const MOCK_NFTS: OwnedNft[] = [
+-  {
+-    contract: { address: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d', name: 'BoredApeYachtClub', symbol: 'BAYC', token_type: 'ERC721', opensea_floor_price: 14.2, opensea_collection_name: 'Bored Ape Yacht Club' },
+-    token_id: '3749', name: 'Bored Ape #3749',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ', thumbnail_url: 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ' },
+-    attributes: [{ trait_type: 'Background', value: 'Orange' }, { trait_type: 'Fur', value: 'Dark Brown' }],
+-  },
+-  {
+-    contract: { address: '0xed5af388653567af2f388e6224dc7c4b3241c544', name: 'Azuki', symbol: 'AZUKI', token_type: 'ERC721', opensea_floor_price: 3.8, opensea_collection_name: 'Azuki' },
+-    token_id: '1234', name: 'Azuki #1234',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmYDvPAXtiJg7s8JdRBoDibXtHVdNDsY5VFKQ8zuKGFUv2', thumbnail_url: 'https://ipfs.io/ipfs/QmYDvPAXtiJg7s8JdRBoDibXtHVdNDsY5VFKQ8zuKGFUv2' },
+-    attributes: [{ trait_type: 'Type', value: 'Human' }, { trait_type: 'Hair', value: 'Pink Flowy' }],
+-  },
+-  {
+-    contract: { address: '0x49cf6f5d44e70224e2e23fdcdd2c053f30ada28b', name: 'CloneX', symbol: 'CloneX', token_type: 'ERC721', opensea_floor_price: 1.9, opensea_collection_name: 'CloneX - X TAKASHI MURAKAMI' },
+-    token_id: '8891', name: 'CloneX #8891',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmXqSE7aGMFHGNFKNnhA7rdvXTdFcm3eLJwWB6xLadkKHM' },
+-    attributes: [{ trait_type: 'DNA', value: 'Human' }, { trait_type: 'Eye Color', value: 'Ice Blue' }],
+-  },
+-  {
+-    contract: { address: '0x60e4d786628fea6478f785a6d7e704777c86a7c6', name: 'MutantApeYachtClub', symbol: 'MAYC', token_type: 'ERC721', opensea_floor_price: 2.1, opensea_collection_name: 'Mutant Ape Yacht Club' },
+-    token_id: '12345', name: 'Mutant Ape #12345',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmTDcCdt3yb6mZitzWBmQr65AW6Wska295Dg9nbEYpSUDR' },
+-    attributes: [{ trait_type: 'Background', value: 'M1' }, { trait_type: 'Eyes', value: 'Bored' }],
+-  },
+-  {
+-    contract: { address: '0x8a90cab2b38dba80c64b7734e58ee1db38b8992e', name: 'Doodles', symbol: 'DOODLE', token_type: 'ERC721', opensea_floor_price: 0.9, opensea_collection_name: 'Doodles' },
+-    token_id: '5021', name: 'Doodle #5021',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmPMc4tcBsMqLRuCQtPmPe8t1Hq5CkdaLgGTxjPLdj3TBJ' },
+-    attributes: [{ trait_type: 'Background', value: 'Gradient' }, { trait_type: 'Head', value: 'Mohawk' }],
+-  },
+-  {
+-    contract: { address: '0x34d85c9cdeb23fa97cb08333b511ac86e1c4e258', name: 'Otherdeed', symbol: 'OTHR', token_type: 'ERC721', opensea_floor_price: 0.7, opensea_collection_name: 'Otherdeed for Otherside' },
+-    token_id: '77341', name: 'Otherdeed #77341',
+-    image: { original_url: 'https://ipfs.io/ipfs/QmfVMAmNM1kDEBYrC2Te2gaJxfte9yiAtHHHBBpBd1Q73z' },
+-    attributes: [{ trait_type: 'Sediment', value: 'Cosmic Dream' }],
+-  },
+-];
+-
+-export const MOCK_NFTS_RESPONSE: NftsForOwnerResponse = {
+-  owned_nfts: MOCK_NFTS,
+-  total_count: MOCK_NFTS.length,
+-};
+-
+-// ─── Analytics ────────────────────────────────────────────────────────────────
+-
+-export const MOCK_PORTFOLIO_SNAPSHOT: PortfolioSnapshot = {
+-  eth_balance: 45.2341,
+-  eth_price_usd: 3412.88,
+-  portfolio_value_usd: 154382.5,
+-  token_count: 7,
+-  nft_count: 6,
+-};
+-
+-export const MOCK_PNL_SUMMARY: PnlSummary = {
+-  wallet_address: MOCK_ADDRESS,
+-  realized_pnl_eth: 12.445,
+-  unrealized_pnl_eth: -2.311,
+-  total_buy_volume_eth: 87.32,
+-  total_sell_volume_eth: 99.765,
+-  gas_spent_eth: 0.0,
+-  trade_count: 34,
+-  win_count: 22,
+-  loss_count: 12,
+-};
+-
+-export const MOCK_TRADES: TradeRecord[] = [
+-  { contract_address: '0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d', token_id: '3749', buy_price_eth: 10.5, sell_price_eth: undefined, pnl_eth: undefined, buy_tx_hash: '0xabc1', buy_timestamp: '2025-09-12T14:22:00Z' },
+-  { contract_address: '0xed5af388653567af2f388e6224dc7c4b3241c544', token_id: '812', buy_price_eth: 6.2, sell_price_eth: 9.8, pnl_eth: 3.6, buy_tx_hash: '0xabc2', sell_tx_hash: '0xdef2', buy_timestamp: '2025-07-03T09:10:00Z', sell_timestamp: '2025-08-20T17:45:00Z' },
+-  { contract_address: '0x60e4d786628fea6478f785a6d7e704777c86a7c6', token_id: '19283', buy_price_eth: 4.1, sell_price_eth: 2.9, pnl_eth: -1.2, buy_tx_hash: '0xabc3', sell_tx_hash: '0xdef3', buy_timestamp: '2025-06-15T11:00:00Z', sell_timestamp: '2025-07-01T08:30:00Z' },
+-  { contract_address: '0x8a90cab2b38dba80c64b7734e58ee1db38b8992e', token_id: '2211', buy_price_eth: 1.8, sell_price_eth: 3.4, pnl_eth: 1.6, buy_tx_hash: '0xabc4', sell_tx_hash: '0xdef4', buy_timestamp: '2025-05-22T16:15:00Z', sell_timestamp: '2025-06-10T12:00:00Z' },
+-  { contract_address: '0x49cf6f5d44e70224e2e23fdcdd2c053f30ada28b', token_id: '8891', buy_price_eth: 3.0, sell_price_eth: undefined, pnl_eth: undefined, buy_tx_hash: '0xabc5', buy_timestamp: '2025-10-01T10:00:00Z' },
+-  { contract_address: '0x34d85c9cdeb23fa97cb08333b511ac86e1c4e258', token_id: '44120', buy_price_eth: 1.2, sell_price_eth: 0.8, pnl_eth: -0.4, buy_tx_hash: '0xabc6', sell_tx_hash: '0xdef6', buy_timestamp: '2025-04-11T07:00:00Z', sell_timestamp: '2025-05-03T14:00:00Z' },
+-];
+-
+-// ─── Alerts ───────────────────────────────────────────────────────────────────
+-
+-export const MOCK_ALERTS: AlertRule[] = [
+-  {
+-    id: 'mock-alert-001',
+-    alert_type: 'portfolio_value',
+-    wallet_address: MOCK_ADDRESS,
+-    threshold_eth: 40.0,
+-    condition: 'below',
+-    active: true,
+-    created_at: '2025-11-01T10:00:00Z',
+-  },
+-  {
+-    id: 'mock-alert-002',
+-    alert_type: 'floor_price',
+-    wallet_address: MOCK_ADDRESS,
+-    collection_slug: 'boredapeyachtclub',
+-    threshold_eth: 10.0,
+-    condition: 'below',
+-    discord_webhook: 'https://discord.com/api/webhooks/...',
+-    active: true,
+-    created_at: '2025-10-15T09:30:00Z',
+-    last_triggered_at: '2025-11-20T14:12:00Z',
+-  },
+-  {
+-    id: 'mock-alert-003',
+-    alert_type: 'wallet_activity',
+-    wallet_address: MOCK_ADDRESS,
+-    threshold_eth: 5.0,
+-    condition: 'above',
+-    active: false,
+-    created_at: '2025-09-28T16:00:00Z',
+-  },
+-];
+-
+-// ─── Sniping ──────────────────────────────────────────────────────────────────
+-
+-export const MOCK_ENVELOPE: EnvelopeStatus = {
+-  active: true,
+-  kill_switch: false,
+-  spent_wei: '2100000000000000000',    // 2.1 ETH spent
+-  hard_cap_wei: '5000000000000000000', // 5.0 ETH cap
+-  expires_at: Math.floor(Date.now() / 1000) + 72 * 3600, // 72h from now
+-};
+-
+-export const MOCK_SNIPE_RULES: SnipeRule[] = [
+-  {
+-    id: 'mock-snipe-001',
+-    collection_slug: 'azuki',
+-    target_price_eth: 3.5,
+-    max_quantity: 2,
+-    wallet_address: MOCK_ADDRESS,
+-    active: true,
+-    triggered_count: 0,
+-    created_at: '2025-11-10T08:00:00Z',
+-  },
+-  {
+-    id: 'mock-snipe-002',
+-    collection_slug: 'doodles-official',
+-    target_price_eth: 0.75,
+-    max_quantity: 1,
+-    wallet_address: MOCK_ADDRESS,
+-    active: false,
+-    triggered_count: 3,
+-    created_at: '2025-10-22T11:30:00Z',
+-  },
+-];
+diff --git a/src/lib/tauri.ts b/src/lib/tauri.ts
+index 8d341a2..94817c3 100644
+--- a/src/lib/tauri.ts
++++ b/src/lib/tauri.ts
+@@ -419,6 +419,43 @@ export async function deleteOpenSeaKey(): Promise<void> {
+   return invoke('delete_opensea_key_cmd');
+ }
+ 
++// ── Sister-wallet finder (Etherscan, ETH mainnet) ────────────────────────────
++
++export type SisterReason = 'common_funder' | 'funded_target' | 'target_funded' | 'round_trip';
++
++export interface SisterCandidate {
++  address: string;
++  reasons: SisterReason[];
++  direct_out: number;
++  direct_in: number;
++  first_interaction?: number | null;
++  last_interaction?: number | null;
++  score: number;
++}
++
++export interface SisterReport {
++  target: string;
++  funder?: string | null;
++  candidates: SisterCandidate[];
++  note?: string | null;
++}
++
++export async function findSisterWallets(address: string): Promise<SisterReport> {
++  return invoke<SisterReport>('find_sister_wallets', { address });
++}
++
++export async function saveEtherscanKey(apiKey: string): Promise<void> {
++  return invoke('save_etherscan_key', { apiKey });
++}
++
++export async function loadEtherscanKey(): Promise<string> {
++  return invoke<string>('load_etherscan_key');
++}
++
++export async function deleteEtherscanKey(): Promise<void> {
++  return invoke('delete_etherscan_key_cmd');
++}
++
+ // Sniping
+ export interface SnipeRuleInput {
+   collection_slug: string;
+diff --git a/subscription-worker/DEPLOY.md b/subscription-worker/DEPLOY.md
+new file mode 100644
+index 0000000..5d10570
+--- /dev/null
++++ b/subscription-worker/DEPLOY.md
+@@ -0,0 +1,116 @@
++# Westron Abonelik Sistemi — Kurulum (yazılımcı olmayanlar için)
++
++Bu sistem, kullanıcıların **sadece kripto (ETH) göndererek** abone olmasını sağlar.
++Kredi kartı, hesap, üçüncü taraf ödeme sağlayıcısı yok. Nasıl çalışır, üç adımda:
++
++1. Kullanıcı, senin **ödeme cüzdanına** ETH gönderir (aylık ya da yıllık tutar).
++2. Küçük bir Cloudflare "worker" (sunucu), bu ödemeyi Alchemy webhook'u ile fark eder
++   ve o cüzdan için aboneliği bitiş tarihiyle kaydeder.
++3. Uygulama worker'dan **imzalı bir lisans** alır. Bu lisans kullanıcının
++   bilgisayarında saklanır ve uygulama onu **internetsiz** doğrulayabilir.
++
++## Neden "imzalı lisans"? (senin sorduğun offline kilitleme)
++
++- Lisans, worker'ın **özel imza anahtarıyla** imzalanır. Uygulama içine gömülü
++  **açık anahtarla** doğrular. Kullanıcı lisans dosyasını açıp süreyi uzatmaya
++  çalışırsa **imza bozulur** ve geçersiz olur.
++- Uygulama, gördüğü en son zamanı saklar. Kullanıcı bilgisayarın saatini geri
++  alsa bile süre uzamaz (saat-geri-alma koruması).
++- İnternet olmadan da çalışır: bir kez bağlanıp lisansı aldıktan sonra offline
++  doğrulanır.
++
++Özel anahtar **hiçbir zaman** uygulamaya veya kullanıcının bilgisayarına gitmez.
++
++---
++
++## Kurulum adımları
++
++### 0. Gerekenler
++- Bir Cloudflare hesabı (ücretsiz) — https://dash.cloudflare.com
++- Terminalde `npm` kurulu olması.
++
++### 1. İmza anahtarı
++Aşağıdaki **hazır anahtar çifti** geliştirme/ilk kurulum için üretildi:
++
++```
++UYGULAMAYA GÖMÜLÜ AÇIK ANAHTAR (zaten kodda):
++  src-tauri/src/subscription/mod.rs → LICENSE_PUBLIC_KEY_B64 =
++  EQFxzxkeDSAeEoq9908geKlTC/lok9eb8o2t3rdAkHI=
++
++WORKER'A SECRET OLARAK GİRİLECEK ÖZEL ANAHTAR (PKCS8, base64):
++  MC4CAQAwBQYDK2VwBCIEIIxTG74w9TXpfq1T6R28r4pbbkMiPHb+MOgoFTz3aBuJ
++```
++
++> **Canlıya çıkmadan önce (production):** Güvenlik için kendi anahtar çiftini
++> üret ve yukarıdakileri değiştir. Tek satır (Terminal, Node kurulu ise):
++> ```
++> node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");console.log("PUBLIC:",Buffer.from(publicKey.export({format:"jwk"}).x,"base64url").toString("base64"));console.log("PRIVATE_PKCS8:",privateKey.export({type:"pkcs8",format:"der"}).toString("base64"))'
++> ```
++> Çıkan PUBLIC değerini `mod.rs`'teki `LICENSE_PUBLIC_KEY_B64`'e yapıştır,
++> PRIVATE_PKCS8 değerini aşağıdaki 4. adımda secret olarak gir.
++
++### 2. Ödeme cüzdanı
++Sadece abonelik ödemelerini alacak **ayrı bir ETH cüzdanı** oluştur (ana
++cüzdanınla karıştırma). Adresini not et.
++
++### 3. Worker'ı deploy et
++`subscription-worker/` klasöründe Terminalde:
++```
++npm install
++npx wrangler login          # tarayıcıda Cloudflare'e giriş
++npx wrangler kv namespace create SUBS    # abonelik kayıtları için depo
++```
++Son komut sana bir `id = "...."` verir. Onu `wrangler.toml` içinde
++`[[kv_namespaces]]` altındaki `id` alanına yaz.
++
++Ayarları `wrangler.toml`'da doldur:
++```
++[vars]
++PAYMENT_WALLET   = "0xSENIN_ODEME_CUZDANIN"   # küçük harf
++MONTHLY_PRICE_ETH = "0.01"
++ANNUAL_PRICE_ETH  = "0.09"
++PRICE_TOLERANCE   = "0.20"
++```
++Sonra deploy:
++```
++npx wrangler deploy
++```
++Deploy sonunda sana bir adres verir, örn:
++`https://westron-subscription.SENIN-SUBDOMAIN.workers.dev`
++
++### 4. Secret'ları gir
++```
++npx wrangler secret put LICENSE_SIGNING_KEY
++# yukarıdaki PRIVATE_PKCS8 base64 değerini yapıştır
++
++npx wrangler secret put ALCHEMY_WEBHOOK_SECRET
++# (5. adımdaki Alchemy webhook signing key'i buraya)
++```
++
++### 5. Alchemy webhook (ödeme algılama)
++1. Alchemy dashboard → **Webhooks** → **Address Activity** oluştur.
++2. İzlenecek adres: senin **ödeme cüzdanın**. Ağ: Ethereum Mainnet.
++3. Webhook URL: `https://…workers.dev/webhook/alchemy`
++4. Alchemy'nin verdiği **Signing Key**'i 4. adımdaki `ALCHEMY_WEBHOOK_SECRET`'e gir.
++
++### 6. Uygulamadaki worker adresini güncelle
++`src-tauri/src/subscription/mod.rs` içinde:
++```
++pub const WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
++```
++`YOUR_SUBDOMAIN`'i 3. adımdaki gerçek adresinle değiştir. (Bu tek satırlık
++değişikliği ben ya da Claude Code senin için yapabilir.)
++
++---
++
++## Test
++1. Worker deploy edildikten sonra ödeme cüzdanına küçük bir test ETH'i gönder
++   (aylık tutar kadar).
++2. Alchemy webhook birkaç saniye içinde worker'ı tetikler, abonelik kaydolur.
++3. Uygulamada ilgili cüzdanla giriş yap → PRO görünmeli.
++4. İnterneti kapat, uygulamayı yeniden aç → hâlâ PRO olmalı (offline lisans).
++
++## Uç noktalar (özet)
++- `POST /license  {wallet}` → aktifse `{active:true, payload, sig}` (imzalı lisans)
++- `POST /validate {wallet}` → hızlı online kontrol `{active, plan, expires_at}`
++- `POST /webhook/alchemy`   → Alchemy ödeme bildirimi (imza doğrulamalı)
+diff --git a/subscription-worker/src/index.ts b/subscription-worker/src/index.ts
+index 49f8d2e..5e92dee 100644
+--- a/subscription-worker/src/index.ts
++++ b/subscription-worker/src/index.ts
+@@ -10,6 +10,7 @@ export interface Env {
+   SUBS: KVNamespace;
+   // Set these via `wrangler secret put` or in the Cloudflare dashboard
+   ALCHEMY_WEBHOOK_SECRET: string; // from Alchemy webhook signing key
++  LICENSE_SIGNING_KEY: string;    // base64 PKCS8 DER of the ED25519 private key (see DEPLOY.md)
+   // Set these in wrangler.toml [vars] or dashboard environment variables
+   PAYMENT_WALLET: string;         // your ETH address that receives payments (lowercase)
+   MONTHLY_PRICE_ETH: string;      // e.g. "0.01"
+@@ -112,6 +113,65 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
+   return json(response);
+ }
+ 
++// ── Signed license issuance ───────────────────────────────────────────────────
++
++function base64ToBytes(b64: string): Uint8Array {
++  const bin = atob(b64);
++  const out = new Uint8Array(bin.length);
++  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
++  return out;
++}
++
++function bytesToBase64(bytes: Uint8Array): string {
++  let bin = '';
++  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
++  return btoa(bin);
++}
++
++/**
++ * Issue a signed license for a wallet with an active subscription.
++ * The app verifies the signature offline with the embedded public key.
++ */
++async function handleLicense(request: Request, env: Env): Promise<Response> {
++  let body: { wallet?: string };
++  try {
++    body = await request.json();
++  } catch {
++    return json({ error: 'Invalid JSON' }, 400);
++  }
++
++  const wallet = body.wallet?.toLowerCase();
++  if (!wallet || !/^0x[0-9a-f]{40}$/.test(wallet)) {
++    return json({ active: false });
++  }
++
++  const record = await env.SUBS.get<SubRecord>(`sub:${wallet}`, 'json');
++  const nowSec = Math.floor(Date.now() / 1000);
++  if (!record || record.expires_at <= nowSec) {
++    return json({ active: false });
++  }
++
++  // Canonical payload string — signed verbatim and returned as-is.
++  const payload = JSON.stringify({
++    wallet,
++    plan: record.plan,
++    expires_at: record.expires_at,
++    issued_at: nowSec,
++  });
++
++  const key = await crypto.subtle.importKey(
++    'pkcs8',
++    base64ToBytes(env.LICENSE_SIGNING_KEY),
++    { name: 'Ed25519' },
++    false,
++    ['sign'],
++  );
++  const sigBuf = await crypto.subtle.sign('Ed25519', key, new TextEncoder().encode(payload));
++  const sig = bytesToBase64(new Uint8Array(sigBuf));
++
++  return json({ active: true, payload, sig });
++}
++
+ async function handleAlchemyWebhook(request: Request, env: Env): Promise<Response> {
+   const rawBody = await request.text();
+ 
+@@ -210,6 +270,9 @@ export default {
+       if (url.pathname === '/validate') {
+         return handleValidate(request, env);
+       }
++      if (url.pathname === '/license') {
++        return handleLicense(request, env);
++      }
+       if (url.pathname === '/webhook/alchemy') {
+         return handleAlchemyWebhook(request, env);
+       }

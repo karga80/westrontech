@@ -51,3 +51,8 @@ my-clone/
 
 # tauri build artifacts
 src-tauri/target/
+
+_junk/
+_deferred/_applied-*.patch
+_deferred/*.dead
+_deferred/*.lock

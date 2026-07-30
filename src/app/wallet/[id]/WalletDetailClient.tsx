@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, loadAlchemyKey,
-  type PortfolioSnapshot, type OwnedNft, type AssetTransfer,
+  getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, getWalletTokens, loadAlchemyKey,
+  type PortfolioSnapshot, type OwnedNft, type AssetTransfer, type WalletToken,
 } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
 import { persistTask } from '@/lib/taskStore';
@@ -1220,6 +1220,7 @@ export default function WalletDetailClient({ id }: { id: string }) {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [liveNfts, setLiveNfts] = useState<OwnedNft[] | null>(null);
   const [liveTxs, setLiveTxs] = useState<ReturnType<typeof mapTransfer>[] | null>(null);
+  const [liveTokens, setLiveTokens] = useState<WalletToken[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1248,15 +1249,17 @@ export default function WalletDetailClient({ id }: { id: string }) {
         const address = walletRecord?.address ?? wallet.address;
         setWalletAddr(address);
 
-        const [snap, nftRes, transfers] = await Promise.allSettled([
+        const [snap, nftRes, transfers, toks] = await Promise.allSettled([
           getPortfolioSnapshot(address, apiKey),
           getNftsForOwner(address, apiKey),
           getAssetTransfers(address, apiKey),
+          getWalletTokens(address, apiKey),
         ]);
 
         if (snap.status === 'fulfilled') setSnapshot(snap.value);
         if (nftRes.status === 'fulfilled') setLiveNfts(nftRes.value.owned_nfts);
         if (transfers.status === 'fulfilled') setLiveTxs(transfers.value.map(t => mapTransfer(t, address)));
+        if (toks.status === 'fulfilled') setLiveTokens(toks.value);
       } catch {}
       setLoading(false);
     })();
@@ -1270,10 +1273,27 @@ export default function WalletDetailClient({ id }: { id: string }) {
   const displayEthBalance = snap?.eth_balance !== undefined ? `${snap.eth_balance.toFixed(4)} ETH` : null;
 
   const liveNftGroups = liveNfts ? groupNftsByCollection(liveNfts) : null;
-  const displayNfts   = liveNftGroups ?? NFT_DATA[id] ?? [];
-  const displayTxs    = liveTxs ?? TX_DATA[id] ?? [];
+  const displayNfts   = liveNftGroups ?? [];
+  const displayTxs    = liveTxs ?? [];
 
-  const tokens = TOKEN_DATA[id] ?? [];
+  // Real token holdings (Alchemy). Market fields (fdv / 24h-7d change / volume)
+  // aren't provided by the balances API, so they render as "—".
+  const fmtUsd = (n: number | null | undefined) =>
+    n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—';
+  const tokens = (liveTokens ?? []).map(t => ({
+    name: t.name ?? t.symbol ?? 'Unknown',
+    ticker: t.symbol ?? '—',
+    color: '#627eea',
+    verified: false,
+    walletCount: 1,
+    heldValue: fmtUsd(t.usdValue),
+    heldQty: t.balance != null ? t.balance.toLocaleString('en-US', { maximumFractionDigits: 6 }) : '—',
+    price: fmtUsd(t.usdPrice),
+    fdv: '—',
+    change1d: '—',
+    change7d: '—',
+    vol1d: '—',
+  }));
   const topCols = TOP_COLLECTIONS[id] ?? [];
 
   return (

@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import ProGate from '@/components/ProGate';
 import { loadAddressBook, type AddressEntry } from '@/lib/addressBook';
+import { loadWallets } from '@/lib/walletStore';
+import { loadAlchemyKey, getPortfolioSnapshot, getWalletTokens } from '@/lib/tauri';
 
 // ─── Distribute Funds ─────────────────────────────────────────────────────────
 
@@ -12,18 +14,13 @@ type DistMode = 'equal' | 'custom';
 
 const STEP_LABELS = ['Select & Amounts', 'Confirm', 'Process'] as const;
 
-const MOCK_WALLETS = [
-  { id: 'main',   name: 'Main Wallet',  address: '0x3f4a6e…a91c', eth: 4.2819,  weth: 1.5000 },
-  { id: 'defi',   name: 'DeFi Wallet',  address: '0x1234…7890',   eth: 0.8340,  weth: 3.2100 },
-  { id: 'emir1',  name: 'Emir 1',       address: '0xb29a…7a1e',   eth: 0.1205,  weth: 0.0000 },
-  { id: 'burner', name: 'burner1',      address: '0xca7d…fd2a',   eth: 0.0500,  weth: 0.0000 },
-];
+const WETH_CONTRACT = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 
-const SOURCE_WALLETS = [
-  { id: 'cold',  label: 'Cold Storage — 0xabcd…ef12', eth: 12.4400, weth: 0.0000 },
-  { id: 'main',  label: 'Main Wallet — 0x3f4a…a91c',  eth: 4.2819,  weth: 1.5000 },
-  { id: 'defi',  label: 'DeFi Wallet — 0x1234…7890',  eth: 0.8340,  weth: 3.2100 },
-];
+interface DistWallet { id: string; name: string; address: string; eth: number; weth: number }
+
+function shortAddr(a: string): string {
+  return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
 
 function StepIndicator({ current }: { current: Step }) {
   return (
@@ -60,9 +57,35 @@ function StepIndicator({ current }: { current: Step }) {
 export default function DistributeFundsPage() {
   const [step, setStep] = useState<Step>(1);
 
+  // Real wallets + live balances (Alchemy). No mock fixtures.
+  const [wallets, setWallets] = useState<DistWallet[]>([]);
+  useEffect(() => {
+    const stored = loadWallets();
+    const base: DistWallet[] = stored.map(w => ({ id: w.id, name: w.name, address: w.address, eth: 0, weth: 0 }));
+    setWallets(base);
+    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    if (!inTauri || stored.length === 0) return;
+    (async () => {
+      const key = await loadAlchemyKey().catch(() => '');
+      if (!key) return;
+      const filled = await Promise.all(stored.map(async (w): Promise<DistWallet> => {
+        let eth = 0, weth = 0;
+        try { eth = (await getPortfolioSnapshot(w.address, key)).eth_balance; } catch {}
+        try {
+          const toks = await getWalletTokens(w.address, key);
+          weth = toks.find(t => (t.tokenAddress ?? '').toLowerCase() === WETH_CONTRACT.toLowerCase())?.balance ?? 0;
+        } catch {}
+        return { id: w.id, name: w.name, address: w.address, eth, weth };
+      }));
+      setWallets(filled);
+    })();
+  }, []);
+
+  const sourceWallets = wallets.map(w => ({ id: w.id, label: `${w.name} — ${shortAddr(w.address)}`, eth: w.eth, weth: w.weth }));
+
   // Step 1 state
-  const [source, setSource] = useState('cold');
-  const [selected, setSelected] = useState<Set<string>>(new Set(['main', 'defi', 'emir1', 'burner']));
+  const [source, setSource] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<DistMode>('equal');
   const [amountEqual, setAmountEqual] = useState('');
   const [amountCustom, setAmountCustom] = useState<Record<string, string>>({});
@@ -77,7 +100,7 @@ export default function DistributeFundsPage() {
   const toggleAb = (id: string) =>
     setAbSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const selectedList = MOCK_WALLETS.filter(w => selected.has(w.id));
+  const selectedList = wallets.filter(w => selected.has(w.id));
   const abSelectedList = addressBookEntries.filter(e => abSelected.has(e.id));
   const totalSelected = selected.size + abSelected.size;
 
@@ -107,7 +130,7 @@ export default function DistributeFundsPage() {
           {selectedList.map((w, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
               <div>
-                <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.address}</div>
+                <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(w.address)}</div>
                 <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
                   {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
                 </div>
@@ -157,7 +180,7 @@ export default function DistributeFundsPage() {
                     onChange={e => setSource(e.target.value)}
                     style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: '1px solid var(--wr-border)', padding: '10px 32px 10px 14px', appearance: 'none', cursor: 'pointer', outline: 'none' }}
                   >
-                    {SOURCE_WALLETS.map(w => (
+                    {sourceWallets.map(w => (
                       <option key={w.id} value={w.id}>{w.label}</option>
                     ))}
                   </select>
@@ -167,7 +190,7 @@ export default function DistributeFundsPage() {
                 </div>
                 {/* Source balance */}
                 {(() => {
-                  const sw = SOURCE_WALLETS.find(w => w.id === source);
+                  const sw = sourceWallets.find(w => w.id === source);
                   if (!sw) return null;
                   return (
                     <div style={{ display: 'flex', gap: '16px', marginTop: '7px', paddingLeft: '2px' }}>
@@ -190,7 +213,7 @@ export default function DistributeFundsPage() {
                   To
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  {MOCK_WALLETS.map(w => {
+                  {wallets.map(w => {
                     const isSel = selected.has(w.id);
                     return (
                       <div
@@ -219,7 +242,7 @@ export default function DistributeFundsPage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: isSel ? 'var(--wr-accent)' : 'var(--wr-text)' }}>{w.name}</div>
-                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{w.address}</div>
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{shortAddr(w.address)}</div>
                           <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                             <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px' }}>
                               <span style={{ color: 'var(--wr-text-4)' }}>ETH </span>
@@ -387,7 +410,7 @@ export default function DistributeFundsPage() {
                 <div key={i} className="flex items-center justify-between px-3 py-2.5" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
                   <div>
                     <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.name}</div>
-                    <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)' }}>{w.address}</div>
+                    <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(w.address)}</div>
                   </div>
                   <span style={{ color: 'var(--wr-accent)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }}>
                     {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
