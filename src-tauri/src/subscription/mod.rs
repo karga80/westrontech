@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 /// PRODUCTION: regenerate a keypair, set the private key as the worker secret
 /// `LICENSE_SIGNING_KEY`, and replace this value with the new public key.
 /// See `subscription-worker/DEPLOY.md`.
-const LICENSE_PUBLIC_KEY_B64: &str = "EQFxzxkeDSAeEoq9908geKlTC/lok9eb8o2t3rdAkHI=";
+const LICENSE_PUBLIC_KEY_B64: &str = "w1+T3XMFDkUASvJ0iNLuH7i7tyMNcGx/229uLO17wnM=";
 
 /// Deployed worker base URL. Replace `YOUR_SUBDOMAIN` after `wrangler deploy`.
 pub const WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
