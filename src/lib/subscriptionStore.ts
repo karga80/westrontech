@@ -14,12 +14,15 @@ export interface SubscriptionState {
 const STORAGE_KEY = 'westron_subscription';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // recheck every 24h
 
-const DEFAULT_STATE: SubscriptionState = {
+// Exported so components can seed useState with the SAME value the server
+// produces (hydration-stable), then load the real one in an effect.
+export const DEFAULT_SUBSCRIPTION: SubscriptionState = {
   plan: 'free',
   activatedAt: null,
   expiresAt: null,
   lastChecked: null,
 };
+const DEFAULT_STATE = DEFAULT_SUBSCRIPTION;
 
 export function loadSubscription(): SubscriptionState {
   try {

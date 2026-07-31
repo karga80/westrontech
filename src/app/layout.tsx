@@ -22,18 +22,12 @@ export const metadata: Metadata = {
   },
 };
 
-// Brand v2: dark theme is fixed. Pin the attribute before hydration.
-const ANTI_FLASH = `(function(){
-  try { document.documentElement.setAttribute('data-theme','night'); } catch(e){}
-})();`;
-
+// Brand v2: dark is the only theme. It's baked into the static HTML below
+// (data-theme="night"), so the build-time markup already matches the client —
+// no localStorage read, no anti-flash script, no hydration mismatch, no flash.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="night" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${inter.variable} ${spaceGrotesk.variable} h-full`}>
-      {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: ANTI_FLASH }} />
-      </head>
+    <html lang="en" data-theme="night" className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} ${inter.variable} ${spaceGrotesk.variable} h-full`}>
       <body className="h-full flex flex-col antialiased" style={{ backgroundColor: 'var(--wr-bg)', color: 'var(--wr-text)' }}>
         <ThemeProvider>
           <AppInit />

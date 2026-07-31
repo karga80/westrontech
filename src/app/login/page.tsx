@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { importWallet } from '@/lib/tauri';
 import WestronLogo from '@/components/WestronLogo';
@@ -52,7 +52,10 @@ export default function LoginPage() {
 // ─── Home Step ────────────────────────────────────────────────────────────────
 
 function HomeStep({ isDay, onImport, onWatch }: { isDay: boolean; onImport: () => void; onWatch: () => void }) {
-  const existingWallets = typeof window !== 'undefined' ? loadWallets() : [];
+  // Read wallets after mount only — a `typeof window` branch during render makes
+  // the server ([]) and client (stored) disagree and breaks hydration.
+  const [existingWallets, setExistingWallets] = useState<ReturnType<typeof loadWallets>>([]);
+  useEffect(() => { setExistingWallets(loadWallets()); }, []);
   const hasWallets = existingWallets.length > 0 && existingWallets[0].address !== '0x3f4a6b2d8e1c9f7a5b3e4d6c2a1f8b3d4e5c6a91c';
 
   return (

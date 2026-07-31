@@ -289,7 +289,7 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
       )}
 
       {/* Whole card opens wallet detail */}
-      <Link href={`/wallet/${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '16px 16px 0', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
+      <Link href={`/wallet/detail?id=${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '16px 16px 0', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
 
         {/* 1 — Identity: name + chain badge */}
         <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>

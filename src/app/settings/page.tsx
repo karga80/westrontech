@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { loadWallets, addWallet, removeWallet } from '@/lib/walletStore';
 import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription } from '@/lib/tauri';
-import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, type SubscriptionState } from '@/lib/subscriptionStore';
+import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, DEFAULT_SUBSCRIPTION, type SubscriptionState } from '@/lib/subscriptionStore';
 import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
 import { Tag } from '@/components/Tag';
 
@@ -118,7 +118,9 @@ function ProfileSection() {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [country, setCountry] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
-  const [sub, setSub] = useState(() => loadSubscription());
+  // Seed with the SSR-stable default so the first client render matches the
+  // static HTML; the effect below loads the real subscription from storage.
+  const [sub, setSub] = useState<SubscriptionState>(DEFAULT_SUBSCRIPTION);
   const isPro = isSubscriptionActive(sub);
 
   useEffect(() => {

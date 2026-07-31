@@ -13,6 +13,8 @@
  * Purple is brand-only here — it never encodes data anywhere in the product.
  */
 
+import { useId } from 'react';
+
 type Variant = 'gradient' | 'mono' | 'solid';
 
 interface WestronLogoProps {
@@ -27,8 +29,6 @@ interface WestronLogoProps {
   style?: React.CSSProperties;
 }
 
-let gradientSeq = 0;
-
 export default function WestronLogo({
   size = 28,
   wordmark = false,
@@ -37,8 +37,9 @@ export default function WestronLogo({
   className,
   style,
 }: WestronLogoProps) {
-  // Unique gradient id so multiple logos on one page don't collide.
-  const gid = `wg-${(gradientSeq = (gradientSeq + 1) % 100000)}`;
+  // Hydration-stable unique id (useId matches server & client). A module counter
+  // would produce different ids on each render and break hydration.
+  const gid = `wg-${useId().replace(/:/g, '')}`;
 
   // ≤32px symbol-only auto-collapses to the solid, dotless treatment.
   const collapse = !wordmark && size <= 32;

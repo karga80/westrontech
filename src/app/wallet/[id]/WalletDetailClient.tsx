@@ -1189,7 +1189,18 @@ function syntheticConfig(
   };
 }
 
-export default function WalletDetailClient({ id }: { id: string }) {
+export default function WalletDetailClient({ id: routeId }: { id: string }) {
+  // Static export serves one prerendered /wallet/detail page; the real wallet
+  // id arrives as ?id=… and is read on the client after mount. Until then the
+  // route id ('detail') matches no wallet on either server or client, so the
+  // first render is hydration-stable.
+  const [id, setId] = useState(routeId);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('id');
+    if (q && q !== id) setId(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Resolve the wallet: prefer WALLET_CONFIGS (has analytics mocks), fall back
   // to the stored record so user-added wallets show their own name/address
   // instead of silently loading Main Wallet data.

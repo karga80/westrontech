@@ -599,16 +599,24 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
         </div>
       )}
 
-      <Link href={`/wallet/${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '20px', paddingBottom: '12px', textDecoration: 'none', minHeight: 0 }}>
+      <Link href={`/wallet/detail?id=${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '20px', paddingBottom: '12px', textDecoration: 'none', minHeight: 0 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
           <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</span>
           <Tag variant={WALLET_TOKEN_VARIANT[w.badge] ?? 'neutral'}>{w.badge}</Tag>
         </div>
         <div className="flex items-center gap-1" style={{ marginBottom: '8px' }}>
           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{w.address}</span>
-          <a href={`https://etherscan.io/address/${w.rawAddress}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
+          {/* External link — NOT an <a> (would nest inside the card's Link and
+              break hydration). Opens the system browser, swallows the click. */}
+          <span
+            role="link"
+            tabIndex={0}
+            title="View on Etherscan"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); window.open(`https://etherscan.io/address/${w.rawAddress}`, '_blank', 'noopener,noreferrer'); }}
+            className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex cursor-pointer"
+          >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </a>
+          </span>
         </div>
         <div style={{ marginBottom: '4px' }}>
           <div style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>
@@ -649,7 +657,7 @@ function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boo
       {/* Action buttons */}
       <div className="flex" style={{ borderTop: '1px solid var(--wr-border)', height: '27px' }}>
         <Link
-          href={`/wallet/${w.id}`}
+          href={`/wallet/detail?id=${w.id}`}
           className="flex-1 h-full flex items-center justify-center"
           style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', borderRight: '1px solid var(--wr-border)', textDecoration: 'none' }}
           onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'var(--wr-hover-bg)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--wr-accent)'; }}

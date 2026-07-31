@@ -1,15 +1,15 @@
 import WalletDetailClient from './WalletDetailClient';
 
-// Next.js static export pre-renders only the ids returned here. Default
-// wallets ('0'|'1'|'2') plus a sentinel so user-added wallets (id = Date.now())
-// fall back to client-side routing without a 404.
+// Static export ('output: export') can only ship prerendered paths, and wallet
+// ids are runtime values (Date.now()), so we prerender ONE detail page and route
+// every wallet through it as /wallet/detail?id=<id>. WalletDetailClient reads the
+// real id from the query string on the client. dynamicParams MUST be false here —
+// 'true' is incompatible with static export.
 export function generateStaticParams() {
-  return [{ id: '0' }, { id: '1' }, { id: '2' }, { id: 'detail' }];
+  return [{ id: 'detail' }];
 }
 
-// Client-side fallback: any id not pre-generated is still rendered through
-// React hydration of the sentinel page, which reads the real id from the URL.
-export const dynamicParams = true;
+export const dynamicParams = false;
 
 export default async function WalletDetailPage({
   params,
