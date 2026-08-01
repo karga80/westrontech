@@ -31,35 +31,12 @@ interface Order {
 }
 
 const WALLET_COLORS = ['#2fc4d6', '#a855f7', '#ffb020'];
-const STATIC_WALLETS = [
-  { id: 'w1', label: 'Main Wallet',   color: '#2fc4d6' },
-  { id: 'w2', label: 'Trading Vault', color: '#a855f7' },
-  { id: 'w3', label: 'Cold Storage',  color: '#ffb020' },
-];
+const STATIC_WALLETS: Array<{ id: string; label: string; color: string }> = [];
 
-const ORDERS: Order[] = [
-  // Wallet 1
-  { id: 'o1',  wallet: 'w1', nft: 'Pudgy #4531',      collection: 'Pudgy Penguins',    collectionEmoji: '🐧', type: 'Listing', marketplace: 'OpenSea',  price: 4.80,  floor: 4.124, expiry: '6d 12h',   status: 'Active' },
-  { id: 'o2',  wallet: 'w1', nft: 'Pudgy #7102',      collection: 'Pudgy Penguins',    collectionEmoji: '🐧', type: 'Listing', marketplace: 'Blur',     price: 4.55,  floor: 4.124, expiry: '2d 4h',    status: 'Active' },
-  { id: 'o3',  wallet: 'w1', nft: 'Doodles #8021',    collection: 'Doodles',           collectionEmoji: '🌈', type: 'Bid',     marketplace: 'OpenSea',  price: 0.44,  floor: 0.4865,expiry: '1h 10m',   status: 'Expiring Soon' },
-  { id: 'o4',  wallet: 'w1', nft: 'Doodles #3340',    collection: 'Doodles',           collectionEmoji: '🌈', type: 'Bid',     marketplace: 'OpenSea',  price: 0.46,  floor: 0.4865,expiry: '3d 0h',    status: 'Active' },
-  { id: 'o5',  wallet: 'w1', nft: 'Azuki #2960',      collection: 'Azuki',             collectionEmoji: '⛩', type: 'Listing', marketplace: 'Blur',     price: 0.72,  floor: 0.676, expiry: '—',        status: 'Expired' },
-  { id: 'o6',  wallet: 'w1', nft: 'Clone X #8812',    collection: 'Clone X',           collectionEmoji: '🤖', type: 'Bid',     marketplace: 'OpenSea',  price: 1.85,  floor: 1.92,  expiry: '5d 6h',    status: 'Active' },
-  // Wallet 2
-  { id: 'o7',  wallet: 'w2', nft: 'BAYC #8752',       collection: 'Bored Ape YC',      collectionEmoji: '🦍', type: 'Listing', marketplace: 'OpenSea',  price: 15.50, floor: 14.20, expiry: '13d 0h',   status: 'Active' },
-  { id: 'o8',  wallet: 'w2', nft: 'BAYC #0391',       collection: 'Bored Ape YC',      collectionEmoji: '🦍', type: 'Listing', marketplace: 'Blur',     price: 14.90, floor: 14.20, expiry: '4d 18h',   status: 'Active' },
-  { id: 'o9',  wallet: 'w2', nft: 'MAYC #8720',       collection: 'Mutant Ape YC',     collectionEmoji: '🧬', type: 'Listing', marketplace: 'Blur',     price: 0.80,  floor: 0.7597,expiry: '0h 40m',   status: 'Expiring Soon' },
-  { id: 'o10', wallet: 'w2', nft: 'CryptoPunk #5102', collection: 'CryptoPunks',       collectionEmoji: '👾', type: 'Listing', marketplace: 'OpenSea',  price: 31.00, floor: 29.00, expiry: '—',        status: 'Expired' },
-  { id: 'o11', wallet: 'w2', nft: 'Milady #2241',     collection: 'Milady Maker',      collectionEmoji: '👧', type: 'Bid',     marketplace: 'OpenSea',  price: 1.10,  floor: 1.18,  expiry: '6d 2h',    status: 'Active' },
-  { id: 'o12', wallet: 'w2', nft: 'Moonbirds #2284',  collection: 'Moonbirds',         collectionEmoji: '🦉', type: 'Listing', marketplace: 'MagicEden',price: 1.50,  floor: 1.40,  expiry: '—',        status: 'Expired' },
-  // Wallet 3
-  { id: 'o13', wallet: 'w3', nft: 'Azuki #7741',      collection: 'Azuki',             collectionEmoji: '⛩', type: 'Listing', marketplace: 'Blur',     price: 0.71,  floor: 0.676, expiry: '8d 0h',    status: 'Active' },
-  { id: 'o14', wallet: 'w3', nft: 'Pudgy #9903',      collection: 'Pudgy Penguins',    collectionEmoji: '🐧', type: 'Bid',     marketplace: 'Blur',     price: 3.90,  floor: 4.124, expiry: '1d 4h',    status: 'Active' },
-  { id: 'o15', wallet: 'w3', nft: 'Clone X #0019',    collection: 'Clone X',           collectionEmoji: '🤖', type: 'Bid',     marketplace: 'OpenSea',  price: 1.80,  floor: 1.92,  expiry: '0h 15m',   status: 'Expiring Soon' },
-  { id: 'o16', wallet: 'w3', nft: 'Doodles #1120',    collection: 'Doodles',           collectionEmoji: '🌈', type: 'Listing', marketplace: 'OpenSea',  price: 0.52,  floor: 0.4865,expiry: '—',        status: 'Expired' },
-  { id: 'o17', wallet: 'w3', nft: 'MAYC #3344',       collection: 'Mutant Ape YC',     collectionEmoji: '🧬', type: 'Bid',     marketplace: 'OpenSea',  price: 0.72,  floor: 0.7597,expiry: '2d 8h',    status: 'Active' },
-  { id: 'o18', wallet: 'w3', nft: 'Milady #8801',     collection: 'Milady Maker',      collectionEmoji: '👧', type: 'Listing', marketplace: 'MagicEden',price: 1.25,  floor: 1.18,  expiry: '3d 12h',   status: 'Active' },
-];
+// No API for listing a wallet's active marketplace orders yet — real cancel
+// submission (marketplaceCancelOrder) is wired, but there is nothing to
+// populate this list with until that endpoint exists.
+const ORDERS: Order[] = [];
 
 const ORDER_STATUS_VARIANT: Record<OrderStatus, TagVariant> = {
   'Active':        'success',

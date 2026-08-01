@@ -708,10 +708,10 @@ export default function WalletsPage() {
 
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     if (!inTauri) {
-      // Browser mock mode
-      const mock: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { mock[w.id] = EMPTY_SNAPSHOT; });
-      setSnapshots(mock);
+      // Browser mode (no Tauri backend) — show empty state, no API calls possible
+      const emptySnaps: Record<string, PortfolioSnapshot> = {};
+      wallets.forEach(w => { emptySnaps[w.id] = EMPTY_SNAPSHOT; });
+      setSnapshots(emptySnaps);
       setLoadingData(false);
       return;
     }

@@ -98,56 +98,6 @@ const WALLET_CONFIGS = [
   },
 ];
 
-// ── NFT holdings per wallet ───────────────────────────────────────────────────
-
-const NFT_DATA: Record<string, Array<{
-  name: string; color: string; count: number; floor: string; change: string;
-  neg: boolean; topPrice: string; vol24h: string; sales24h: number; supply: number; avgPa: string;
-}>> = {
-  '0': [
-    { name: 'Bored Ape YC',   color: '#ffb020', count: 6, floor: '23.5 ETH', change: '-7.3%',  neg: true,  topPrice: '24.8 ETH', vol24h: '142.5 ETH', sales24h: 0,  supply: 10000, avgPa: '14,998' },
-    { name: 'Azuki',          color: '#ff8a96', count: 3, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
-    { name: 'Doodles',        color: '#90a6ff', count: 3, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
-  ],
-  '1': [
-    { name: 'Pudgy Penguins', color: '#4fe9b4', count: 4, floor: '7.4 ETH',  change: '+0.4%',  neg: false, topPrice: '7.2 ETH',  vol24h: '42.6 ETH',  sales24h: 14, supply: 8888,  avgPa: '3,988' },
-    { name: 'Clonex',         color: '#a78bfa', count: 1, floor: '4.1 ETH',  change: '-1.1%',  neg: true,  topPrice: '4.8 ETH',  vol24h: '28.4 ETH',  sales24h: 9,  supply: 9534,  avgPa: '26,008' },
-  ],
-  '2': [
-    { name: 'Azuki',          color: '#ff8a96', count: 2, floor: '34.2 ETH', change: '-1.7%',  neg: true,  topPrice: '41.5 ETH', vol24h: '53.4 ETH',  sales24h: 13, supply: 5821,  avgPa: '10,200' },
-    { name: 'Doodles',        color: '#90a6ff', count: 4, floor: '2.9 ETH',  change: '+8.3%',  neg: false, topPrice: '3.4 ETH',  vol24h: '14.2 ETH',  sales24h: 9,  supply: 10000, avgPa: '12,000' },
-    { name: 'Moonbirds',      color: '#ffb020', count: 2, floor: '1.8 ETH',  change: '-5.2%',  neg: true,  topPrice: '2.1 ETH',  vol24h: '9.8 ETH',   sales24h: 5,  supply: 10000, avgPa: '8,420' },
-  ],
-};
-
-// ── Token holdings per wallet ─────────────────────────────────────────────────
-
-const TOKEN_DATA: Record<string, Array<{
-  name: string; ticker: string; color: string; verified: boolean; walletCount: number;
-  heldValue: string; heldQty: string; price: string; fdv: string;
-  change1d: string; change7d: string; vol1d: string;
-}>> = {
-  '0': [
-    { name: 'Ethereum',    ticker: 'ETH',  color: '#627eea', verified: true,  walletCount: 4, heldValue: '$45,200', heldQty: '15.89',    price: '$2,842',  fdv: '$340B',  change1d: '+1.4%',  change7d: '+8.2%',   vol1d: '$14.2B' },
-    { name: 'USD Coin',    ticker: 'USDC', color: '#2775ca', verified: true,  walletCount: 2, heldValue: '$15,000', heldQty: '15,000',   price: '$1.00',   fdv: '$52B',   change1d: '+0.0%',  change7d: '+0.0%',   vol1d: '$8.1B'  },
-    { name: 'Wrapped ETH', ticker: 'WETH', color: '#627eea', verified: true,  walletCount: 1, heldValue: '$12,400', heldQty: '4.36',     price: '$2,842',  fdv: '$340B',  change1d: '+1.4%',  change7d: '+8.2%',   vol1d: '$420M'  },
-    { name: 'Uniswap',     ticker: 'UNI',  color: '#ff007a', verified: true,  walletCount: 1, heldValue: '$11,600', heldQty: '1,601.1',  price: '$7.24',   fdv: '$7.2B',  change1d: '-2.1%',  change7d: '+14.8%',  vol1d: '$310M'  },
-  ],
-  '1': [
-    { name: 'Ethereum',    ticker: 'ETH',  color: '#627eea', verified: true,  walletCount: 2, heldValue: '$20,100', heldQty: '7.07',     price: '$2,842',  fdv: '$340B',  change1d: '+1.4%',  change7d: '+8.2%',   vol1d: '$14.2B' },
-    { name: 'Binance Coin',ticker: 'BNB',  color: '#f3ba2f', verified: true,  walletCount: 1, heldValue: '$10,200', heldQty: '24.76',    price: '$412',    fdv: '$63B',   change1d: '-0.8%',  change7d: '+4.1%',   vol1d: '$1.8B'  },
-    { name: 'Curve DAO',   ticker: 'CRV',  color: '#232533', verified: false, walletCount: 1, heldValue: '$8,190',  heldQty: '15,166',   price: '$0.54',   fdv: '$540M',  change1d: '-3.4%',  change7d: '-12.1%',  vol1d: '$88M'   },
-  ],
-  '2': [
-    { name: 'Polygon',     ticker: 'MATIC',color: '#8247e5', verified: true,  walletCount: 2, heldValue: '$8,400',  heldQty: '10,769',   price: '$0.78',   fdv: '$7.8B',  change1d: '+2.1%',  change7d: '+2.0%',   vol1d: '$620M'  },
-    { name: 'Ethereum',    ticker: 'ETH',  color: '#627eea', verified: true,  walletCount: 1, heldValue: '$5,600',  heldQty: '1.97',     price: '$2,842',  fdv: '$340B',  change1d: '+1.4%',  change7d: '+8.2%',   vol1d: '$14.2B' },
-    { name: 'Aave',        ticker: 'AAVE', color: '#b6509e', verified: true,  walletCount: 1, heldValue: '$3,200',  heldQty: '25.81',    price: '$124',    fdv: '$1.8B',  change1d: '-1.2%',  change7d: '+18.4%',  vol1d: '$210M'  },
-    { name: 'Chainlink',   ticker: 'LINK', color: '#2a5ada', verified: true,  walletCount: 1, heldValue: '$1,800',  heldQty: '126.76',   price: '$14.2',   fdv: '$14.2B', change1d: '+3.8%',  change7d: '+22.1%',  vol1d: '$980M'  },
-    { name: 'Synthetix',   ticker: 'SNX',  color: '#00d1ff', verified: false, walletCount: 1, heldValue: '$700',    heldQty: '224.36',   price: '$3.12',   fdv: '$940M',  change1d: '-0.5%',  change7d: '+5.3%',   vol1d: '$42M'   },
-    { name: 'USD Coin',    ticker: 'USDC', color: '#2775ca', verified: true,  walletCount: 1, heldValue: '$441',    heldQty: '441',      price: '$1.00',   fdv: '$52B',   change1d: '+0.0%',  change7d: '+0.0%',   vol1d: '$8.1B'  },
-  ],
-};
-
 // ── Transactions per wallet ───────────────────────────────────────────────────
 
 const TX_STYLE = {
@@ -158,51 +108,6 @@ const TX_STYLE = {
 } as const;
 
 type TxType = keyof typeof TX_STYLE;
-
-const TX_DATA: Record<string, Array<{
-  hash: string; type: TxType; block: string; age: string; from: string; to: string; token: string; amount: string; gas: string;
-}>> = {
-  '0': [
-    { hash: '0x8aDf73c1a4…', type: 'Receive', block: '1847343', age: '1 hr ago',   from: '0x6a4b…2sd8', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.5 ETH',  gas: '0.00003157' },
-    { hash: '0x3fc81dAe22…', type: 'Send',    block: '1846891', age: '3 hrs ago',  from: '0x3f4a…A91c', to: '0x7f2e…B3c1', token: 'ETH',  amount: '0.1 ETH',  gas: '0.00002841' },
-    { hash: '0x1a8c9b7e55…', type: 'Swap',    block: '1844210', age: '1 day ago',  from: '0x3f4a…A91c', to: '0x3f4a…A91c', token: 'ETH',  amount: '1.5 ETH',  gas: '0.00001764' },
-    { hash: '0xa1B9f2c7d4…', type: 'NFT',     block: '1842711', age: '2 days ago', from: '0x3f4a…A91c', to: '0xe4b1…9A3d', token: 'NFT',  amount: '1 NFT',    gas: '0.00007241' },
-    { hash: '0x2eF8a17c90…', type: 'Receive', block: '1841203', age: '3 days ago', from: '0x3b7f…D2c9', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.75 ETH', gas: '0.00001943' },
-    { hash: '0x6bD0e31a77…', type: 'Swap',    block: '1838401', age: '6 days ago', from: '0x3f4a…A91c', to: '0x3f4a…A91c', token: 'DAI',  amount: '1200 DAI', gas: '0.00004455' },
-    { hash: '0x1dA5b84c62…', type: 'Send',    block: '1837688', age: '7 days ago', from: '0x3f4a…A91c', to: '0x1234…5678', token: 'ETH',  amount: '2.0 ETH',  gas: '0.00002987' },
-  ],
-  '1': [
-    { hash: '0x9aB2cd4f88…', type: 'Receive', block: '1847217', age: '2 hrs ago',  from: '0xbc4c…f13d', to: '0x1234…5678', token: 'ETH',  amount: '0 ETH',    gas: '0.00000892' },
-    { hash: '0xc3D7e48f21…', type: 'Send',    block: '1843488', age: '2 days ago', from: '0x1234…5678', to: '0x5d3a…C8f2', token: 'USDC', amount: '500 USDC', gas: '0.00003880' },
-    { hash: '0x7dC4b39e01…', type: 'Swap',    block: '1841990', age: '3 days ago', from: '0x1234…5678', to: '0x1234…5678', token: 'WETH', amount: '2.0 WETH', gas: '0.00005512' },
-    { hash: '0x9cE1f74b38…', type: 'Send',    block: '1839844', age: '5 days ago', from: '0x1234…5678', to: '0xabcd…ef12', token: 'ETH',  amount: '0.05 ETH', gas: '0.00001320' },
-  ],
-  '2': [
-    { hash: '0x5c29a31234…', type: 'Swap',    block: '1845430', age: '14 hrs ago', from: '0xabcd…ef12', to: '0xabcd…ef12', token: 'ETH',  amount: '1.5 ETH',  gas: '0.00004213' },
-    { hash: '0xf4E2a1b9cc…', type: 'Receive', block: '1843902', age: '1 day ago',  from: '0x92ab…4F1e', to: '0xabcd…ef12', token: 'ETH',  amount: '3.2 ETH',  gas: '0.00002100' },
-    { hash: '0xb5A3d92f44…', type: 'Send',    block: '1840517', age: '4 days ago', from: '0xabcd…ef12', to: '0x8c2e…5B7a', token: 'ETH',  amount: '0.3 ETH',  gas: '0.00002610' },
-    { hash: '0x4aF6c28d55…', type: 'NFT',     block: '1839120', age: '5 days ago', from: '0xd19a…7F4b', to: '0xabcd…ef12', token: 'NFT',  amount: '2 NFTs',   gas: '0.00009870' },
-  ],
-};
-
-// ── Top collections per wallet ────────────────────────────────────────────────
-
-const TOP_COLLECTIONS: Record<string, Array<{ name: string; eth: string; pct: number }>> = {
-  '0': [
-    { name: 'Bored Ape Yacht Club', eth: '141 ETH',   pct: 55 },
-    { name: 'Azuki',                eth: '102.6 ETH', pct: 30 },
-    { name: 'Doodles',              eth: '8.7 ETH',   pct: 15 },
-  ],
-  '1': [
-    { name: 'Pudgy Penguins',       eth: '29.6 ETH',  pct: 68 },
-    { name: 'Clonex',               eth: '4.1 ETH',   pct: 32 },
-  ],
-  '2': [
-    { name: 'Azuki',                eth: '68.4 ETH',  pct: 48 },
-    { name: 'Doodles',              eth: '11.6 ETH',  pct: 30 },
-    { name: 'Moonbirds',            eth: '3.6 ETH',   pct: 22 },
-  ],
-};
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
 
@@ -1180,9 +1085,21 @@ function syntheticConfig(
     address,
     badge: 'ETH',
     totalValue: '—',
+    totalNfts: 0,
+    totalTokens: 0,
     unrealizedPnl: '—',
+    pnlPos: true,
     analytics: {
-      ...template.analytics,
+      totalAction: '—',
+      actionPct: '—',
+      bestPerformer: '—',
+      bestPct: '—',
+      worstPerformer: '—',
+      worstPct: '—',
+      avgHoldTime: '—',
+      totalTrades: '—',
+      winRate: '—',
+      avgPrice: '—',
       portfolioValue: '—',
       portfolioChange: '—',
     },
@@ -1305,7 +1222,7 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
     change7d: '—',
     vol1d: '—',
   }));
-  const topCols = TOP_COLLECTIONS[id] ?? [];
+  const topCols: Array<{ name: string; eth: string; pct: number }> = [];
 
   return (
     <main className="min-h-full bg-[#0b0c14] text-white px-12 py-8">

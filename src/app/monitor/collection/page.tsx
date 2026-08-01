@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Tag, NFT_ACTIVITY_VARIANT } from '@/components/Tag';
-import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, fetchCollectionNfts, getEthBalance, getTokenBalances, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue } from '@/lib/tauri';
+import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, fetchCollectionNfts, getEthBalance, getTokenBalances, loadAlchemyKey, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue } from '@/lib/tauri';
 import {
   addTrackedNft, isTracked, loadTrackedNfts, removeTrackedNft, trackedNftId,
   type TrackedNft,
@@ -20,58 +20,18 @@ type Tab = 'Items' | 'Offers' | 'Holders' | 'Activity' | 'Make Collection Bid' |
 
 const TABS: Tab[] = ['Items', 'Offers', 'Holders', 'Activity', 'Make Collection Bid', 'Analytics', 'Alerts'];
 
-// ── Mock collection data keyed by name ────────────────────────────────────────
-const COLLECTION_DATA: Record<string, {
-  name: string; symbol: string; color: string; floor: string; change: number;
-  vol24h: string; vol7d: string; sales7d: string; totalSupply: string;
-  owners: string; marketCap: string; royalty: string; opensea_slug: string;
-}> = {
-  'Bored Ape Yacht Club': { name: 'Bored Ape Yacht Club', symbol: 'BAYC', color: '#ffb020', floor: '14.2 ETH', change: -2.3, vol24h: '349.8 ETH', vol7d: '1,349.8 ETH', sales7d: '94', totalSupply: '10,000', owners: '5,829', marketCap: '142,000 ETH', royalty: '2.5%', opensea_slug: 'boredapeyachtclub' },
-  'CryptoPunks':          { name: 'CryptoPunks', symbol: 'PUNK', color: '#5b7cfa', floor: '33.1 ETH', change: 1.5, vol24h: '43.9 ETH', vol7d: '56.2 ETH', sales7d: '2', totalSupply: '10,000', owners: '3,411', marketCap: '331,000 ETH', royalty: '0%', opensea_slug: 'cryptopunks' },
-  'Azuki':                { name: 'Azuki', symbol: 'AZUKI', color: '#a78bfa', floor: '3.8 ETH', change: -1.3, vol24h: '43.9 ETH', vol7d: '56.2 ETH', sales7d: '4', totalSupply: '10,000', owners: '4,102', marketCap: '38,000 ETH', royalty: '5%', opensea_slug: 'azuki' },
-  'Fidgy Penguins':       { name: 'Fidgy Penguins', symbol: 'FP', color: '#90a6ff', floor: '1.6 ETH', change: -1.3, vol24h: '18.8 ETH', vol7d: '1.1 ETH', sales7d: '3', totalSupply: '8,888', owners: '2,954', marketCap: '14,221 ETH', royalty: '5%', opensea_slug: 'pudgypenguins' },
+// ── Known-collection cosmetic lookup (display name/symbol/brand color/slug only — no stats) ──
+const COLLECTION_DATA: Record<string, { name: string; symbol: string; color: string; opensea_slug: string }> = {
+  'Bored Ape Yacht Club': { name: 'Bored Ape Yacht Club', symbol: 'BAYC',  color: '#ffb020', opensea_slug: 'boredapeyachtclub' },
+  'CryptoPunks':          { name: 'CryptoPunks',          symbol: 'PUNK',  color: '#5b7cfa', opensea_slug: 'cryptopunks' },
+  'Azuki':                { name: 'Azuki',                symbol: 'AZUKI', color: '#a78bfa', opensea_slug: 'azuki' },
+  'Fidgy Penguins':       { name: 'Fidgy Penguins',        symbol: 'FP',    color: '#90a6ff', opensea_slug: 'pudgypenguins' },
 };
 
-const FALLBACK = { name: '', symbol: '?', color: '#6e7590', floor: '—', change: 0, vol24h: '—', vol7d: '—', sales7d: '—', totalSupply: '—', owners: '—', marketCap: '—', royalty: '—', opensea_slug: '' };
+const FALLBACK = { name: '', symbol: '?', color: '#6e7590', opensea_slug: '' };
 
-// ── Mock feed data ─────────────────────────────────────────────────────────────
-const FEED_ITEMS = [
-  { type: 'Sale',     typeColor: '#4fe9b4', typeBg: '#06251b', typeBorder: '#06251b', title: 'BAYC #7391 sold for 14.5 ETH', sub: 'Buyer: 0x3a2f…c841 · Seller: 0x81d2…f320', timeAgo: '3 min ago',  date: '2 Apr 2026' },
-  { type: 'Listing',  typeColor: '#2fc4d6', typeBg: '#0e2630', typeBorder: '#0e2630', title: 'BAYC #2108 listed for 16.0 ETH', sub: 'By: 0x9cd1…44ba', timeAgo: '11 min ago', date: '2 Apr 2026' },
-  { type: 'Sale',     typeColor: '#4fe9b4', typeBg: '#06251b', typeBorder: '#06251b', title: 'BAYC #0451 sold for 13.9 ETH', sub: 'Buyer: 0x5dh1…4b3 · Seller: 0x72f4…a109', timeAgo: '42 min ago', date: '2 Apr 2026' },
-  { type: 'Bid',      typeColor: '#ffb020', typeBg: '#451a03', typeBorder: '#78350f', title: 'Offer 13.2 ETH on BAYC #5523', sub: 'By: 0x1a9c…d204', timeAgo: '1 hr ago',   date: '2 Apr 2026' },
-  { type: 'Transfer', typeColor: '#a78bfa', typeBg: '#2e1065', typeBorder: '#4c1d95', title: 'BAYC #8820 transferred', sub: 'From: 0x82a3…f012 → To: 0x3311…9a2e', timeAgo: '2 hrs ago',  date: '2 Apr 2026' },
-  { type: 'Sale',     typeColor: '#4fe9b4', typeBg: '#06251b', typeBorder: '#06251b', title: 'BAYC #1133 sold for 15.2 ETH', sub: 'Buyer: 0xcf3d…b4a1 · Seller: 0x4d21…8f33', timeAgo: '3 hrs ago',  date: '2 Apr 2026' },
-];
-
-// ── Mock holders data ──────────────────────────────────────────────────────────
-const HOLDERS = [
-  { rank: 1,  address: '0x3352…ef42', label: 'dexidda.eth',   held: 12, pct: '0.12%', value: '170.4 ETH', firstBuy: '14.1 ETH', avgCost: '12.8 ETH', tags: ['Whale'] },
-  { rank: 2,  address: '0x9af3…12c0', label: 'NFTWhale',       held: 9,  pct: '0.09%', value: '127.8 ETH', firstBuy: '11.4 ETH', avgCost: '11.9 ETH', tags: ['Holder'] },
-  { rank: 3,  address: '0x7b1c…4e09', label: '0x7b1c…4e09',   held: 7,  pct: '0.07%', value: '99.4 ETH',  firstBuy: '13.0 ETH', avgCost: '12.1 ETH', tags: [] },
-  { rank: 4,  address: '0x2f4a…8831', label: 'apegang.eth',    held: 6,  pct: '0.06%', value: '85.2 ETH',  firstBuy: '9.8 ETH',  avgCost: '10.4 ETH', tags: ['Trader'] },
-  { rank: 5,  address: '0x5c2d…001f', label: '0x5c2d…001f',   held: 5,  pct: '0.05%', value: '71.0 ETH',  firstBuy: '12.2 ETH', avgCost: '11.7 ETH', tags: [] },
-  { rank: 6,  address: '0xd901…3b2e', label: 'collector99',    held: 4,  pct: '0.04%', value: '56.8 ETH',  firstBuy: '10.1 ETH', avgCost: '10.9 ETH', tags: ['Smart Money'] },
-];
-
-// ── Mock NFT Items data ────────────────────────────────────────────────────────
-const NFT_ITEMS = [
-  { id: '#7391', rank: 142,  price: '33.1 ETH', lastSale: '32.0 ETH', owner: '0x3a2f…c841', traits: ['Alien', 'Pipe'] },
-  { id: '#2108', rank: 381,  price: '33.5 ETH', lastSale: '31.5 ETH', owner: '0x9cd1…44ba', traits: ['Ape', 'Shades'] },
-  { id: '#0451', rank: 55,   price: '36.0 ETH', lastSale: '35.2 ETH', owner: '0x72f4…a109', traits: ['Zombie', 'Cap'] },
-  { id: '#5523', rank: 903,  price: '33.1 ETH', lastSale: '33.1 ETH', owner: '0x1a9c…d204', traits: ['Normal', 'Gold Chain'] },
-  { id: '#8820', rank: 2041, price: '33.2 ETH', lastSale: '30.0 ETH', owner: '0x82a3…f012', traits: ['Normal', 'Headband'] },
-  { id: '#1133', rank: 187,  price: '34.9 ETH', lastSale: '34.0 ETH', owner: '0xcf3d…b4a1', traits: ['Ape', 'Tiara'] },
-  { id: '#3821', rank: 612,  price: '33.1 ETH', lastSale: '29.5 ETH', owner: '0x82a1…c02d', traits: ['Normal', 'Cigarette'] },
-  { id: '#6042', rank: 1204, price: '33.3 ETH', lastSale: '31.0 ETH', owner: '0x5d41…9911', traits: ['Normal', 'Bandana'] },
-  { id: '#0019', rank: 28,   price: '45.0 ETH', lastSale: '42.0 ETH', owner: '0xd901…3b2e', traits: ['Alien', 'No Attr'] },
-  { id: '#4411', rank: 778,  price: '33.1 ETH', lastSale: '32.5 ETH', owner: '0x3311…9a2e', traits: ['Normal', 'Mohawk'] },
-  { id: '#2994', rank: 1501, price: '33.1 ETH', lastSale: '28.0 ETH', owner: '0x4d21…8f33', traits: ['Normal', 'Earring'] },
-  { id: '#7102', rank: 441,  price: '33.6 ETH', lastSale: '33.0 ETH', owner: '0x9af3…12c0', traits: ['Zombie', 'Shades'] },
-];
-
-// ── Mock trait filters ────────────────────────────────────────────────────────
-// Collection traits render from live Alchemy/OpenSea data (`liveTraits`); no mock fixtures.
+// NFT item shape for the Items tab — real items come from `liveNfts` (OpenSea)
+type NftItem = { id: string; rank: number; price: string; lastSale: string; owner: string; traits: string[] };
 
 // ── Alert rules ────────────────────────────────────────────────────────────────
 type AlertRule = { id: number; label: string; enabled: boolean; channel: string };
@@ -317,15 +277,10 @@ function MonitorCollectionInner() {
       .finally(() => setHoldersLoading(false));
   }, [tab, activeSlug, contractParam]);
 
-  // Mock balances — replaced by real Tauri calls when API is wired
-  const mockBalances = (id: string) => {
-    const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const eth  = ((seed % 800) / 100 + 0.5).toFixed(3);
-    const weth = ((seed % 400) / 100 + 0.1).toFixed(3);
-    return { eth, weth };
+  const walletBalance = (address: string) => {
+    const b = colBidWalletBalances[address];
+    return { eth: b?.eth != null ? b.eth.toFixed(3) : '—', weth: b?.weth != null ? b.weth.toFixed(3) : '—' };
   };
-
-  type NftItem = typeof NFT_ITEMS[0];
 
   // ── Buy modal state ──────────────────────────────────────────────────────
   const [buyNft,        setBuyNft]       = useState<NftItem | null>(null);
@@ -503,23 +458,27 @@ function MonitorCollectionInner() {
     return () => document.removeEventListener('mousedown', h);
   }, [colBidWalletDropOpen]);
 
-  // Fetch ETH + WETH balances when Collection Bid tab opens
+  // Fetch real ETH + WETH balances for the buy/offer/collection-bid wallet pickers
   useEffect(() => {
-    if (tab !== 'Make Collection Bid' || wallets.length === 0) return;
-    if (!colBidWallet) setColBidWallet(wallets[0].address);
-    const WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-    wallets.forEach(w => {
-      getEthBalance(w.address, '').then(b => {
-        setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), eth: b.eth } }));
-      }).catch(() => {});
-      getTokenBalances(w.address, '').then(toks => {
-        const wethTok = toks.find(t => t.contract_address.toLowerCase() === WETH);
-        if (wethTok?.token_balance && wethTok.token_balance !== '0x0' && wethTok.token_balance !== '0x00') {
-          const weth = Number(BigInt(wethTok.token_balance)) / 1e18;
-          setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), weth } }));
-        }
-      }).catch(() => {});
-    });
+    if (wallets.length === 0) return;
+    if (tab === 'Make Collection Bid' && !colBidWallet) setColBidWallet(wallets[0].address);
+    (async () => {
+      const apiKey = await loadAlchemyKey().catch(() => '');
+      if (!apiKey) return;
+      const WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
+      wallets.forEach(w => {
+        getEthBalance(w.address, apiKey).then(b => {
+          setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), eth: b.eth } }));
+        }).catch(() => {});
+        getTokenBalances(w.address, apiKey).then(toks => {
+          const wethTok = toks.find(t => t.contract_address.toLowerCase() === WETH);
+          if (wethTok?.token_balance && wethTok.token_balance !== '0x0' && wethTok.token_balance !== '0x00') {
+            const weth = Number(BigInt(wethTok.token_balance)) / 1e18;
+            setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), weth } }));
+          }
+        }).catch(() => {});
+      });
+    })();
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -577,12 +536,12 @@ function MonitorCollectionInner() {
                   </label>
                   <div ref={buyDropRef} style={{ position: 'relative' }}>
                     <button onClick={() => setBuyDropOpen(o => !o)} style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: buyWallet ? 'var(--wr-text)' : 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', border: `1px solid ${buyDropOpen ? 'var(--wr-accent)' : 'var(--wr-border)'}`, padding: '10px 36px 10px 12px', textAlign: 'left', cursor: 'pointer', outline: 'none' }}>
-                      {buyWallet ? (() => { const w = wallets.find(x => x.id === buyWallet)!; const b = mockBalances(w.id); return `${w.name} · ${b.eth} ETH · ${b.weth} WETH`; })() : 'Select wallet…'}
+                      {buyWallet ? (() => { const w = wallets.find(x => x.id === buyWallet)!; const b = walletBalance(w.address); return `${w.name} · ${b.eth} ETH · ${b.weth} WETH`; })() : 'Select wallet…'}
                     </button>
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: `translateY(-50%) rotate(${buyDropOpen ? 180 : 0}deg)`, color: 'var(--wr-text-3)', fontSize: '10px', pointerEvents: 'none', transition: 'transform 0.15s' }}>▾</span>
                     {buyDropOpen && (
                       <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 10, backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
-                        {wallets.map(w => { const b = mockBalances(w.id); const short = `${w.address.slice(0,6)}…${w.address.slice(-4)}`; const sel = buyWallet === w.id; return (
+                        {wallets.map(w => { const b = walletBalance(w.address); const short = `${w.address.slice(0,6)}…${w.address.slice(-4)}`; const sel = buyWallet === w.id; return (
                           <div key={w.id} onClick={() => { setBuyWallet(w.id); setBuyDropOpen(false); }}
                             style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: sel ? 'var(--wr-accent-dim)' : 'transparent', borderBottom: '1px solid var(--wr-border)' }}
                             onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
@@ -712,7 +671,7 @@ function MonitorCollectionInner() {
                   </label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {wallets.map(w => {
-                      const b = mockBalances(w.id);
+                      const b = walletBalance(w.address);
                       const short = `${w.address.slice(0,6)}…${w.address.slice(-4)}`;
                       const cfg = offerConfigs[w.id];
                       const sel = !!cfg;
@@ -902,7 +861,7 @@ function MonitorCollectionInner() {
 
           {/* KPI bar */}
           {(() => {
-            const floor = liveStats?.floor_price_eth != null ? `${liveStats.floor_price_eth.toFixed(3)} ETH` : col.floor;
+            const floor = liveStats?.floor_price_eth != null ? `${liveStats.floor_price_eth.toFixed(3)} ETH` : '—';
             const floorChange = liveStats?.vol_1d_change != null ? liveStats.vol_1d_change * 100 : null;
             const topOffer = liveOffers != null && liveOffers.length > 0
               ? `${Math.max(...liveOffers.map(o => o.price_eth)).toFixed(3)} ETH`
@@ -1278,10 +1237,10 @@ function MonitorCollectionInner() {
             {/* Summary */}
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
               {[
-                { label: 'Total Supply', value: liveStats?.total_supply != null ? liveStats.total_supply.toLocaleString() : col.totalSupply },
-                { label: 'Unique Owners', value: liveStats?.num_owners != null ? liveStats.num_owners.toLocaleString() : col.owners },
-                { label: 'Market Cap', value: liveStats?.market_cap_eth != null ? `${liveStats.market_cap_eth.toFixed(0)} ETH` : col.marketCap },
-                { label: 'Creator Royalty', value: col.royalty },
+                { label: 'Total Supply', value: liveStats?.total_supply != null ? liveStats.total_supply.toLocaleString() : '—' },
+                { label: 'Unique Owners', value: liveStats?.num_owners != null ? liveStats.num_owners.toLocaleString() : '—' },
+                { label: 'Market Cap', value: liveStats?.market_cap_eth != null ? `${liveStats.market_cap_eth.toFixed(0)} ETH` : '—' },
+                { label: 'Creator Royalty', value: '—' },
               ].map(s => (
                 <div key={s.label} className="border border-[#14161f] bg-[#14161f] px-4 py-3">
                   <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">{s.label}</div>
@@ -1618,7 +1577,7 @@ function MonitorCollectionInner() {
                   const imgUrl = asset.display_image_url ?? asset.image_url;
                   const price = asset.price_eth != null ? `${asset.price_eth.toFixed(4)} ETH` : '—';
                   const rank = asset.rarity?.rank ?? 0;
-                  const mockNftItem = { id: nftId, rank, price, lastSale: '—', owner: '', traits: [] };
+                  const nftItem = { id: nftId, rank, price, lastSale: '—', owner: '', traits: [] };
                   const assetTrackId = contractParam ? trackedNftId(contractParam, asset.identifier) : '';
                   const isAssetTracked = trackedSet.has(assetTrackId);
                   const isAssetSelected = selectedTokenIds.has(asset.identifier);
@@ -1774,13 +1733,13 @@ function MonitorCollectionInner() {
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
                           <button
-                            onClick={e => { e.stopPropagation(); setBuyWallet(''); setBuyStep('confirm'); setBuyNft(mockNftItem); }}
+                            onClick={e => { e.stopPropagation(); setBuyWallet(''); setBuyStep('confirm'); setBuyNft(nftItem); }}
                             className="btn-cta"
                             style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '6px 0', cursor: 'pointer' }}>
                             Buy
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); setOfferConfigs({}); setOfferStep('form'); setOfferNft(mockNftItem); }}
+                            onClick={e => { e.stopPropagation(); setOfferConfigs({}); setOfferStep('form'); setOfferNft(nftItem); }}
                             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.4)'; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none'; }}
                             style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)', border: '1px solid var(--wr-info)', padding: '6px 0', cursor: 'pointer', transition: 'filter 0.12s ease' }}>
@@ -2295,7 +2254,7 @@ function MonitorCollectionInner() {
               {[
                 {
                   label: 'FLOOR PRICE',
-                  value: liveStats?.floor_price_eth != null ? `${liveStats.floor_price_eth.toFixed(4)} ETH` : col.floor,
+                  value: liveStats?.floor_price_eth != null ? `${liveStats.floor_price_eth.toFixed(4)} ETH` : '—',
                   sub: null,
                 },
                 {
@@ -2306,7 +2265,7 @@ function MonitorCollectionInner() {
                 },
                 {
                   label: '7D VOLUME',
-                  value: liveStats?.vol_7d_eth != null ? `${liveStats.vol_7d_eth.toFixed(2)} ETH` : col.vol7d,
+                  value: liveStats?.vol_7d_eth != null ? `${liveStats.vol_7d_eth.toFixed(2)} ETH` : '—',
                   sub: liveStats?.vol_7d_change != null ? `${liveStats.vol_7d_change >= 0 ? '+' : ''}${(liveStats.vol_7d_change * 100).toFixed(1)}%` : null,
                   subColor: liveStats?.vol_7d_change != null ? (liveStats.vol_7d_change >= 0 ? '#4fe9b4' : '#ff8a96') : undefined,
                 },
@@ -2323,17 +2282,17 @@ function MonitorCollectionInner() {
                 },
                 {
                   label: 'MARKET CAP',
-                  value: liveStats?.market_cap_eth != null ? `${liveStats.market_cap_eth.toFixed(0)} ETH` : col.marketCap,
+                  value: liveStats?.market_cap_eth != null ? `${liveStats.market_cap_eth.toFixed(0)} ETH` : '—',
                   sub: null,
                 },
                 {
                   label: 'UNIQUE OWNERS',
-                  value: liveStats?.num_owners != null ? liveStats.num_owners.toLocaleString() : col.owners,
-                  sub: liveStats?.total_supply != null ? `of ${liveStats.total_supply.toLocaleString()} supply` : `of ${col.totalSupply}`,
+                  value: liveStats?.num_owners != null ? liveStats.num_owners.toLocaleString() : '—',
+                  sub: liveStats?.total_supply != null ? `of ${liveStats.total_supply.toLocaleString()} supply` : '—',
                 },
                 {
                   label: 'TOTAL SUPPLY',
-                  value: liveStats?.total_supply != null ? liveStats.total_supply.toLocaleString() : col.totalSupply,
+                  value: liveStats?.total_supply != null ? liveStats.total_supply.toLocaleString() : '—',
                   sub: null,
                 },
               ].map(s => (
@@ -2377,7 +2336,7 @@ function MonitorCollectionInner() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
               {[
                 { label: '24H SALES', value: liveStats?.sales_1d != null ? liveStats.sales_1d.toLocaleString() : '—' },
-                { label: '7D SALES',  value: liveStats?.sales_7d != null ? liveStats.sales_7d.toLocaleString() : col.sales7d },
+                { label: '7D SALES',  value: liveStats?.sales_7d != null ? liveStats.sales_7d.toLocaleString() : '—' },
                 { label: '30D SALES', value: liveStats?.sales_30d != null ? liveStats.sales_30d.toLocaleString() : '—' },
               ].map(s => (
                 <div key={s.label} style={{ border: '1px solid #14161f', backgroundColor: '#0b0c14', padding: '14px 16px' }}>

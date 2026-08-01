@@ -39,6 +39,19 @@ executes in simulation by design (explicitly gated, not claimed as done), key st
 local files + a Keychain module (`src-tauri/src/wallet/keychain.rs` exists, not re-audited here).
 Treat those notes as **not re-verified** until a session actually checks them again.
 
+## Update (2026-08-02, later): dashboard mock-data cleanup
+
+Emir: "dashboard is full of mock / wrong datas." Confirmed and fixed — 11 files across the app
+had hardcoded fixture data (fake wallets, balances, transactions, collection stats, PnL) that
+displayed as if real whenever live data was empty. All replaced with `'—'` / honest empty states.
+`npx tsc --noEmit` passes clean. **Changes are NOT committed** — review then ask to commit.
+Full list and 2 flagged-but-not-fixed items (Monitor Wallet's PnL/Trades/Related-Wallets tabs
+have no real backend at all; `WalletDetailClient`'s transfer confirm fakes a tx hash — financial,
+needs explicit approval) are in `MOCKS.md`.
+
+Recommended verification for Emir: run the app (`npm run dev:tauri`), open the dashboard with a
+wallet that has zero transactions — it should show "No transactions yet." instead of 15 fake rows.
+
 ## Housekeeping done this session
 
 - Fixed `.gitignore`: `/node_modules` was root-anchored only, so `subscription-worker/node_modules`

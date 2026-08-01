@@ -27,29 +27,9 @@ interface Tx {
   age: string; from: string; to: string; token: string; amount: string; gas: string;
 }
 
-const WALLETS: Wallet[] = [
-  { id: '0', name: 'Main Wallet',   address: '0x3f4a…A91c', rawAddress: '0x3f4a…A91c', badge: 'ETH',   usdValue: 84201.40,  change: 1204.32,  changePct: 1.45,  nfts: 12, floorPnl: -5420, coins: 4, pnl: 1280 },
-  { id: '1', name: 'DeFi Wallet',   address: '0x1234…5678', rawAddress: '0x1234…5678', badge: 'BNB',   usdValue: 38490.87,  change: -270,     changePct: -0.69, nfts: 5,  floorPnl: -270,  coins: 3, pnl: -340 },
-  { id: '2', name: 'Polygon Cold',  address: '0xabcd…ef12', rawAddress: '0xabcd…ef12', badge: 'MATIC', usdValue: 20141.65,  change: 3800,     changePct: 2.01,  nfts: 8,  floorPnl: 3800,  coins: 6, pnl: 2490 },
-];
+const WALLETS: Wallet[] = [];
 
-const TRANSACTIONS: Tx[] = [
-  { hash: '0x8aDf73c1a4…', type: 'Receive',              block: '1847343', age: '1 hr ago',    from: '0x6a4b…2sd8', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.5 ETH',   gas: '0.00003157' },
-  { hash: '0x9aB2cd4f88…', type: 'NFT Buy',              block: '1847217', age: '2 hrs ago',   from: '0xbc4c…f13d', to: '0x1234…5678', token: 'NFT',  amount: '1 NFT',     gas: '0.00000892' },
-  { hash: '0x3fc81dAe22…', type: 'Sent',                 block: '1846891', age: '3 hrs ago',   from: '0x3f4a…A91c', to: '0x7f2e…B3c1', token: 'ETH',  amount: '0.1 ETH',   gas: '0.00002841' },
-  { hash: '0x5c29a31234…', type: 'Swap Buy',             block: '1845430', age: '14 hrs ago',  from: '0xabcd…ef12', to: '0xabcd…ef12', token: 'ETH',  amount: '1.5 ETH',   gas: '0.00004213' },
-  { hash: '0x1a8c9b7e55…', type: 'Contract Interaction', block: '1844210', age: '1 day ago',   from: '0x3f4a…A91c', to: '0x1234…5678', token: 'ETH',  amount: '1.5 ETH',   gas: '0.00001764' },
-  { hash: '0xf4E2a1b9cc…', type: 'NFT Sell',             block: '1843902', age: '1 day ago',   from: '0x92ab…4F1e', to: '0xabcd…ef12', token: 'NFT',  amount: '1 NFT',     gas: '0.00002100' },
-  { hash: '0xc3D7e48f21…', type: 'Sent',                 block: '1843488', age: '2 days ago',  from: '0x1234…5678', to: '0x5d3a…C8f2', token: 'USDC', amount: '500 USDC',  gas: '0.00003880' },
-  { hash: '0xa1B9f2c7d4…', type: 'NFT Mint',             block: '1842711', age: '2 days ago',  from: '0x3f4a…A91c', to: '0xe4b1…9A3d', token: 'NFT',  amount: '1 NFT',     gas: '0.00007241' },
-  { hash: '0x7dC4b39e01…', type: 'Sweep',                block: '1841990', age: '3 days ago',  from: '0x1234…5678', to: '0x1234…5678', token: 'NFT',  amount: '3 NFTs',    gas: '0.00005512' },
-  { hash: '0x2eF8a17c90…', type: 'Receive',              block: '1841203', age: '3 days ago',  from: '0x3b7f…D2c9', to: '0x3f4a…A91c', token: 'ETH',  amount: '0.75 ETH',  gas: '0.00001943' },
-  { hash: '0xb5A3d92f44…', type: 'NFT Sent',             block: '1840517', age: '4 days ago',  from: '0xabcd…ef12', to: '0x8c2e…5B7a', token: 'NFT',  amount: '1 NFT',     gas: '0.00002610' },
-  { hash: '0x9cE1f74b38…', type: 'Approve',              block: '1839844', age: '5 days ago',  from: '0x1234…5678', to: '0xabcd…ef12', token: 'USDC', amount: '—',         gas: '0.00001320' },
-  { hash: '0x4aF6c28d55…', type: 'NFT Offer',            block: '1839120', age: '5 days ago',  from: '0xd19a…7F4b', to: '0xabcd…ef12', token: 'NFT',  amount: '2.1 ETH',   gas: '0.00009870' },
-  { hash: '0x6bD0e31a77…', type: 'Swap Buy',             block: '1838401', age: '6 days ago',  from: '0x3f4a…A91c', to: '0x3f4a…A91c', token: 'DAI',  amount: '1200 DAI',  gas: '0.00004455' },
-  { hash: '0x1dA5b84c62…', type: 'Sent',                 block: '1837688', age: '7 days ago',  from: '0x3f4a…A91c', to: '0x1234…5678', token: 'ETH',  amount: '2.0 ETH',   gas: '0.00002987' },
-];
+const TRANSACTIONS: Tx[] = [];
 
 // ─── Live data helpers ──────────────────────────────────────────────────────
 
@@ -941,8 +921,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
 
 // ─── Address Cell ──────────────────────────────────────────────────────────
 
-function AddrCell({ addr }: { addr: string }) {
-  const wallet = WALLETS.find(w => w.address === addr);
+function AddrCell({ addr, wallets }: { addr: string; wallets: Wallet[] }) {
+  const wallet = wallets.find(w => w.address === addr || w.rawAddress === addr);
   if (wallet) {
     return <Tag variant={WALLET_TOKEN_VARIANT[wallet.badge] ?? 'neutral'}>{wallet.name}</Tag>;
   }
@@ -990,10 +970,10 @@ export default function Dashboard() {
         })
         .catch(() => { setLoadingData(false); });
     } else {
-      // Browser mode — use mock data immediately
-      const mockSnaps: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { mockSnaps[w.id] = EMPTY_SNAPSHOT; });
-      setSnapshots(mockSnaps);
+      // Browser mode (no Tauri backend) — show empty state, no API calls possible
+      const emptySnaps: Record<string, PortfolioSnapshot> = {};
+      wallets.forEach(w => { emptySnaps[w.id] = EMPTY_SNAPSHOT; });
+      setSnapshots(emptySnaps);
       setLiveTransactions(EMPTY_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
       setLoadingData(false);
     }
@@ -1118,8 +1098,6 @@ export default function Dashboard() {
   const totalCoins = Object.values(snapshots).reduce((s, snap) => s + snap.token_count, 0);
   const totalAssets = totalNfts + totalCoins;
 
-  const pnl7d = 8204.15; // Placeholder until 7d PnL endpoint is added
-
   return (
     <main className="min-h-full text-white" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)}  />}
@@ -1148,13 +1126,13 @@ export default function Dashboard() {
         {[
           {
             label: 'Total Portfolio',
-            value: loadingData ? '—' : `$${(totalPortfolioUsd || 142834.92).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: loadingData ? '—' : `$${totalPortfolioUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
             valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: loadingData ? 'Loading…' : 'Across all wallets',
           },
           {
             label: '7D PnL',
-            value: pnl7d >= 0 ? `+$${pnl7d.toLocaleString()}` : `-$${Math.abs(pnl7d).toLocaleString()}`,
-            valueColor: pnl7d >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)', subUp: pnl7d >= 0, subColor: pnl7d >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)', sub: '+6.10% vs last week',
+            value: '—',
+            valueColor: 'var(--wr-text-3)', subUp: null, subColor: 'var(--wr-text-3)', sub: 'Not available yet',
           },
           {
             label: 'Wallets',
@@ -1163,7 +1141,7 @@ export default function Dashboard() {
           },
           {
             label: 'Assets',
-            value: loadingData ? '—' : String(totalAssets || 23),
+            value: loadingData ? '—' : String(totalAssets),
             valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: `${totalNfts || '—'} NFTs · ${totalCoins || '—'} tokens`,
           },
         ].map((card, i) => (
@@ -1225,17 +1203,23 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
-          {displayWallets.map(w => (
-            <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
-              onDelete={() => {
-                deleteWallet(w.id);
-                setStoredWallets(loadWallets());
-              }}
-              onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
-            />
-          ))}
-        </div>
+        {displayWallets.length === 0 && !loadingData ? (
+          <div style={{ padding: '32px 0', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
+            No wallets added yet — click &quot;Add Wallet&quot; to get started.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+            {displayWallets.map(w => (
+              <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
+                onDelete={() => {
+                  deleteWallet(w.id);
+                  setStoredWallets(loadWallets());
+                }}
+                onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Transactions section container */}
@@ -1264,6 +1248,11 @@ export default function Dashboard() {
           </div>
 
           {/* Rows */}
+          {displayTransactions.length === 0 && !loadingData ? (
+            <div style={{ padding: '32px 0', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
+              No transactions yet.
+            </div>
+          ) : (
           <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#232533 #0b0c14' } : {}}>
           {(txExpanded ? displayTransactions : displayTransactions.slice(0, PREVIEW_COUNT)).map((tx, i) => (
             <div
@@ -1283,13 +1272,13 @@ export default function Dashboard() {
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#5b7cfa' }}>{tx.block}</span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{tx.age}</span>
               <div className="flex items-center min-w-0 pr-1">
-                <AddrCell addr={tx.from} />
+                <AddrCell addr={tx.from} wallets={displayWallets} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px' }}>
                 <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 4h10M8 1l3 3-3 3" stroke="#232533" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
               <div className="flex items-center min-w-0 pr-1">
-                <AddrCell addr={tx.to} />
+                <AddrCell addr={tx.to} wallets={displayWallets} />
               </div>
               <div className="flex items-center" style={{ gap: '4px' }}>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: '9px' }}>◈</span>
@@ -1300,6 +1289,7 @@ export default function Dashboard() {
             </div>
           ))}
           </div>
+          )}
         </div>
       </div>
     </main>

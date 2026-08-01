@@ -35,129 +35,6 @@ interface FeedItem {
   typeBorder?: string;
 }
 
-const FEED_ITEMS: FeedItem[] = [
-  // ── NFT Buy: purchased NFT from marketplace (ETH out + NFT in same tx) ──
-  {
-    type: 'NFT Buy',
-    title: 'Bought BAYC #3821 for 14.2 ETH',
-    sub: 'OpenSea · Floor: 14.2 ETH',
-    timeAgo: '12m ago',
-    date: 'Apr 8 2024',
-    collectionName: 'Bored Ape Yacht Club',
-    collectionSlug: 'boredapeyachtclub',
-    txHash: '0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
-  },
-  // ── NFT Offer: placed collection bid (no NFT transferred yet) ──
-  {
-    type: 'NFT Offer',
-    title: 'Offer on Bored Ape Yacht Club — 12.5 ETH × 3',
-    sub: 'Status: Active · Expires in 6h 23m · Total 37.5 ETH',
-    timeAgo: '2 hrs ago',
-    date: 'Apr 8 2024',
-    collectionName: 'Bored Ape Yacht Club',
-    collectionSlug: 'boredapeyachtclub',
-    txHash: '0xb2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3',
-  },
-  // ── Sent: sent ETH/ERC-20 to another wallet ──
-  {
-    type: 'Sent',
-    title: 'Sent 0.6 USDT to 0x3352…ef42',
-    sub: '',
-    timeAgo: '41m ago',
-    date: 'Apr 8 2024',
-    counterpartyDisplay: '0x3352…ef42',
-    counterpartyAddress: '0x3352a1b2c3d4e5f6a7b8c9d0e1f2a3b4b5c6ef42',
-    txHash: '0xc3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4',
-  },
-  // ── NFT Mint: minted new NFT (transfer from 0x0) ──
-  {
-    type: 'NFT Mint',
-    title: 'Minted Azuki #7142 — 0.1 ETH',
-    sub: 'Public mint · gas: 0.008 ETH',
-    timeAgo: '3 hrs ago',
-    date: 'Apr 8 2024',
-    collectionName: 'Azuki',
-    collectionSlug: 'azuki',
-    txHash: '0xd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5',
-  },
-  // ── Sweep: bulk NFT buy (multiple NFTs in one tx) ──
-  {
-    type: 'Sweep',
-    title: 'Swept 5 CryptoPunks — 140 ETH total',
-    sub: 'Blur · Avg 28 ETH/item',
-    timeAgo: '5 hrs ago',
-    date: 'Apr 8 2024',
-    collectionName: 'CryptoPunks',
-    collectionSlug: 'cryptopunks',
-    txHash: '0xe5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6',
-  },
-  // ── NFT Sell: sold NFT on marketplace (NFT out + ETH in same tx) ──
-  {
-    type: 'NFT Sell',
-    title: 'Sold BAYC #1204 for 15.8 ETH',
-    sub: 'OpenSea · +1.6 ETH vs floor',
-    timeAgo: '9 hrs ago',
-    date: 'Apr 7 2024',
-    collectionName: 'Bored Ape Yacht Club',
-    collectionSlug: 'boredapeyachtclub',
-    txHash: '0xf6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7',
-  },
-  // ── Receive: received ETH/ERC-20 from another wallet ──
-  {
-    type: 'Receive',
-    title: 'Received 2.5K USDT from 0x5d2e…4a3f',
-    sub: '',
-    timeAgo: '1 day ago',
-    date: 'Apr 7 2024',
-    counterpartyDisplay: '0x5d2e…4a3f',
-    counterpartyAddress: '0x5d2ea1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d64a3f',
-    txHash: '0xa7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8',
-  },
-  // ── Swap Buy: DEX token swap via Uniswap/Curve ──
-  {
-    type: 'Swap Buy',
-    title: 'Swapped 1.2 ETH → 3,120 USDC',
-    sub: 'Uniswap v3 · rate: $2,600/ETH',
-    timeAgo: '1 day ago',
-    date: 'Apr 7 2024',
-    txHash: '0xb8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9',
-  },
-  // ── NFT Sent: transferred NFT to another wallet (no ETH exchange) ──
-  {
-    type: 'NFT Sent',
-    title: 'Sent Azuki #331 to 0x9a1b…3c4d',
-    sub: 'No sale · direct transfer',
-    timeAgo: '2 days ago',
-    date: 'Apr 6 2024',
-    collectionName: 'Azuki',
-    collectionSlug: 'azuki',
-    counterpartyDisplay: '0x9a1b…3c4d',
-    counterpartyAddress: '0x9a1ba2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d73c4d',
-    txHash: '0xc9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0',
-  },
-  // ── Approve: ERC-20/NFT approval for contract to spend assets ──
-  {
-    type: 'Approve',
-    title: 'Approved USDC for 0x7a8b…2c3d',
-    sub: 'Uniswap v3 Router · unlimited',
-    timeAgo: '2 days ago',
-    date: 'Apr 6 2024',
-    counterpartyDisplay: '0x7a8b…2c3d',
-    counterpartyAddress: '0x7a8ba1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d62c3d',
-    txHash: '0xd0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1',
-  },
-  // ── Contract Interaction: generic contract call not matching other types ──
-  {
-    type: 'Contract Interaction',
-    title: 'Called claim() on 0x4f5a…8b9c',
-    sub: 'Airdrop claim · gas: 0.004 ETH',
-    timeAgo: '3 days ago',
-    date: 'Apr 5 2024',
-    counterpartyDisplay: '0x4f5a…8b9c',
-    counterpartyAddress: '0x4f5aa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d68b9c',
-    txHash: '0xe1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2',
-  },
-];
 
 // ── P&L tab data ──────────────────────────────────────────────────────────────
 const TOKEN_PNL = [
@@ -591,7 +468,7 @@ function MonitorWalletInner() {
       };
     };
 
-    if (!inTauri) return; // use FEED_ITEMS mock (shows all tag types)
+    if (!inTauri) return;
     (async () => {
       const key = await loadAlchemyKey().catch(() => '');
       if (!key || !addr) return;
@@ -817,7 +694,7 @@ function MonitorWalletInner() {
 
             {/* Transactions */}
             <div className="border border-[#14161f] overflow-hidden">
-              {(liveFeed ?? FEED_ITEMS).filter(item => {
+              {(liveFeed ?? []).filter(item => {
                 // Type filter (multi-select; empty set = show all)
                 if (feedFilters.size > 0 && !feedFilters.has(item.type)) return false;
                 // Time range filter

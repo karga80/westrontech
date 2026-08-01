@@ -11,13 +11,7 @@ import { EMPTY_PNL, EMPTY_SNAPSHOT } from '@/lib/emptyData';
 type TimeRange = '1d' | '1w' | '1m' | '3m' | 'ALL';
 const TIME_RANGES: TimeRange[] = ['1d', '1w', '1m', '3m', 'ALL'];
 
-const TOP_COLLECTIONS = [
-  { rank: 1, name: 'Bored Ape Yacht Club', eth: '11.4 ETH', pct: '22%' },
-  { rank: 2, name: 'Azuki',                eth: '8.7 ETH',  pct: '21%' },
-  { rank: 3, name: 'Pudgy Penguins',       eth: '5.7 ETH',  pct: '17%' },
-  { rank: 4, name: 'Doodles',              eth: '3.6 ETH',  pct: '9%'  },
-  { rank: 5, name: 'Moonbirds',            eth: '9.1 ETH',  pct: '7%'  },
-];
+const TOP_COLLECTIONS: Array<{ rank: number; name: string; eth: string; pct: string }> = [];
 
 const STAT_LABEL = { fontFamily: 'var(--font-jetbrains)' as const, fontSize: '11px', fontWeight: 500, letterSpacing: '1px', textTransform: 'uppercase' as const, color: 'var(--wr-text-3)', marginBottom: '8px' };
 const STAT_VALUE = { fontFamily: 'var(--font-inter)' as const, fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)' };
@@ -50,11 +44,11 @@ export default function PortfolioAnalyticsPage() {
     })();
   }, []);
 
-  const totalReturn  = pnl ? `${(pnl.realized_pnl_eth >= 0 ? '+' : '')}${pnl.realized_pnl_eth.toFixed(3)} ETH` : '$12,847.32';
-  const returnSub    = pnl && snap ? `${pnl.realized_pnl_eth >= 0 ? '+' : ''}${((pnl.realized_pnl_eth / (snap.eth_balance || 1)) * 100).toFixed(1)}%` : '+28.4%';
-  const totalTrades  = pnl ? String(pnl.trade_count) : '1,434';
-  const winRate      = pnl && pnl.trade_count > 0 ? ((pnl.win_count / pnl.trade_count) * 100).toFixed(2) + '%' : '49.45%';
-  const portfolioUsd = snap ? `$${snap.portfolio_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$284,521.40';
+  const totalReturn  = pnl ? `${(pnl.realized_pnl_eth >= 0 ? '+' : '')}${pnl.realized_pnl_eth.toFixed(3)} ETH` : '—';
+  const returnSub    = pnl && snap ? `${pnl.realized_pnl_eth >= 0 ? '+' : ''}${((pnl.realized_pnl_eth / (snap.eth_balance || 1)) * 100).toFixed(1)}%` : '—';
+  const totalTrades  = pnl ? String(pnl.trade_count) : '—';
+  const winRate      = pnl && pnl.trade_count > 0 ? ((pnl.win_count / pnl.trade_count) * 100).toFixed(2) + '%' : '—';
+  const portfolioUsd = snap ? `$${snap.portfolio_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
   return (
     <main className="min-h-full" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px' }}>

@@ -77,7 +77,7 @@ export default function WalletPage() {
   const [timeFilter, setTimeFilter] = useState<string>('24h');
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
   const [walletName, setWalletName] = useState('Main Wallet');
-  const [unrealizedPnl, setUnrealizedPnl] = useState('+$18,240.65');
+  const [unrealizedPnl, setUnrealizedPnl] = useState('—');
 
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;

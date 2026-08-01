@@ -138,7 +138,7 @@ export default function Gallery() {
     setIsTauri(inTauri);
 
     if (!inTauri) {
-      // Browser mode: load first wallet address and auto-fetch mock data
+      // Browser mode (no Tauri backend): load first wallet address, show empty state
       const wallets = loadWallets();
       const firstAddr = wallets[0]?.address ?? '';
       setAddress(firstAddr);

@@ -34,11 +34,7 @@ function ownedNftToNFT(nft: OwnedNft, idx: number, walletId: string): NFT {
   };
 }
 
-const STATIC_WALLETS = [
-  { id: 'main', name: 'Main Wallet',  address: '0x3f4a…A91c', nftCount: 7 },
-  { id: 'defi', name: 'DeFi Wallet',  address: '0x1234…5678', nftCount: 3 },
-  { id: 'cold', name: 'Polygon Cold', address: '0xabcd…ef12', nftCount: 5 },
-];
+const STATIC_WALLETS: { id: string; name: string; address: string; nftCount: number }[] = [];
 
 interface NFT {
   id: number; name: string; collection: string; collectionColor: string;
@@ -46,85 +42,18 @@ interface NFT {
   listed: boolean; listedPrice: string | null;
 }
 
-const STATIC_NFTS: NFT[] = [
-  { id: 1,  name: 'BAYC #3291',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'main', floor: 23.5, rank: '892',  emoji: '🦍', listed: false, listedPrice: null },
-  { id: 2,  name: 'BAYC #7421',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'main', floor: 23.5, rank: '1204', emoji: '🦍', listed: false, listedPrice: null },
-  { id: 3,  name: 'Azuki #1108',     collection: 'Azuki',          collectionColor: '#ff8a96', wallet: 'main', floor: 34.2, rank: '340',  emoji: '⛩', listed: true,  listedPrice: '35.0 ETH' },
-  { id: 4,  name: 'Doodles #3921',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '5821', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 5,  name: 'Doodles #8042',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '3244', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 6,  name: 'Pudgy #8234',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'main', floor: 4.5,  rank: '340',  emoji: '🐧', listed: false, listedPrice: null },
-  { id: 15, name: 'Doodles #0512',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'main', floor: 2.9,  rank: '512',  emoji: '🌈', listed: true,  listedPrice: '3.2 ETH' },
-  { id: 7,  name: 'Azuki #4492',     collection: 'Azuki',          collectionColor: '#ff8a96', wallet: 'defi', floor: 34.2, rank: '582',  emoji: '⛩', listed: false, listedPrice: null },
-  { id: 8,  name: 'Clonex #9912',    collection: 'Clonex',         collectionColor: '#a78bfa', wallet: 'defi', floor: 4.1,  rank: '1892', emoji: '🤖', listed: true,  listedPrice: '4.2 ETH' },
-  { id: 9,  name: 'Pudgy #9053',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'defi', floor: 4.5,  rank: '982',  emoji: '🐧', listed: false, listedPrice: null },
-  { id: 10, name: 'BAYC #9053',      collection: 'Bored Ape YC',  collectionColor: '#ffb020', wallet: 'cold', floor: 23.5, rank: '421',  emoji: '🦍', listed: false, listedPrice: null },
-  { id: 11, name: 'Moonbirds #1847', collection: 'Moonbirds',      collectionColor: '#ffb020', wallet: 'cold', floor: 1.8,  rank: '2847', emoji: '🦉', listed: false, listedPrice: null },
-  { id: 12, name: 'Moonbirds #4231', collection: 'Moonbirds',      collectionColor: '#ffb020', wallet: 'cold', floor: 1.8,  rank: '4102', emoji: '🦉', listed: false, listedPrice: null },
-  { id: 13, name: 'Doodles #7291',   collection: 'Doodles',        collectionColor: '#90a6ff', wallet: 'cold', floor: 2.9,  rank: '6710', emoji: '🌈', listed: false, listedPrice: null },
-  { id: 14, name: 'Pudgy #4492',     collection: 'Pudgy Penguins', collectionColor: '#4fe9b4', wallet: 'cold', floor: 4.5,  rank: '173',  emoji: '🐧', listed: false, listedPrice: null },
-];
+const STATIC_NFTS: NFT[] = [];
 
 // Trait data per collection — each NFT gets a seeded slice based on id.
 // floor      = lowest listing price for NFTs holding this trait
 // offerFloor = highest open collection bid for NFTs holding this trait
 interface NFTTrait { type: string; value: string; rarity: number; floor: number; offerFloor: number; }
 
-const COLLECTION_TRAITS: Record<string, NFTTrait[]> = {
-  'Bored Ape YC': [
-    { type: 'Background', value: 'Army Green',      rarity: 12.4, floor: 26.2, offerFloor: 24.1 },
-    { type: 'Fur',        value: 'Golden Brown',     rarity:  4.8, floor: 28.9, offerFloor: 26.5 },
-    { type: 'Eyes',       value: 'Bored',            rarity: 22.1, floor: 25.1, offerFloor: 23.5 },
-    { type: 'Mouth',      value: 'Bored Unshaven',   rarity:  7.6, floor: 27.3, offerFloor: 25.0 },
-    { type: 'Clothes',    value: 'Striped Tee',      rarity:  8.2, floor: 27.0, offerFloor: 24.8 },
-  ],
-  'Azuki': [
-    { type: 'Type',       value: 'Human',            rarity: 81.9, floor: 36.1, offerFloor: 34.2 },
-    { type: 'Hair',       value: 'Red Spiky',        rarity: 12.9, floor: 41.0, offerFloor: 38.0 },
-    { type: 'Eyes',       value: 'Determined',       rarity: 26.7, floor: 37.8, offerFloor: 35.1 },
-    { type: 'Clothing',   value: 'White Qipao',      rarity:  3.1, floor: 55.5, offerFloor: 52.0 },
-    { type: 'Background', value: 'Off White A',      rarity: 17.2, floor: 37.2, offerFloor: 34.5 },
-  ],
-  'Doodles': [
-    { type: 'Background', value: 'Gradient 1',       rarity: 18.4, floor:  3.3, offerFloor:  3.0 },
-    { type: 'Head',       value: 'Pink Puff',        rarity:  9.2, floor:  3.7, offerFloor:  3.4 },
-    { type: 'Face',       value: 'Happy',            rarity: 31.0, floor:  3.1, offerFloor:  2.9 },
-    { type: 'Body',       value: 'Purple Fleece',    rarity:  6.7, floor:  3.9, offerFloor:  3.6 },
-    { type: 'Accessories',value: 'Headphones',       rarity:  4.1, floor:  4.5, offerFloor:  4.1 },
-  ],
-  'Pudgy Penguins': [
-    { type: 'Background', value: 'Blue',             rarity:  7.4, floor:  5.3, offerFloor:  4.9 },
-    { type: 'Skin',       value: 'Normal',           rarity: 68.2, floor:  4.8, offerFloor:  4.5 },
-    { type: 'Head',       value: 'Beanie',           rarity:  3.2, floor:  6.7, offerFloor:  6.2 },
-    { type: 'Body',       value: 'Turtleneck',       rarity:  5.8, floor:  5.5, offerFloor:  5.1 },
-    { type: 'Eyes',       value: 'Half Closed',      rarity: 11.3, floor:  5.1, offerFloor:  4.7 },
-  ],
-  'Clonex': [
-    { type: 'DNA',        value: 'Human',            rarity: 93.4, floor:  4.4, offerFloor:  4.1 },
-    { type: 'Eye Color',  value: 'Hazel',            rarity: 21.0, floor:  4.5, offerFloor:  4.2 },
-    { type: 'Body',       value: 'White Suit',       rarity:  8.4, floor:  5.4, offerFloor:  5.0 },
-    { type: 'Jewellery',  value: 'Gold Chain',       rarity:  6.1, floor:  5.7, offerFloor:  5.3 },
-    { type: 'Background', value: 'Purple',           rarity: 14.2, floor:  4.6, offerFloor:  4.3 },
-  ],
-  'Moonbirds': [
-    { type: 'Body',       value: 'Crescent',         rarity: 15.6, floor:  2.1, offerFloor:  1.9 },
-    { type: 'Eyes',       value: 'Open',             rarity: 28.8, floor:  2.0, offerFloor:  1.8 },
-    { type: 'Headwear',   value: 'Durag',            rarity:  4.3, floor:  2.7, offerFloor:  2.5 },
-    { type: 'Beak',       value: 'Short',            rarity: 62.1, floor:  2.0, offerFloor:  1.8 },
-    { type: 'Background', value: 'Pink',             rarity: 11.7, floor:  2.1, offerFloor:  1.9 },
-  ],
-};
+// No API for per-NFT trait/rarity/offer data yet.
+const COLLECTION_TRAITS: Record<string, NFTTrait[]> = {};
 
 function getNftTraits(nft: NFT): NFTTrait[] {
-  const base = COLLECTION_TRAITS[nft.collection] ?? [];
-  // Rotate the array by NFT id so each card shows slightly different traits
-  const offset = nft.id % base.length;
-  return [...base.slice(offset), ...base.slice(0, offset)].map((t, i) => ({
-    ...t,
-    // Vary rarity + prices slightly per NFT so cards aren't identical
-    rarity: Math.round((t.rarity + ((nft.id * (i + 1)) % 5) - 2) * 10) / 10,
-    floor: Math.round((t.floor + ((nft.id % 3) - 1) * 0.2) * 100) / 100,
-    offerFloor: Math.round((t.offerFloor + ((nft.id % 3) - 1) * 0.2) * 100) / 100,
-  }));
+  return COLLECTION_TRAITS[nft.collection] ?? [];
 }
 
 const TX_STATUS_VARIANT: Record<TxStatus, TagVariant> = {
@@ -298,7 +227,7 @@ export default function BulkListPage() {
         setWallets(w);
         setActiveWallets(new Set(w.map(x => x.id)));
         const mockNfts = (EMPTY_NFTS_RESPONSE.owned_nfts as OwnedNft[]).map((n, i) => ownedNftToNFT(n, i, w[0].id));
-        setAllNfts(mockNfts.length > 0 ? mockNfts : STATIC_NFTS);
+        setAllNfts(mockNfts);
       }
       return;
     }

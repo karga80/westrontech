@@ -42,83 +42,15 @@ interface QueuedBid {
 
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
-const INITIAL_COLLECTIONS: Collection[] = [
-  { id: 'courtyard', name: 'Courtyard.io',           emoji: '🏛', color: '#6366f1', verified: true,  starred: false, floor: 3.90,   change:  4.0,  topOffer: 0,     vol: 1200,  sales: 25469, owners: 70131, supply: 257257, desc: 'Physical collectibles onchain. RWA-backed NFTs.' },
-  { id: 'pudgy',     name: 'Pudgy Penguins',          emoji: '🐧', color: '#5b7cfa', verified: true,  starred: true,  floor: 4.124,  change: -1.5,  topOffer: 4.00,  vol: 57.62, sales: 13,    owners: 5092,  supply: 8888,   desc: 'A collection of 8,888 NFTs living on the Ethereum blockchain.' },
-  { id: 'punks',     name: 'CryptoPunks',             emoji: '👾', color: '#5b7cfa', verified: true,  starred: true,  floor: 29.00,  change: -1.4,  topOffer: 0,     vol: 28.98, sales: 1,     owners: 3825,  supply: 9994,   desc: '10,000 unique algorithmically generated characters by Larva Labs.' },
-  { id: 'milady',    name: 'Milady Maker',             emoji: '👧', color: '#ec4899', verified: true,  starred: false, floor: 1.18,   change: -3.8,  topOffer: 1.11,  vol: 24.42, sales: 21,    owners: 5159,  supply: 9998,   desc: 'Radical street style NFT collection of 10k Miladys.' },
-  { id: 'warplets',  name: 'The Warplets',             emoji: '🌀', color: '#8b5cf6', verified: true,  starred: false, floor: 0.003,  change: -1.1,  topOffer: 0.003, vol: 22.70, sales: 7372,  owners: 21617, supply: 49141,  desc: 'Warplets are a new kind of NFT living in the Warpcast ecosystem.' },
-  { id: 'veefriends',name: 'VeeFriends',               emoji: '🐾', color: '#ffb020', verified: true,  starred: false, floor: 1.30,   change:  2.4,  topOffer: 1.21,  vol: 15.53, sales: 4,     owners: 4657,  supply: 10255,  desc: 'Gary Vaynerchuk\'s hand-drawn NFT collection.' },
-  { id: 'doodles',   name: 'Doodles',                  emoji: '🌈', color: '#ffb020', verified: true,  starred: true,  floor: 0.4865, change: -3.3,  topOffer: 0.475, vol: 15.02, sales: 28,    owners: 4465,  supply: 9998,   desc: 'A community-driven collectibles project by Evan Keast & Jordan Castro.' },
-  { id: 'bayc',      name: 'Bored Ape Yacht Club',     emoji: '🦍', color: '#a855f7', verified: true,  starred: true,  floor: 14.20,  change: -2.6,  topOffer: 13.80, vol: 14.10, sales: 8,     owners: 6432,  supply: 10000,  desc: 'A collection of 10,000 Bored Ape NFTs — unique digital collectibles.' },
-  { id: 'mayc',      name: 'Mutant Ape Yacht Club',    emoji: '🧬', color: '#7c3aed', verified: true,  starred: true,  floor: 0.7597, change: -2.6,  topOffer: 0.761, vol: 13.32, sales: 16,    owners: 12089, supply: 19559,  desc: 'A collection of 20,000 Mutant Apes created from existing BAYCs.' },
-  { id: 'azuki',     name: 'Azuki',                    emoji: '⛩',  color: '#ff8a96', verified: true,  starred: false, floor: 0.676,  change: -1.0,  topOffer: 0.661, vol: 10.90, sales: 10,    owners: 4392,  supply: 10000,  desc: 'A brand for the metaverse. Built by the community. Join the garden.' },
-  { id: 'clonex',    name: 'Clone X',                  emoji: '🤖', color: '#4fe9b4', verified: true,  starred: false, floor: 1.92,   change:  0.5,  topOffer: 1.88,  vol: 9.14,  sales: 25,    owners: 9841,  supply: 20000,  desc: 'RTFKT x Takashi Murakami 3D Avatar collection. Metaverse-ready.' },
-  { id: 'moon',      name: 'Moonbirds',                emoji: '🦉', color: '#90a6ff', verified: true,  starred: false, floor: 1.40,   change: -0.2,  topOffer: 1.35,  vol: 8.20,  sales: 22,    owners: 6100,  supply: 10000,  desc: 'A collection of 10,000 utility-enabled PFPs by PROOF Collective.' },
-];
+// No API for a live "top collections" feed yet — real bid submission
+// (marketplacePlaceBid) is wired, but there is nothing to populate this
+// table with until that endpoint exists.
+const INITIAL_COLLECTIONS: Collection[] = [];
 
-const COLLECTION_TRAITS: Record<string, Trait[]> = {
-  pudgy: [
-    { id: 't1', category: 'Background', value: 'Blue',        supply: 74,  rarity: 7.4,  topOffer: 5.10 },
-    { id: 't2', category: 'Background', value: 'Pink',        supply: 98,  rarity: 9.8,  topOffer: 4.95 },
-    { id: 't3', category: 'Background', value: 'Yellow',      supply: 112, rarity: 11.2, topOffer: 4.90 },
-    { id: 't4', category: 'Body',       value: 'Hoodie',      supply: 210, rarity: 21.0, topOffer: 4.85 },
-    { id: 't5', category: 'Body',       value: 'Turtleneck',  supply: 145, rarity: 14.5, topOffer: 5.00 },
-    { id: 't6', category: 'Head',       value: 'Beanie',      supply: 320, rarity: 32.0, topOffer: 5.00 },
-    { id: 't7', category: 'Head',       value: 'Crown',       supply: 44,  rarity: 4.4,  topOffer: 6.20 },
-    { id: 't8', category: 'Eyes',       value: 'Laser Eyes',  supply: 18,  rarity: 1.8,  topOffer: 9.20 },
-    { id: 't9', category: 'Eyes',       value: 'Heart Eyes',  supply: 56,  rarity: 5.6,  topOffer: 5.80 },
-    { id: 'ta', category: 'Skin',       value: 'Gold',        supply: 42,  rarity: 4.2,  topOffer: 6.80 },
-  ],
-  bayc: [
-    { id: 't1', category: 'Fur',        value: 'Gold',        supply: 46,  rarity: 0.5,  topOffer: 58.00 },
-    { id: 't2', category: 'Fur',        value: 'Solid Gold',  supply: 22,  rarity: 0.2,  topOffer: 75.00 },
-    { id: 't3', category: 'Fur',        value: 'Black',       supply: 384, rarity: 3.8,  topOffer: 16.50 },
-    { id: 't4', category: 'Eyes',       value: '3D',          supply: 211, rarity: 2.1,  topOffer: 47.50 },
-    { id: 't5', category: 'Eyes',       value: 'Laser Eyes',  supply: 31,  rarity: 0.3,  topOffer: 62.00 },
-    { id: 't6', category: 'Mouth',      value: 'Rage',        supply: 84,  rarity: 0.8,  topOffer: 52.00 },
-    { id: 't7', category: 'Mouth',      value: 'Grin',        supply: 490, rarity: 4.9,  topOffer: 15.50 },
-    { id: 't8', category: 'Hat',        value: 'Bayc Hat Red',supply: 77,  rarity: 0.8,  topOffer: 48.00 },
-    { id: 't9', category: 'Clothes',    value: 'Bone Tee',    supply: 112, rarity: 1.1,  topOffer: 42.00 },
-  ],
-  azuki: [
-    { id: 't1', category: 'Type',       value: 'Human',       supply: 819, rarity: 81.9, topOffer: 0.68 },
-    { id: 't2', category: 'Type',       value: 'Spirit',      supply: 97,  rarity: 9.7,  topOffer: 1.20 },
-    { id: 't3', category: 'Hair',       value: 'Red Spiky',   supply: 129, rarity: 12.9, topOffer: 6.20 },
-    { id: 't4', category: 'Hair',       value: 'White',       supply: 58,  rarity: 5.8,  topOffer: 8.40 },
-    { id: 't5', category: 'Eyes',       value: 'Crossed',     supply: 267, rarity: 26.7, topOffer: 0.70 },
-    { id: 't6', category: 'Eyes',       value: 'Closed',      supply: 188, rarity: 18.8, topOffer: 0.69 },
-    { id: 't7', category: 'Clothing',   value: 'Red Kimono',  supply: 144, rarity: 14.4, topOffer: 1.10 },
-    { id: 't8', category: 'Background', value: 'Off White A', supply: 214, rarity: 21.4, topOffer: 0.68 },
-  ],
-  doodles: [
-    { id: 't1', category: 'Head',       value: 'Cat',         supply: 88,  rarity: 8.8,  topOffer: 3.10 },
-    { id: 't2', category: 'Head',       value: 'Alien',       supply: 34,  rarity: 3.4,  topOffer: 5.80 },
-    { id: 't3', category: 'Background', value: 'Pink',        supply: 412, rarity: 41.2, topOffer: 2.60 },
-    { id: 't4', category: 'Background', value: 'Gradient',    supply: 211, rarity: 21.1, topOffer: 2.80 },
-    { id: 't5', category: 'Face',       value: 'Happy',       supply: 644, rarity: 64.4, topOffer: 2.50 },
-    { id: 't6', category: 'Body',       value: 'Holographic', supply: 66,  rarity: 6.6,  topOffer: 4.20 },
-  ],
-  punks: [
-    { id: 't1', category: 'Type',       value: 'Ape',         supply: 24,  rarity: 0.2,  topOffer: 89.00 },
-    { id: 't2', category: 'Type',       value: 'Alien',       supply: 9,   rarity: 0.09, topOffer: 320.00 },
-    { id: 't3', category: 'Type',       value: 'Zombie',      supply: 88,  rarity: 0.9,  topOffer: 75.00 },
-    { id: 't4', category: 'Hat',        value: 'Top Hat',     supply: 115, rarity: 1.1,  topOffer: 46.00 },
-    { id: 't5', category: 'Hat',        value: 'Cowboy Hat',  supply: 142, rarity: 1.4,  topOffer: 44.00 },
-    { id: 't6', category: 'Eyes',       value: '3D Glasses',  supply: 286, rarity: 2.9,  topOffer: 36.00 },
-    { id: 't7', category: 'Mouth',      value: 'Smile',       supply: 238, rarity: 2.4,  topOffer: 33.00 },
-  ],
-};
+// No API for per-collection trait/rarity data yet.
+const COLLECTION_TRAITS: Record<string, Trait[]> = {};
 
-// fallback traits for collections without specific data
-const DEFAULT_TRAITS = (floor: number): Trait[] => [
-  { id: 't1', category: 'Background', value: 'Rare',    supply: 120,  rarity: 1.2,  topOffer: +(floor * 1.15).toFixed(3) },
-  { id: 't2', category: 'Background', value: 'Common',  supply: 3400, rarity: 34.0, topOffer: +(floor * 0.98).toFixed(3) },
-  { id: 't3', category: 'Type',       value: 'Special', supply: 44,   rarity: 0.4,  topOffer: +(floor * 2.20).toFixed(3) },
-  { id: 't4', category: 'Body',       value: 'Gold',    supply: 88,   rarity: 0.9,  topOffer: +(floor * 1.80).toFixed(3) },
-  { id: 't5', category: 'Eyes',       value: 'Glowing', supply: 210,  rarity: 2.1,  topOffer: +(floor * 1.30).toFixed(3) },
-  { id: 't6', category: 'Hat',        value: 'Crown',   supply: 66,   rarity: 0.7,  topOffer: +(floor * 1.60).toFixed(3) },
-];
+const DEFAULT_TRAITS = (_floor: number): Trait[] => [];
 
 const TX_STATUS_VARIANT: Record<TxStatus, TagVariant> = {
   Pending:      'neutral',
@@ -139,11 +71,7 @@ interface BidWallet {
   ethBalance: number; wethBalance: number;
 }
 
-const STATIC_BID_WALLETS: BidWallet[] = [
-  { id: 'w1', label: 'Main Wallet',   address: '', color: '#2fc4d6', ethBalance: 4.218,  wethBalance: 1.500 },
-  { id: 'w2', label: 'Trading Vault', address: '', color: '#a855f7', ethBalance: 12.044, wethBalance: 8.200 },
-  { id: 'w3', label: 'Cold Storage',  address: '', color: '#ffb020', ethBalance: 0.812,  wethBalance: 0.000 },
-];
+const STATIC_BID_WALLETS: BidWallet[] = [];
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -396,6 +324,9 @@ export default function BulkBidPage() {
               </tr>
             </thead>
             <tbody>
+              {sorted.length === 0 && (
+                <tr><td colSpan={9} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px' }}>No collections loaded yet.</td></tr>
+              )}
               {sorted.map((col, idx) => {
                 const inQueue = queue.some(b => b.collectionId === col.id);
                 return (
