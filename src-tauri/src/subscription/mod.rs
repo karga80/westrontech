@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 const LICENSE_PUBLIC_KEY_B64: &str = "w1+T3XMFDkUASvJ0iNLuH7i7tyMNcGx/229uLO17wnM=";
 
 /// Deployed worker base URL. Replace `YOUR_SUBDOMAIN` after `wrangler deploy`.
-pub const WORKER_URL: &str = "https://westron-subscription.YOUR_SUBDOMAIN.workers.dev";
+pub const WORKER_URL: &str = "https://westron-subscription.ebaltepe.workers.dev";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriptionCheckResult {

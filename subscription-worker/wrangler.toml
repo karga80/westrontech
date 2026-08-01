@@ -2,17 +2,25 @@ name = "westron-subscription"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-[[kv_namespaces]]
-binding = "SUBS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# Account + subscription database (Cloudflare D1). Create it, then paste the id:
+#   wrangler d1 create westron-db
+[[d1_databases]]
+binding = "DB"
+database_name = "westron-db"
+database_id = "05fa9c4d-45f5-4c2c-ade4-6db04aa9d5ab"
 
-# Public config — payment address and prices
-# Run `wrangler deploy` after setting secrets below
+# Public config (safe to commit). Prices are ETH amounts you set.
 [vars]
-PAYMENT_WALLET    = "0xYOUR_PAYMENT_WALLET_ADDRESS"
+PAYMENT_WALLET    = "0x002218708cf0a09135fe486615e8156d101e0e66"   # lowercased ETH address that receives payments
 MONTHLY_PRICE_ETH = "0.01"
-ANNUAL_PRICE_ETH  = "0.09"
-PRICE_TOLERANCE   = "0.20"
+ANNUAL_PRICE_ETH  = "0.09"                            # yearly, discounted vs 12x monthly
+PRICE_TOLERANCE   = "0.20"                            # +/-20% match window on the paid amount
+TRIAL_DAYS        = "7"
+SESSION_DAYS      = "30"
 
-# Secrets — set via CLI before deploying:
-#   wrangler secret put ALCHEMY_WEBHOOK_SECRET
+# Secrets - set via CLI, NEVER commit (see DEPLOY.md):
+#   wrangler secret put LICENSE_SIGNING_KEY      # base64 PKCS8 Ed25519 private key
+#   wrangler secret put ALCHEMY_WEBHOOK_SECRET   # Alchemy webhook signing key
+#   wrangler secret put ALCHEMY_KEY              # app-wide Alchemy key (proxy)
+#   wrangler secret put OPENSEA_KEY              # app-wide OpenSea key (proxy)
+#   wrangler secret put ETHERSCAN_KEY            # app-wide Etherscan key (proxy)
