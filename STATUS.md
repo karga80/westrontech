@@ -16,18 +16,21 @@ Full feature/architecture overview: `README.md`. This file tracks what's proven 
 - Not yet verified end-to-end: full app flow (Tauri UI → worker → license stored/used).
   This session only proved the worker itself via curl, not the app calling it.
 
+## Update (2026-08-02): all 5 secrets set, proxy verified live
+
+All Worker secrets are now set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY_KEY`,
+`OPENSEA_KEY`, `ETHERSCAN_KEY`) and the Alchemy address-activity webhook is registered.
+API-key proxy verified live for all 3 providers — see `probes/subscription-worker-proxy.md`.
+
+One mid-session error caught and fixed: the Etherscan key was first entered as the *secret name*
+instead of its value (`npx wrangler secret put <the-key-itself>` instead of
+`npx wrangler secret put ETHERSCAN_KEY`), which briefly exposed it in `wrangler secret list`
+output. Deleted the bad entry and rotated the Etherscan key before re-entering it correctly.
+
 ## Blocked — Emir'in yapması gerekenler
 
-1. **4 secret eksik** — bunlar olmadan ödeme tespiti ve API-key proxy çalışmaz (login/signup/trial çalışır, bunlar etkilenmez):
-   ```
-   npx wrangler secret put ALCHEMY_WEBHOOK_SECRET   # Alchemy dashboard → Webhooks → Address Activity → Signing Key
-   npx wrangler secret put ALCHEMY_KEY               # alchemy.com hesabından
-   npx wrangler secret put OPENSEA_KEY                # docs.opensea.io üzerinden başvuru
-   npx wrangler secret put ETHERSCAN_KEY              # etherscan.io/apis
-   ```
-   (Detaylı adımlar: `subscription-worker/DEPLOY.md` adım 5 ve 7.)
-2. Secret'lar girildikten sonra Alchemy webhook'unu kaydet (adım 7, aynı dosyada) — ödeme algılama bu olmadan çalışmaz.
-3. App'i yeniden derleyip (`npm run dev:tauri` veya release build) yeni `WORKER_URL` ile gerçek bir signup/login denemesi yap.
+1. App'i yeniden derleyip (`npm run dev:tauri` veya release build) yeni `WORKER_URL` ile gerçek bir signup/login denemesi yap.
+2. Ödeme webhook'u henüz gerçek bir ödemeyle test edilmedi — ilk gerçek (veya testnet) ödeme geçtiğinde `/webhook/alchemy`'nin hesabı doğru aktif ettiğini doğrula.
 
 ## Everything else (sniping, portfolio, marketplace, etc.)
 
@@ -42,8 +45,8 @@ Treat those notes as **not re-verified** until a session actually checks them ag
   wasn't ignored. Added `**/node_modules`.
 - Deleted the probe test account (`probe-test@westron.local`) from the live D1 `users` table after
   verifying the signup flow.
-- Still untracked / needs a decision: `_arch.tar.gz`, `_faz1.tar.gz` at repo root (leftover backup
-  archives, not created this session — left alone, ask Emir before deleting).
+- `_arch.tar.gz`, `_faz1.tar.gz` (leftover pre-refactor backup archives, fully superseded by
+  committed work, no unique content) — confirmed with Emir and deleted.
 - `subscription-worker/schema.sql` and `package-lock.json` are untracked in git — should be
   committed (schema.sql is required to reproduce the D1 tables; package-lock.json pins deps).
   Not committed automatically per workflow rules — do this in the next commit.

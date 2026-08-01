@@ -5,15 +5,17 @@ Empty section = that area is real. Update whenever something moves from mock →
 
 ## Subscription worker
 
-- **Payment webhook (Alchemy address-activity) — not live.** `ALCHEMY_WEBHOOK_SECRET` is not
-  set as a Worker secret yet. Requests to `/webhook/alchemy` will fail signature verification.
-  Needs: Emir sets the secret + registers the webhook in the Alchemy dashboard.
-  See `subscription-worker/DEPLOY.md` step 7.
-- **API-key proxy (`/proxy/*` — Alchemy/OpenSea/Etherscan) — not live.** `ALCHEMY_KEY`,
-  `OPENSEA_KEY`, `ETHERSCAN_KEY` are not set as Worker secrets yet. Requests will fail (missing
-  env value used in upstream URL/header). Needs: Emir sets the 3 secrets.
-- Account signup/login/trial/license issuance: **real**, verified this session
+All 5 secrets are set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY_KEY`,
+`OPENSEA_KEY`, `ETHERSCAN_KEY`) and the Alchemy address-activity webhook is registered.
+
+- Account signup/login/trial/license issuance: **real**, verified with a live request
   (`probes/subscription-worker-signup.md`).
+- API-key proxy (`/proxy/alchemy/*`, `/proxy/opensea/*`, `/proxy/etherscan/*`): **real**, each
+  provider verified with a live authenticated request returning real data (real block number,
+  real ETH supply, real BAYC collection data). See `probes/subscription-worker-proxy.md`.
+- Payment webhook (`/webhook/alchemy`): secret is set and webhook is registered in the Alchemy
+  dashboard, but **not yet proven with a real on-chain payment** — no test ETH has been sent
+  through it. Treat as configured-but-unverified until a real (or testnet) payment round-trips.
 
 ## Sniping & automation
 
