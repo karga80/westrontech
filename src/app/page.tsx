@@ -428,7 +428,7 @@ function ModalBackdrop({ onClose, children }: { onClose: () => void; children: R
 
 type AddWalletTab = 'import' | 'watch';
 
-function AddWalletModal({ onClose }: { onClose: () => void }) {
+function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [tab, setTab] = useState<AddWalletTab>('import');
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
@@ -530,6 +530,7 @@ function AddWalletModal({ onClose }: { onClose: () => void }) {
                 const addr = tab === 'import' ? key : address;
                 if (!addr.trim() || !name.trim()) return;
                 persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr.trim() });
+                onAdded();
                 onClose();
               }}
               style={{
@@ -1100,7 +1101,7 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-full text-white" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)}  />}
+      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)} onAdded={() => setStoredWallets(loadWallets())} />}
       {showDistribute && <DistributeModal  onClose={() => setShowDistribute(false)} />}
       {editTarget && (
         <EditWalletModal

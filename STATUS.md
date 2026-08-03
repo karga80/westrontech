@@ -52,6 +52,48 @@ needs explicit approval) are in `MOCKS.md`.
 Recommended verification for Emir: run the app (`npm run dev:tauri`), open the dashboard with a
 wallet that has zero transactions — it should show "No transactions yet." instead of 15 fake rows.
 
+## Update (2026-08-03): two real bugs fixed — wallet refresh + transaction history
+
+Both fixed, both compile clean, **neither committed** — review then ask to commit.
+
+**1. Dashboard didn't show a newly added wallet until reload** (`src/app/page.tsx`)
+The dashboard's own `AddWalletModal` wrote the wallet to `localStorage` but never told the
+dashboard to re-read it, so the new card only appeared after a page reload. `/wallets` already
+did this correctly via an `onAdded` callback — applied the same pattern to the dashboard.
+
+**2. Wallet detail showed stale/incomplete transaction history**
+(`src-tauri/src/rpc/client.rs`, `get_asset_transfers` — feeds both the dashboard tx table and
+the wallet-detail Transactions tab). Two defects in the Alchemy call:
+- Only `toAddress` was queried, so **sent transactions never appeared** — incoming only.
+- No `order` param with `fromBlock: 0x0` + `maxCount: 100`. Alchemy defaults to *ascending*,
+  so any wallet with >100 transfers got its **oldest 100 transfers since genesis**, never recent
+  activity. That is the "not up to date" symptom.
+
+Fix: queries incoming + outgoing in parallel with `"order": "desc"`, merges, dedupes by tx hash
+(self-transfers appear in both), sorts by block descending, keeps the 100 most recent.
+`cargo check` passes — no new warnings.
+
+**Not verified in the running app yet.** Emir should open a wallet with real history →
+Transactions tab → confirm recent activity appears, including sent txs, not just received.
+
+## NEXT SESSION STARTS HERE — price poller is broken
+
+The Tauri log shows this failing continuously, every run, for both providers' symbols:
+
+```
+[app_lib::data::realtime::price_poller][WARN] price_poller: transport error:
+error sending request for url (https://api.g.alchemy.com/prices/v1/tokens/by-symbol?symbols=USDC&...)
+```
+
+That URL has **no API key segment** — Alchemy's prices endpoint is
+`https://api.g.alchemy.com/prices/v1/{apiKey}/tokens/by-symbol`. Strong hypothesis, **not yet
+probed**: ETH/USDC/USDT/WETH prices never load, which would make portfolio USD values wrong
+or zero app-wide.
+
+Per the operating manual, do this before touching app code: **probe the endpoint with curl
+first** (real key, real response, saved to `probes/`), confirm the correct URL shape, then fix
+`src-tauri/src/data/realtime/price_poller.rs`. Do not assume the docs — call it once for real.
+
 ## Housekeeping done this session
 
 - Fixed `.gitignore`: `/node_modules` was root-anchored only, so `subscription-worker/node_modules`
