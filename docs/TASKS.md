@@ -162,6 +162,25 @@ doğrulasın.
 
 ---
 
+## NOT (10.08.2026, gece) — forge T9'a başlamadı, context'i yetmedi
+`forge` T6a/T6d/T9/T10'u tek seferde almaya çalıştı, keşif sırasında context kritik
+seviyeye geldi ve GÜVENLİ ŞEKİLDE hiçbir dosyayı değiştirmeden durdu — repo temiz/
+çalışır durumda. İki bulgu bir sonraki oturuma devrediliyor:
+1. Orion'un D2'deki "3 `DistributeModal` kopyası" iddiası doğrulanmadı — forge sadece
+   ikisini buldu (`src/app/page.tsx:547`, `src/app/wallets/page.tsx:374`),
+   `bulk/distribute/page.tsx`'te bu isimde bir fonksiyon yok. Ortak bileşene çıkarmadan
+   önce gerçek kopya sayısı netleştirilmeli.
+2. Repoda çok sayıda takip dışı " 2" son ekli dosya bulundu (`FAZ1-DEMO 2.md`,
+   `src/lib/distribute 2.ts`, `src-tauri/src/persist 2.rs` vb.) — CLAUDE.md'nin
+   yasakladığı "package 2.json" deseni. `scout` bunları inceliyor, sonucu ayrı not
+   düşülecek.
+
+**Öneri:** T6a, T6d, T10 küçük ve bağımsız — ayrı ayrı taze context'li ajanlara
+verilsin. T9 (paylaşılan bileşen + CTA + NFT sekmesi) en büyük iş, tek başına bir
+oturum/agent hak ediyor, kopya-sayısı netleştikten sonra başlanmalı.
+
+---
+
 ## T9 — Wallet detail: Distribute CTA + NFT transferi  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi, ÖNCELİKLİ
 Dashboard'da olan "Distribute" (fund transfer) CTA'sı tekil cüzdan detay sayfasında
 (`/wallet/[id]`) yok. Emir'in isteği (ekran görüntüsü — kırmızı kutu, Etherscan
