@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import ProGate from '@/components/ProGate';
 import { loadAddressBook, type AddressEntry } from '@/lib/addressBook';
 import { loadWallets } from '@/lib/walletStore';
-import { loadAlchemyKey, getWalletTokens, estimateGas } from '@/lib/tauri';
+import { loadAlchemyKey, getWalletTokens, estimateGas, openExternalUrl } from '@/lib/tauri';
+import {
+  runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
+  type SendRow, type TransactionPreview,
+} from '@/lib/distribute';
 
 // ─── Distribute Funds ─────────────────────────────────────────────────────────
 
@@ -153,6 +157,23 @@ export default function DistributeFundsPage() {
   const abSelectedList = addressBookEntries.filter(e => abSelected.has(e.id));
   const totalSelected = selected.size + abSelected.size;
 
+  const sourceWallet = wallets.find(w => w.id === source) ?? null;
+
+  // Address-based, case-insensitive — same check as DistributeModal's
+  // `selfSendWarnings`/`nftSelfSendWarning` (T6b). A destination that shares
+  // the source's address only burns gas; the user is told, not silently
+  // allowed to send money to themselves.
+  const selfSendWarnings = sourceWallet
+    ? [
+        ...selectedList
+          .filter(w => w.address.toLowerCase() === sourceWallet.address.toLowerCase())
+          .map(w => `${w.name}: this destination is the same address as the source. The transfer would only cost gas.`),
+        ...abSelectedList
+          .filter(e => e.address.toLowerCase() === sourceWallet.address.toLowerCase())
+          .map(e => `${e.name}: this destination is the same address as the source. The transfer would only cost gas.`),
+      ]
+    : [];
+
   const canReview = !!source && totalSelected > 0 && (
     mode === 'equal'
       ? !!amountEqual && parseFloat(amountEqual) > 0
@@ -190,6 +211,94 @@ export default function DistributeFundsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, alchemyKey]);
 
+  // ── Real send path ───────────────────────────────────────────────────────
+  // Same envelope-protected pipeline as DistributeModal: `previewTransaction`
+  // (no side effects) verdicts every destination before Confirm is enabled,
+  // `runDistribution` performs the actual serial `send_eth` calls and reports
+  // real per-row state back — nothing here is a timer.
+  const [previews, setPreviews] = useState<Record<string, TransactionPreview>>({});
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [sendRows, setSendRows] = useState<SendRow[]>([]);
+  const [sending, setSending] = useState(false);
+  const [linkOpenError, setLinkOpenError] = useState<string | null>(null);
+  const sendStartedRef = useRef(false);
+
+  async function openInBrowser(url: string) {
+    setLinkOpenError(null);
+    try {
+      await openExternalUrl(url);
+    } catch (e) {
+      setLinkOpenError(`Could not open the default browser: ${errText(e, 'unknown error')}`);
+    }
+  }
+
+  useEffect(() => {
+    if (step !== 2) return;
+    let cancelled = false;
+    (async () => {
+      setPreviewBusy(true); setPreviewError(null);
+      try {
+        const out: Record<string, TransactionPreview> = {};
+        for (const w of selectedList) {
+          const amt = mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '');
+          const wei = parseEthToWei(amt);
+          if (wei == null) continue;
+          out[w.id] = await previewTransaction({ to: w.address, valueWei: wei.toString() });
+        }
+        for (const ab of abSelectedList) {
+          const amt = mode === 'equal' ? amountEqual : (abAmounts[ab.id] ?? '');
+          const wei = parseEthToWei(amt);
+          if (wei == null) continue;
+          out[ab.id] = await previewTransaction({ to: ab.address, valueWei: wei.toString() });
+        }
+        if (!cancelled) setPreviews(out);
+      } catch (e) {
+        if (!cancelled) setPreviewError(errText(e, 'Preview failed.'));
+      } finally {
+        if (!cancelled) setPreviewBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const canSend = !!sourceWallet && !!alchemyKey && !previewBusy && !previewError &&
+    totalSelected > 0 &&
+    selectedList.every(w => previews[w.id]?.authorized === true) &&
+    abSelectedList.every(e => previews[e.id]?.authorized === true);
+
+  async function startSend() {
+    // Ref, not `sending` state: state updates land async, so a double-click
+    // in the same tick could otherwise fire two broadcasts.
+    if (!canSend || sendStartedRef.current || !sourceWallet) return;
+    sendStartedRef.current = true;
+    const rows: SendRow[] = [];
+    for (const w of selectedList) {
+      const amt = mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '');
+      const wei = parseEthToWei(amt);
+      if (wei == null) continue;
+      rows.push({ id: w.id, name: w.name, address: w.address, valueWei: wei, state: 'queued' });
+    }
+    for (const ab of abSelectedList) {
+      const amt = mode === 'equal' ? amountEqual : (abAmounts[ab.id] ?? '');
+      const wei = parseEthToWei(amt);
+      if (wei == null) continue;
+      rows.push({ id: ab.id, name: ab.name, address: ab.address, valueWei: wei, state: 'queued' });
+    }
+    if (rows.length === 0) { sendStartedRef.current = false; return; }
+    setSendRows(rows); setSending(true); setStep(3);
+    await runDistribution(sourceWallet.address, rows, alchemyKey, setSendRows);
+    setSending(false);
+  }
+
+  function resetFlow() {
+    sendStartedRef.current = false;
+    setStep(1); setAmountEqual(''); setAmountCustom({}); setAbAmounts({});
+    setAbSelected(new Set()); setSelected(new Set());
+    setSendRows([]); setPreviews({}); setPreviewError(null); setLinkOpenError(null);
+  }
+
   const TxPanel = () => (
     <div style={{ flex: 1, backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '24px', minHeight: '400px' }}>
       <div className="flex items-center justify-between mb-6">
@@ -206,37 +315,44 @@ export default function DistributeFundsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ffb020', border: '1px solid #ffb020', backgroundColor: 'rgba(255,176,32,0.08)', padding: '10px 12px' }}>
-            Nothing was broadcast. Sending funds from this screen is not enabled in this
-            build, so there are no transaction hashes or statuses to show — the rows
-            below are the distribution you configured, not on-chain transactions.
-          </div>
-          {selectedList.map((w, i) => (
-            <div key={i} className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
-              <div>
-                <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(w.address)}</div>
-                <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
-                  {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
+          {sendRows.map(r => {
+            const rowLabel = r.state === 'broadcast' ? 'Broadcast' : r.state === 'submitting' ? 'Signing…' : r.state === 'failed' ? 'Failed' : r.state === 'skipped' ? 'Not sent' : 'Queued';
+            const rowColor = r.state === 'broadcast' ? 'var(--wr-accent)' : r.state === 'submitting' ? '#ffb020' : r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
+            return (
+              <div key={r.id} className="px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(r.address)}</div>
+                    <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
+                      {formatWeiToEth(r.valueWei)} ETH
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: rowColor }}>
+                    {rowLabel}
+                  </span>
                 </div>
+                {r.hash && (
+                  <button
+                    type="button"
+                    onClick={() => { void openInBrowser(`https://etherscan.io/tx/${r.hash}`); }}
+                    style={{
+                      display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px',
+                      color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none', background: 'none',
+                      border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>TXN:</span> {r.hash}
+                  </button>
+                )}
+                {r.error && (
+                  <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(r.error)}</div>
+                )}
               </div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)' }}>
-                Not sent
-              </span>
-            </div>
-          ))}
-          {abSelectedList.map(ab => (
-            <div key={ab.id} className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
-              <div>
-                <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(ab.address)}</div>
-                <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
-                  {mode === 'equal' ? amountEqual : (abAmounts[ab.id] ?? '0')} ETH
-                </div>
-              </div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)' }}>
-                Not sent
-              </span>
-            </div>
-          ))}
+            );
+          })}
+          {linkOpenError && (
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{linkOpenError}</div>
+          )}
         </div>
       )}
     </div>
@@ -522,6 +638,11 @@ export default function DistributeFundsPage() {
           {step === 2 && (
             <div className="space-y-4">
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '4px' }}>Review distribution</div>
+              {selfSendWarnings.length > 0 && (
+                <div style={{ border: '1px solid rgba(251,191,36,0.3)', backgroundColor: 'rgba(251,191,36,0.06)', padding: '10px 12px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ffb020', lineHeight: 1.6 }}>
+                  {selfSendWarnings.map((w, i) => <div key={i} style={{ marginTop: i ? '3px' : 0 }}>· {w}</div>)}
+                </div>
+              )}
               {selectedList.map((w, i) => (
                 <div key={i} className="flex items-center justify-between px-3 py-2.5" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
                   <div>
@@ -558,31 +679,72 @@ export default function DistributeFundsPage() {
                   ? gasError
                   : 'eth_estimateGas for the first recipient. Gas units only — the ETH cost depends on the gas price at send time, which this build does not fetch.'}
               </div>
+
+              {/* Envelope verdict — this is what actually gates sending, not the gas estimate above */}
+              <div className="flex items-center justify-between">
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Spending envelope:</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: previewBusy ? 'var(--wr-text-4)' : canSend ? 'var(--wr-accent)' : '#ff8a96' }}>
+                  {previewBusy ? 'Checking…' : canSend ? 'Authorized' : 'Not authorized'}
+                </span>
+              </div>
+              {!alchemyKey && (
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '-8px' }}>
+                  Add an Alchemy API key in Settings before sending.
+                </div>
+              )}
+              {previewError && (
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(previewError)}</div>
+              )}
+              {!previewBusy && !previewError && [...selectedList.map(w => ({ id: w.id, name: w.name })), ...abSelectedList.map(e => ({ id: e.id, name: e.name }))]
+                .filter(d => previews[d.id] && previews[d.id].authorized !== true)
+                .map(d => (
+                  <div key={d.id} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                    {d.name}: {explainSendError(previews[d.id].reject_code ?? previews[d.id].reject_reason ?? 'The envelope did not authorize this transfer.')}
+                  </div>
+                ))}
+
               <div className="flex gap-2 mt-2">
                 <button onClick={() => setStep(1)} style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>Back</button>
-                <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 0', border: 'none', cursor: 'pointer' }}>Continue (nothing is sent)</button>
+                <button
+                  onClick={startSend}
+                  disabled={!canSend}
+                  style={{
+                    flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700,
+                    color: canSend ? '#0b0c14' : 'var(--wr-text-4)',
+                    backgroundColor: canSend ? '#7c5cff' : 'var(--wr-overlay)',
+                    border: `1px solid ${canSend ? '#7c5cff' : 'var(--wr-border)'}`,
+                    padding: '10px 0', cursor: canSend ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {previewBusy ? 'Checking…' : 'Confirm & Send'}
+                </button>
               </div>
             </div>
           )}
 
           {/* ── Step 3: Processing ── */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="flex flex-col items-center py-6 gap-3">
-                <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>⚠</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Not sent</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
-                  No transaction was signed or broadcast — sending funds from this screen
-                  is not enabled in this build. Your selection is shown on the right for
-                  review only.
+          {step === 3 && (() => {
+            const anyFailed = sendRows.some(r => r.state === 'failed');
+            const icon = sending ? '⚡' : anyFailed ? '!' : '✓';
+            const headline = sending ? 'Signing and broadcasting' : anyFailed ? 'Not fully sent' : 'Done';
+            return (
+              <div className="space-y-4">
+                <div className="flex flex-col items-center py-6 gap-3">
+                  <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>{icon}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{headline}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
+                    {sending
+                      ? 'One at a time — a second send from the same address would reuse the nonce.'
+                      : 'A transaction hash means the network accepted it. Confirmation still takes a block or two. See the Transaction Monitor for per-destination status.'}
+                  </div>
                 </div>
+                <button disabled={sending} onClick={resetFlow}
+                  style={{ width: '100%', backgroundColor: 'transparent', color: sending ? 'var(--wr-text-4)' : 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: sending ? 'not-allowed' : 'pointer' }}>
+                  {sending ? 'Working…' : 'New Distribution'}
+                </button>
               </div>
-              <button onClick={() => { setStep(1); setAmountEqual(''); setAmountCustom({}); setAbAmounts({}); setAbSelected(new Set()); setSelected(new Set()); }}
-                style={{ width: '100%', backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
-                New Distribution
-              </button>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Right panel — tx monitor */}

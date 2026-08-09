@@ -438,6 +438,58 @@ için NFT listesinin gerçekten göründüğünü kanıtlamıyor. **Kalan iş:**
 Accessibility izni netleşince (T1/T10'daki aynı blokaj) biri bu ekranı fiilen
 açıp NFT seçip Confirm'e kadar gitsin, gerçek Send'e asla tıklamadan.
 
+**`forge` — T9c, `bulk/distribute/page.tsx` gerçek gönderime bağlandı — ⚠️
+KOD HAZIR, İLK GERÇEK GÖNDERİM EMİR'İN ONAYINI BEKLİYOR (10.08.2026).**
+Ekranın kendine özgü bakiye (ETH+WETH), gas tahmini ve Address Book özellikleri
+korunarak, gönderim mekanizması sahte/disabled'dan `src/lib/distribute.ts`'teki
+aynı zarf-korumalı yola bağlandı — `DistributeModal.tsx`'in kullandığı
+`previewTransaction`/`runDistribution` çiftinin aynısı, mekanik olarak ortak
+bileşene sokulmadan (Emir'in 10.08.2026 kararı, yukarıdaki "⚠️ DÜZELTME"
+notuna bakın).
+
+- Step 2 (Confirm) artık her hedef için `previewTransaction` çağırıyor (gas
+  tahmini paneli ayrı kalıyor — o zaten gerçekti, sadece envelope onayı hiç
+  yoktu). Sonuç: "Spending envelope: Authorized / Not authorized", reddeden
+  her hedef için `explainSendError` ile insan-okur gerekçe. "Continue (nothing
+  is sent)" düğmesi kaldırıldı, yerine yalnızca tüm hedefler `authorized`
+  olduğunda aktifleşen "Confirm & Send" geldi.
+- Step 3 artık `runDistribution`'ın döndürdüğü gerçek `SendRow` durumlarını
+  gösteriyor (Queued/Signing…/Broadcast/Failed/Not sent) — sabit "Not sent"
+  metni ve `setTimeout` teatral hali tamamen kaldırıldı. Sağdaki Transaction
+  Monitor paneli de aynı `sendRows`'u gösteriyor, artık statik "Not sent"
+  rozeti basmıyor.
+- T10'daki "TXN:" + tıklanabilir Etherscan linki deseni (`openExternalUrl`,
+  açma hatası görünür satırla) burada da uygulandı.
+- T6b'deki adres-bazlı kendine-gönderim uyarısı (`selfSendWarnings`) hem
+  wallet hem Address Book hedefleri için Step 2'de gösteriliyor.
+- Aynı adresten gönderimler zaten `runDistribution` içinde sıralı (T6b/T9
+  Görev 1'den miras) — bu ekran da aynı fonksiyonu çağırdığı için nonce
+  çakışması riski yok.
+- Çift tık koruması: `sendStartedRef`, `DistributeModal`'daki desenle birebir.
+
+Dosyalar: `src/app/bulk/distribute/page.tsx` (tek dosya — `src/lib/distribute.ts`
+ve `src/lib/tauri.ts`'e sadece import, değişiklik yok).
+
+Doğrulanan: `npx tsc --noEmit` temiz, `npx eslint` bu dosyada yeni hata/uyarı
+eklemedi (`git stash` ile taban alındı — hem öncesi hem sonrası aynı 3 uyarı,
+0 hata, konumları kaydı), `npx jest` 24/24 geçti. Zaten çalışan dev sunucusuna
+(`npm run dev`, port 3000) `curl -sL http://localhost:3000/bulk/distribute`
+200 döndü — sunucu tarafında render çökmesi yok.
+
+**DOĞRULANAMADI:** Bu ortamda tıklayan bir tarayıcı otomasyon aracı yoktu
+(T1/T9/T10'daki aynı Accessibility izni blokajı). Bakiye/gas/Address Book
+panellerinin gerçek uygulamada hâlâ doğru göründüğü, Step 2'deki envelope
+onay/red mesajının canlı bir zarfla gerçekten değiştiği ve Confirm & Send
+düğmesinin doğru etkinleştiği **gözle görülmedi** — yalnızca kod/tip/lint/test
+seviyesinde kanıt var.
+
+**Gerçek ilk gönderim kesinlikle tetiklenmedi** (görev talimatı ve CLAUDE.md
+madde 5 gereği yasaktı) — bu görevde Confirm & Send düğmesine hiç tıklanmadı,
+`runDistribution`/`sendEth` bu oturumda hiç çalıştırılmadı. **Kalan iş:** Emir
+Westron'u açıp bir zarf (envelope) oluşturduktan sonra, düşük tutarlı gerçek
+bir Distribute Funds gönderimini `bulk/distribute` ekranından bizzat onaylayıp
+Etherscan'de teyit etmeli — bu ekrandan yapılacak ilk gerçek mainnet işlemi.
+
 ---
 
 ## T10 — Etherscan link'leri eksik  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi
