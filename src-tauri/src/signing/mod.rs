@@ -1,3 +1,5 @@
+pub mod nonce;
+
 use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy::eips::eip2718::Encodable2718;
 use alloy::network::TxSignerSync;
@@ -55,6 +57,27 @@ fn alchemy_url(api_key: &str) -> String {
     format!("https://eth-mainnet.g.alchemy.com/v2/{api_key}")
 }
 
+/// Read the account's next nonce **including** anything already in the mempool.
+///
+/// `"pending"`, never `"latest"`: `latest` counts only mined transactions, so a
+/// transfer broadcast seconds ago is invisible to it and the next send picks the
+/// same nonce and replaces it.
+async fn fetch_pending_nonce(
+    http: &reqwest::Client,
+    url: &str,
+    address: &str,
+) -> Result<u64, String> {
+    let nonce_hex: String = rpc_call(
+        http,
+        url,
+        "eth_getTransactionCount",
+        serde_json::json!([address, "pending"]),
+    )
+    .await?;
+    u64::from_str_radix(nonce_hex.trim_start_matches("0x"), 16)
+        .map_err(|e| format!("Nonce parse error: {e}"))
+}
+
 pub struct LocalSigner;
 
 impl LocalSigner {
@@ -109,17 +132,29 @@ impl LocalSigner {
         let http = reqwest::Client::new();
         let url = alchemy_url(api_key);
 
-        // 5. Nonce al: eth_getTransactionCount
-        let nonce_hex: String = rpc_call(
-            &http,
-            &url,
-            "eth_getTransactionCount",
-            serde_json::json!([wallet_address, "latest"]),
-        )
-        .await?;
-        let nonce =
-            u64::from_str_radix(nonce_hex.trim_start_matches("0x"), 16)
-                .map_err(|e| format!("Nonce parse error: {e}"))?;
+        // 5. Nonce: serialise every send from this address behind one lock and
+        //    hold it across read → sign → broadcast.
+        //
+        //    Reading `pending` is necessary but not sufficient: two sends can
+        //    both read it before either has broadcast, and even a serialised
+        //    second read can come back stale because the node has not counted
+        //    the transaction we sent a moment ago. The lock removes the race and
+        //    `AddressNonce` remembers what we used, so consecutive sends
+        //    increment instead of replacing one another.
+        let slot = nonce::slot_for(wallet_address);
+        let mut nonce_guard = slot.lock().await;
+
+        let chain_pending = fetch_pending_nonce(&http, &url, wallet_address).await?;
+        let cached_next = nonce_guard.peek();
+        let nonce = nonce_guard.allocate(chain_pending);
+        if nonce != chain_pending {
+            // The condition that used to produce a silent replacement. Worth a
+            // line, because it is otherwise invisible when it goes right.
+            log::debug!(
+                "nonce {nonce} for {wallet_address} came from the in-process record \
+                 (cached next {cached_next:?}); the node still reports pending {chain_pending}"
+            );
+        }
 
         // 6. Gas price al: eth_gasPrice (base fee proxy olarak kullanılır)
         let gas_price_hex: String = rpc_call(
@@ -177,15 +212,44 @@ impl LocalSigner {
         let raw_tx_hex = format!("0x{}", hex::encode(&encoded));
 
         // 11. eth_sendRawTransaction ile broadcast et
-        let tx_hash: String = rpc_call(
+        let sent: Result<String, String> = rpc_call(
             &http,
             &url,
             "eth_sendRawTransaction",
             serde_json::json!([raw_tx_hex]),
         )
-        .await?;
+        .await;
 
-        Ok(tx_hash)
+        match sent {
+            Ok(tx_hash) => {
+                // Only a confirmed broadcast advances our record.
+                nonce_guard.commit(nonce);
+                Ok(tx_hash)
+            }
+            Err(msg) => {
+                // Any failure invalidates the cached nonce: a transport error
+                // or timeout can hide a transaction that did reach the mempool,
+                // and re-reading `pending` is always the safe direction.
+                nonce_guard.invalidate();
+
+                match nonce::classify_send_error(&msg) {
+                    Some(fault) => {
+                        // Re-read the chain so the message states where the
+                        // account actually is, instead of retrying blind and
+                        // possibly replacing a transaction the user still wants.
+                        let chain_now = fetch_pending_nonce(&http, &url, wallet_address)
+                            .await
+                            .ok();
+                        log::warn!(
+                            "send from {wallet_address} refused by the node ({:?}) at nonce {nonce}",
+                            fault
+                        );
+                        Err(nonce::describe_fault(fault, nonce, chain_now, &msg))
+                    }
+                    None => Err(msg),
+                }
+            }
+        }
     }
 }
 
