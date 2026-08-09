@@ -22,10 +22,27 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
+  ETH_ADDRESS_RE,
   type SendRow, type TransactionPreview,
 } from '@/lib/distribute';
-import { loadAlchemyKey, openExternalUrl } from '@/lib/tauri';
+import { loadAlchemyKey, openExternalUrl, transferNft, type OwnedNft, type NftTokenStandard } from '@/lib/tauri';
 import EthIcon from '@/components/EthIcon';
+import NftThumb from '@/components/NftThumb';
+
+/** `nft.contract.token_type` comes back from Alchemy as `"ERC721"` /
+ *  `"ERC1155"` (sometimes with punctuation in older payloads) — normalize
+ *  rather than guess, and default to the far more common ERC-721 only when
+ *  the field is genuinely missing. This must match `nft::TokenStandard`'s
+ *  wire format exactly or the backend rejects the call before it ever
+ *  reaches the chain. */
+function nftTokenStandard(tokenType?: string): NftTokenStandard {
+  const normalized = (tokenType ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return normalized === 'ERC1155' ? 'ERC1155' : 'ERC721';
+}
+
+function nftKey(n: OwnedNft): string {
+  return n.contract.address + n.token_id;
+}
 
 export interface DistributeWalletOption {
   id: string;
@@ -51,11 +68,16 @@ export interface DistributeModalProps {
    *  a static readout. Used by the wallet-detail page, where the page's own
    *  wallet is always the source and re-picking it makes no sense. */
   lockedSourceId?: string;
-  /** Reserves a "Send Funds / Send NFT" tab bar for a later NFT-transfer tab
-   *  (tracked separately). Only Send Funds is implemented here — the NFT tab
-   *  renders disabled. Off by default so the two original call sites keep
-   *  looking exactly as they did before this file existed. */
+  /** Shows a "Send Funds / Send NFT" tab bar. Off by default so the two
+   *  original call sites keep looking exactly as they did before this file
+   *  existed. */
   enableTabs?: boolean;
+  /** NFTs available to send from the (locked) source wallet, for the Send
+   *  NFT tab. Only meaningful with `enableTabs` — the caller already has
+   *  this list (it is the same gallery data the wallet-detail page renders),
+   *  so this component does not fetch its own copy. Defaults to empty,
+   *  which renders an honest "no NFTs" state rather than nothing. */
+  nfts?: OwnedNft[];
 }
 
 type DistStep = 1 | 2 | 3;
@@ -125,7 +147,7 @@ function UnitLabel({ skin, size = 10 }: { skin: DistributeModalSkin; size?: numb
 }
 
 export default function DistributeModal({
-  wallets, onClose, skin = 'dashboard', lockedSourceId, enableTabs = false,
+  wallets, onClose, skin = 'dashboard', lockedSourceId, enableTabs = false, nfts = [],
 }: DistributeModalProps) {
   const c = SKIN[skin];
   const [tab, setTab] = useState<'funds' | 'nft'>('funds');
@@ -144,6 +166,20 @@ export default function DistributeModal({
   const [distKey, setDistKey] = useState('');
   const sendStartedRef = useRef(false);
   const [linkOpenError, setLinkOpenError] = useState<string | null>(null);
+
+  // Send NFT tab — single-item select (one transfer per confirm, matching
+  // `transfer_nft`'s signature), free-text destination (an NFT can go to any
+  // address in the envelope's scope, not just another imported wallet).
+  const [selectedNftKey, setSelectedNftKey] = useState<string | null>(null);
+  const [nftToAddress, setNftToAddress] = useState('');
+  const [nftPreview, setNftPreview] = useState<TransactionPreview | null>(null);
+  const [nftPreviewError, setNftPreviewError] = useState<string | null>(null);
+  const [nftPreviewBusy, setNftPreviewBusy] = useState(false);
+  const [nftSending, setNftSending] = useState(false);
+  const [nftState, setNftState] = useState<'queued' | 'submitting' | 'broadcast' | 'failed'>('queued');
+  const [nftHash, setNftHash] = useState<string | null>(null);
+  const [nftError, setNftError] = useState<string | null>(null);
+  const nftSendStartedRef = useRef(false);
 
   async function openInBrowser(url: string) {
     setLinkOpenError(null);
@@ -237,6 +273,72 @@ export default function DistributeModal({
   const canSend = !!source && !!distKey && !previewBusy && !previewError &&
     selectedList.length > 0 && selectedList.every(w => previews[w.id]?.authorized === true);
 
+  // ── Send NFT tab ──────────────────────────────────────────────────────
+  const selectedNft = nfts.find(n => nftKey(n) === selectedNftKey) ?? null;
+  const nftToTrimmed = nftToAddress.trim();
+  const nftAddressValid = ETH_ADDRESS_RE.test(nftToTrimmed);
+
+  const step1NftValid = !!sourceId && !!selectedNft && nftAddressValid;
+
+  // Same reasoning as `selfSendWarnings` above: the destination is free
+  // text here (not filtered from a list), so this is the only place the
+  // check happens, not a belt-and-suspenders backstop.
+  const nftSelfSendWarning = source && nftAddressValid && nftToTrimmed.toLowerCase() === source.address.toLowerCase()
+    ? 'This destination is the same address as the source. The transfer would only cost gas.'
+    : null;
+
+  // Mirrors the fund-tab preview effect: `transfer_nft` evaluates the
+  // envelope with `value_wei = 0` and empty calldata, exactly like this
+  // preview call, so a pass here is a real predictor of what Send will do.
+  useEffect(() => {
+    if (step !== 2 || tab !== 'nft') return;
+    if (!nftAddressValid) return;
+    let cancelled = false;
+    (async () => {
+      setNftPreviewBusy(true); setNftPreviewError(null);
+      try {
+        const preview = await previewTransaction({ to: nftToTrimmed, valueWei: '0' });
+        if (!cancelled) setNftPreview(preview);
+      } catch (e) {
+        if (!cancelled) setNftPreviewError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setNftPreviewBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, tab]);
+
+  const canSendNft = !!source && !!selectedNft && !!distKey && nftAddressValid &&
+    !nftPreviewBusy && !nftPreviewError && nftPreview?.authorized === true;
+
+  async function startNftSend() {
+    if (!canSendNft || nftSendStartedRef.current || !source || !selectedNft) return;
+    nftSendStartedRef.current = true;
+    setNftState('submitting'); setNftHash(null); setNftError(null); setNftSending(true); setStep(3);
+    try {
+      const hash = await transferNft(
+        source.address,
+        selectedNft.contract.address,
+        selectedNft.token_id,
+        nftToTrimmed,
+        nftTokenStandard(selectedNft.contract.token_type),
+        distKey,
+      );
+      setNftState('broadcast'); setNftHash(hash);
+    } catch (e) {
+      setNftState('failed'); setNftError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setNftSending(false);
+    }
+  }
+
+  function resetNftFlow() {
+    nftSendStartedRef.current = false;
+    setSelectedNftKey(null); setNftToAddress(''); setNftPreview(null); setNftPreviewError(null);
+    setNftState('queued'); setNftHash(null); setNftError(null);
+  }
+
   async function startSend() {
     // A ref, not `sending`: state updates are async and a double-click in the
     // same tick would otherwise broadcast twice.
@@ -274,30 +376,41 @@ export default function DistributeModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
-          <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Distribute Funds</h2>
+          <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>
+            {tab === 'nft' ? 'Send NFT' : 'Distribute Funds'}
+          </h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px', lineHeight: 1 }}>×</button>
         </div>
-        <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '4px' }}>
-          Send ETH from one wallet to one or more destinations
-        </p>
-        <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '20px', lineHeight: 1.5 }}>
-          The source wallet never appears in the destination list below — even if another entry shares its address.
-        </p>
+        {tab === 'nft' ? (
+          <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
+            Send one NFT directly from this wallet to another address — a wallet-to-wallet transfer, not a marketplace sale.
+          </p>
+        ) : (
+          <>
+            <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '4px' }}>
+              Send ETH from one wallet to one or more destinations
+            </p>
+            <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '20px', lineHeight: 1.5 }}>
+              The source wallet never appears in the destination list below — even if another entry shares its address.
+            </p>
+          </>
+        )}
 
         {enableTabs && (
           <div style={{ display: 'flex', gap: '16px', marginBottom: '18px', borderBottom: '1px solid var(--wr-border)' }}>
             <button
               type="button"
-              onClick={() => setTab('funds')}
-              style={{ ...tabBtnBase, color: tab === 'funds' ? 'var(--wr-text)' : 'var(--wr-text-3)', borderBottomColor: tab === 'funds' ? c.accent : 'transparent', cursor: 'pointer' }}
+              disabled={step !== 1}
+              onClick={() => { setTab('funds'); setStep(1); }}
+              style={{ ...tabBtnBase, color: tab === 'funds' ? 'var(--wr-text)' : 'var(--wr-text-3)', borderBottomColor: tab === 'funds' ? c.accent : 'transparent', cursor: step === 1 ? 'pointer' : 'not-allowed' }}
             >
               Send Funds
             </button>
             <button
               type="button"
-              disabled
-              title="Send NFT — not available yet"
-              style={{ ...tabBtnBase, color: 'var(--wr-text-4)', cursor: 'not-allowed' }}
+              disabled={step !== 1}
+              onClick={() => { setTab('nft'); setStep(1); }}
+              style={{ ...tabBtnBase, color: tab === 'nft' ? 'var(--wr-text)' : 'var(--wr-text-3)', borderBottomColor: tab === 'nft' ? c.accent : 'transparent', cursor: step === 1 ? 'pointer' : 'not-allowed' }}
             >
               Send NFT
             </button>
@@ -412,7 +525,71 @@ export default function DistributeModal({
               )}
             </div>
 
-            {skin === 'dashboard' ? (
+            {tab === 'nft' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ ...LABEL_S, marginBottom: '8px' }}>NFT</label>
+                  {nfts.length === 0 ? (
+                    <div style={{
+                      fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
+                      backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '14px 12px', textAlign: 'center',
+                    }}>
+                      No NFTs held — nothing to send from this wallet.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', maxHeight: '220px', overflowY: 'auto', opacity: !sourceId ? 0.4 : 1 }}>
+                      {nfts.map(n => {
+                        const k = nftKey(n);
+                        const isChecked = selectedNftKey === k;
+                        return (
+                          <div
+                            key={k}
+                            onClick={() => sourceId && setSelectedNftKey(id => id === k ? null : k)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              backgroundColor: isChecked ? 'var(--wr-accent-dim)' : 'var(--wr-surface-alt)',
+                              border: `1px solid ${isChecked ? 'var(--wr-accent)' : 'var(--wr-border)'}`,
+                              padding: '8px 10px', cursor: sourceId ? 'pointer' : 'not-allowed',
+                            }}
+                          >
+                            <NftThumb nft={n} size={28} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {n.name ?? `#${n.token_id}`}
+                              </div>
+                              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {n.contract.opensea_collection_name || n.contract.name || n.contract.address.slice(0, 8)}
+                              </div>
+                            </div>
+                            {isChecked && <span style={{ color: c.accent, fontSize: '12px', flexShrink: 0 }}>✓</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={LABEL_S}>To Address</label>
+                  <input
+                    type="text" placeholder="0x…" disabled={!sourceId}
+                    value={nftToAddress} onChange={e => setNftToAddress(e.target.value)}
+                    className={c.placeholderClass}
+                    style={{
+                      fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)',
+                      backgroundColor: 'var(--wr-surface-alt)', width: '100%', padding: '10px 12px', outline: 'none',
+                      border: `1px solid ${nftToTrimmed && !nftAddressValid ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}`,
+                    }}
+                  />
+                  {nftToTrimmed && !nftAddressValid && (
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>Invalid Ethereum address</div>
+                  )}
+                  {nftSelfSendWarning && (
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-warn)', marginTop: '4px' }}>{nftSelfSendWarning}</div>
+                  )}
+                </div>
+              </div>
+            ) : skin === 'dashboard' ? (
               <>
                 {/* TO: wallet grid */}
                 <div>
@@ -557,21 +734,96 @@ export default function DistributeModal({
                 color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
                 padding: '11px 0', cursor: 'pointer',
               }}>Cancel</button>
-              <button onClick={() => step1Valid && setStep(2)} style={{
-                flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: step1Valid ? c.onAccent : 'var(--wr-text-4)',
-                backgroundColor: step1Valid ? c.accent : 'var(--wr-overlay)',
-                border: 'none', padding: '11px 0',
-                cursor: step1Valid ? 'pointer' : 'not-allowed',
-              }}>
-                Review {selected.size > 0 ? `(${selected.size} wallet${selected.size > 1 ? 's' : ''})` : ''}
+              <button
+                onClick={() => { if (tab === 'nft' ? step1NftValid : step1Valid) setStep(2); }}
+                style={{
+                  flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+                  color: (tab === 'nft' ? step1NftValid : step1Valid) ? c.onAccent : 'var(--wr-text-4)',
+                  backgroundColor: (tab === 'nft' ? step1NftValid : step1Valid) ? c.accent : 'var(--wr-overlay)',
+                  border: 'none', padding: '11px 0',
+                  cursor: (tab === 'nft' ? step1NftValid : step1Valid) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {tab === 'nft' ? 'Review' : `Review ${selected.size > 0 ? `(${selected.size} wallet${selected.size > 1 ? 's' : ''})` : ''}`}
               </button>
             </div>
           </div>
         )}
 
         {/* ── Step 2 ── */}
-        {step === 2 && (
+        {step === 2 && tab === 'nft' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Source */}
+            <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px', marginBottom: '4px' }}>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>From</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)' }}>{source?.name}</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>
+                {source ? `${source.address.slice(0, c.fromAddrPrefixLen)}…${source.address.slice(-4)}` : ''}
+              </div>
+            </div>
+
+            {nftSelfSendWarning && (
+              <div style={{ border: '1px solid rgba(251,191,36,0.3)', backgroundColor: 'rgba(251,191,36,0.06)', padding: '10px 12px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-warn)', lineHeight: 1.6 }}>
+                · {nftSelfSendWarning}
+              </div>
+            )}
+
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>Sending</div>
+            {selectedNft && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
+                <NftThumb nft={selectedNft} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)' }}>{selectedNft.name ?? `#${selectedNft.token_id}`}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedNft.contract.address}</div>
+                </div>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)', border: '1px solid var(--wr-border)', padding: '2px 6px', flexShrink: 0 }}>
+                  {nftTokenStandard(selectedNft.contract.token_type)}
+                </span>
+              </div>
+            )}
+
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>To</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px', wordBreak: 'break-all' }}>
+              {nftToTrimmed}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 8px' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Gas estimate</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 <UnitLabel skin={skin} /></span>
+            </div>
+
+            {nftPreviewError && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(nftPreviewError)}</div>
+            )}
+            {!nftPreviewBusy && !nftPreviewError && nftPreview && nftPreview.authorized !== true && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                {explainSendError(nftPreview.reject_code ?? nftPreview.reject_reason ?? 'The envelope did not authorize this transfer.')}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <button onClick={() => setStep(1)} style={{
+                flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
+                color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
+                padding: '11px 0', cursor: 'pointer',
+              }}>Back</button>
+              <button
+                onClick={startNftSend}
+                disabled={!canSendNft}
+                style={{
+                  flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+                  color: c.step2ConfirmGreysOut ? (canSendNft ? c.onAccent : 'var(--wr-text-4)') : c.onAccent,
+                  backgroundColor: c.step2ConfirmGreysOut ? (canSendNft ? c.accent : 'var(--wr-overlay)') : c.accent,
+                  border: c.step2ConfirmGreysOut && !canSendNft ? '1px solid var(--wr-border)' : 'none',
+                  padding: '11px 0', cursor: canSendNft ? 'pointer' : 'not-allowed',
+                }}
+              >{nftPreviewBusy ? 'Checking…' : 'Confirm & Send'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2 (Send Funds) ── */}
+        {step === 2 && tab === 'funds' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Source */}
             <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px', marginBottom: '4px' }}>
@@ -640,7 +892,76 @@ export default function DistributeModal({
         )}
 
         {/* ── Step 3 ── */}
-        {step === 3 && (
+        {step === 3 && tab === 'nft' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
+              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{nftSending ? '⚡' : nftState === 'failed' ? '!' : '✓'}</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{nftSending ? 'Signing and broadcasting' : nftState === 'failed' ? 'Not sent' : 'Done'}</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
+                {nftSending
+                  ? 'One at a time — a second send from the same address would reuse the nonce.'
+                  : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
+              </div>
+            </div>
+            {selectedNft && (
+              <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <NftThumb nft={selectedNft} size={28} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{selectedNft.name ?? `#${selectedNft.token_id}`}</div>
+                      <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
+                        → {nftToTrimmed.slice(0, 6)}…{nftToTrimmed.slice(-4)}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap',
+                    color: nftState === 'broadcast' ? 'var(--wr-accent)' : nftState === 'submitting' ? c.submittingColor : nftState === 'failed' ? '#ff8a96' : 'var(--wr-text-3)' }}>
+                    {nftState === 'broadcast' ? 'Broadcast' : nftState === 'submitting' ? 'Signing…' : nftState === 'failed' ? 'Failed' : 'Queued'}
+                  </span>
+                </div>
+                {nftHash && (
+                  <button
+                    type="button"
+                    onClick={() => { void openInBrowser(`https://etherscan.io/tx/${nftHash}`); }}
+                    style={{
+                      display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px',
+                      color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none', background: 'none',
+                      border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>TXN:</span> {nftHash}
+                  </button>
+                )}
+                {nftError && (
+                  <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(nftError)}</div>
+                )}
+              </div>
+            )}
+            {linkOpenError && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{linkOpenError}</div>
+            )}
+            <button disabled={nftSending}
+              onClick={() => { resetNftFlow(); setStep(1); onClose(); }}
+              style={
+                c.step3ButtonStyle === 'filled'
+                  ? {
+                      width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+                      color: nftSending ? 'var(--wr-text-4)' : c.onAccent,
+                      backgroundColor: nftSending ? 'var(--wr-overlay)' : c.accent,
+                      border: 'none', padding: '11px 0', cursor: nftSending ? 'not-allowed' : 'pointer', marginTop: '8px',
+                    }
+                  : {
+                      width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
+                      color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
+                      padding: '11px 0', cursor: nftSending ? 'not-allowed' : 'pointer', marginTop: '8px',
+                    }
+              }>{nftSending ? 'Working…' : 'Done'}</button>
+          </div>
+        )}
+
+        {/* ── Step 3 (Send Funds) ── */}
+        {step === 3 && tab === 'funds' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
               <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{sending ? '⚡' : '✓'}</div>

@@ -16,6 +16,7 @@ import { loadAddressBook, saveAddressEntry, deleteAddressEntry, updateAddressEnt
 import { EMPTY_NFTS_RESPONSE, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import DistributeModal from '@/components/DistributeModal';
+import NftThumb from '@/components/NftThumb';
 
 // ─── Wallet Detail Client ─────────────────────────────────────────────────────
 //
@@ -1358,17 +1359,6 @@ function UnwiredNotice({ what }: { what: string }) {
   );
 }
 
-function NftThumb({ nft }: { nft: OwnedNft }) {
-  const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
-  return (
-    <div style={{ width: '36px', height: '36px', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#14161f', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {thumb
-        ? <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-        : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#555' }}>{(nft.name ?? '?')[0]}</span>}
-    </div>
-  );
-}
-
 function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
   const [prices, setPrices] = React.useState<Record<string, string>>({});
   const [marketplace, setMarketplace] = React.useState<'opensea' | 'blur'>('opensea');
@@ -2522,6 +2512,7 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
           skin="wallets"
           enableTabs
           lockedSourceId={wallet.id}
+          nfts={liveNfts ?? []}
           onClose={() => setShowDistribute(false)}
         />
       )}

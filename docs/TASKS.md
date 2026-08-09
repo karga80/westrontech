@@ -347,6 +347,97 @@ CTA'sının gerçekten Etherscan'ın solunda çıktığı ve modalı kaynak kili
 `npm run dev` ile `http://localhost:3000` açılıp elle bakılmalı (Send'e asla
 tıklanmadan, en fazla Confirm adımına kadar).
 
+**`forge` — T9b, Send NFT sekmesi — ⚠️ KISMEN BİTTİ (10.08.2026).** "Send NFT"
+sekmesi artık gerçek: backend'deki `transfer_nft` komutuna (`5582cf2`,
+`src-tauri/src/signing/mod.rs:364`) bağlandı. Tam parametre imzası:
+```rust
+pub async fn transfer_nft(
+    wallet_address: String,
+    contract_address: String,
+    token_id: String,
+    to: String,
+    token_standard: crate::nft::TokenStandard,  // "ERC721" | "ERC1155" (UPPERCASE serde)
+    amount: Option<String>,                      // yalnızca ERC-1155, verilmezse 1 varsayılır
+    api_key: String,
+    envelope_engine: tauri::State<...>,           // Tauri'nin kendi enjekte ettiği, JS'den gelmiyor
+) -> Result<String, String>
+```
+Akış Select→Confirm→Process (kararla aynı): Step 1'de kaynak cüzdanın
+gerçek NFT galerisinden (`liveNfts` — `getNftsForOwner`'ın döndürdüğü aynı veri,
+yeni bir API çağrısı **eklenmedi**) tek bir NFT seçiliyor ve alıcı adresi
+serbest metin olarak giriliyor; boş NFT listesi "No NFTs held — nothing to
+send from this wallet." diyor (sessizce boş grid değil). Step 2 (Confirm),
+`preview_transaction`'ı `to=alıcı, value_wei=0, calldata=""` ile çağırıyor —
+bu, `transfer_nft`'in içindeki gerçek `check_and_authorize` çağrısıyla
+**birebir aynı girdi**, yani Confirm'deki "authorized" sonucu gerçek bir
+tahmin, süslemeli bir onay değil. T6b'deki kendine-gönderim uyarısı burada da
+var (`nftSelfSendWarning`, adres bazlı, case-insensitive). Step 3, tek satırlık
+sonucu gösteriyor — T10'daki "TXN:" + tıklanabilir Etherscan linki deseni
+aynen tekrarlandı (`openExternalUrl`).
+
+Dosyalar:
+- `src/lib/tauri.ts` — `transferNft()` wrapper eklendi (Rust'a giden tek köprü
+  kuralına uyarak `invoke` burada çağrıldı, başka hiçbir dosyadan değil).
+- `src/components/DistributeModal.tsx` — "Send NFT" sekmesi artık `disabled`
+  değil; `nfts` prop'u eklendi (chan gerçek NFT listesini çağıran taraf besliyor);
+  Step 1/2/3 hem Send Funds hem Send NFT için ayrı dallara bölündü (sekme
+  değişimi yalnızca Step 1'deyken izinli — yarım kalmış bir akışın ortasında
+  sekme değiştirip karışık state göstermeyi engellemek için).
+- `src/components/NftThumb.tsx` — **yeni, paylaşılan** dosya. Daha önce
+  `WalletDetailClient.tsx` içinde özel (module-private) tanımlıydı; iki dosyanın
+  aynı thumbnail mantığını ayrı ayrı sürdürmesindense (CLAUDE.md'nin yasakladığı
+  "aynı işi yapan ikinci ekran" deseni) tek yere çıkarıldı, her iki dosya da
+  şimdi buradan import ediyor.
+- `src/app/wallet/[id]/WalletDetailClient.tsx` — `DistributeModal`'a
+  `nfts={liveNfts ?? []}` geçildi (yeni bir NFT-listeleme çağrısı **eklenmedi**,
+  sayfa zaten `getNftsForOwner`'dan gelen veriyi tutuyordu); yerel `NftThumb`
+  tanımı silinip paylaşılan bileşene yönlendirildi.
+
+**Bilinen sınırlama, bilerek ele alınmadı:** ERC-1155 için miktar (amount)
+seçici yok — ekran her zaman 1 adet gönderiyor (backend'in varsayılanı da bu).
+Bir cüzdanda aynı token id'den birden fazla kopya varsa kısmi transfer bu
+ekrandan yapılamaz. Görev talimatında istenmedi, kapsam dışı bırakıldı.
+
+**⚠️ Bulgu — muhtemel ikinci "Send NFT" yüzeyi (yeni iş, kuyruğa yazılıyor,
+bu oturumda dokunulmadı):** `WalletDetailClient.tsx`'te bu görevden önce de var
+olan `NftSendModal` (satır ~1530, Bulk Actions seçim çubuğundaki "Send" düğmesiyle
+açılıyor) aynı amaca hizmet ediyor — bir NFT'yi başka bir adrese göndermek —
+ama hâlâ devre dışı (`UnwiredNotice`, "Sending unavailable" düğmesi, dürüstçe
+"not wired to a signer yet" diyor, yalan söylemiyor). Artık ekranda **iki**
+"NFT gönder" girişi var: biri gerçek (Distribute → Send NFT), biri hâlâ sahte
+olduğunu itiraf eden bir iskelet. CLAUDE.md'nin "aynı işi yapan başka ekran
+var mı" kuralına göre bu iki yüzeyin birleştirilmesi (muhtemelen
+`NftSendModal`'ın kaldırılıp Bulk Actions'taki "Send" düğmesinin de Distribute
+modalını NFT'si önceden seçili şekilde açması) ayrı bir görev olmalı — bu
+oturumun kapsamı yalnızca Distribute modalıydı, `NftSendModal`'a dokunulmadı.
+
+Doğrulanan: `npx tsc --noEmit` temiz, `cd src-tauri && cargo check` temiz
+(Rust'a dokunulmadı, komut zaten vardı), `npx eslint` yeni hata/uyarı eklemedi
+(`git stash` ile taban alınıp karşılaştırıldı — taban da 1 hata + 4 uyarı,
+bu değişiklikten sonra da 1 hata + 4 uyarı; `WalletDetailClient.tsx`'teki
+`AddressBookTab` `setState`-in-effect hatası ve `DistributeModal.tsx`'teki
+`no-unused-expressions` uyarısı ikisi de bu görevden önce vardı, konumları
+değişmedi; `NftThumb.tsx`'teki yeni `no-img-element` uyarısı, dosyanın
+taşındığı `WalletDetailClient.tsx`'teki eşdeğerinin yerini aldı, net sayı
+artmadı), `npx jest` 24/24 geçti.
+
+Gerçek bir NFT gerçek bir adrese **bu oturumda hiç gönderilmedi** — görev
+talimatı böyle emrediyordu, `transfer_nft` yalnızca imza/derleme/tip
+seviyesinde doğrulandı (backend tarafı zaten `5582cf2`'de `cargo test`
+93/93 ile doğrulanmıştı, o teste bu oturumda dokunulmadı).
+
+**DOĞRULANAMADI:** Bu ortamda gerçek bir tarayıcıya tıklayan bir araç yoktu
+(GUI otomasyon aracı bulunamadı) — Select→Confirm adımlarının canlı uygulamada
+gerçekten NFT listesini gösterdiği, alıcı adres doğrulamasının ekranda
+çalıştığı, Confirm adımındaki envelope-onay/red mesajının göründüğü **gözle
+hiç görülmedi**. `npm run dev`/`tauri dev` zaten çalışıyordu (port 3000, PID
+37529 next / 37340 tauri) — kapatılmadı, ikinci bir instance başlatılmadı;
+`curl` ile `/` (200) ve `/wallet/test-id` (redirect sonrası 200) sunucu
+tarafında çökme olmadığını doğruladı ama bu istemci-render bir ekran olduğu
+için NFT listesinin gerçekten göründüğünü kanıtlamıyor. **Kalan iş:**
+Accessibility izni netleşince (T1/T10'daki aynı blokaj) biri bu ekranı fiilen
+açıp NFT seçip Confirm'e kadar gitsin, gerçek Send'e asla tıklamadan.
+
 ---
 
 ## T10 — Etherscan link'leri eksik  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi

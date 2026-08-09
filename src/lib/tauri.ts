@@ -400,6 +400,38 @@ export async function sendEth(
   });
 }
 
+/** Matches `nft::TokenStandard`'s `#[serde(rename_all = "UPPERCASE")]` on the
+ *  Rust side — the wire value is the bare variant name, no hyphen. */
+export type NftTokenStandard = 'ERC721' | 'ERC1155';
+
+/**
+ * Direct wallet-to-wallet NFT transfer (`safeTransferFrom`) — not a
+ * marketplace sale. Goes through the same spend envelope as `sendEth`,
+ * called with `value_wei = 0` and `to` set to the human recipient, not the
+ * NFT contract; the envelope's scope/kill-switch/expiry checks apply exactly
+ * as they do for an ETH send. `amount` only matters for ERC-1155 (quantity
+ * of this token id to move); the backend defaults it to 1 when omitted.
+ */
+export async function transferNft(
+  walletAddress: string,
+  contractAddress: string,
+  tokenId: string,
+  to: string,
+  tokenStandard: NftTokenStandard,
+  apiKey: string,
+  amount?: string
+): Promise<string> {
+  return invoke<string>('transfer_nft', {
+    walletAddress,
+    contractAddress,
+    tokenId,
+    to,
+    tokenStandard,
+    amount: amount ?? null,
+    apiKey,
+  });
+}
+
 export async function estimateGas(
   to: string,
   valueWei: string,
