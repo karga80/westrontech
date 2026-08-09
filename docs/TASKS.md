@@ -207,10 +207,27 @@ tek "Distribute" CTA'sı, header'da Etherscan'ın solunda; modal iki sekmeli
 cap/allowlist eklenmeyecek; Confirm adımı zorunlu (Select→Confirm→Process).
 → `vault` (NFT transferi için Tauri komutu, zarf çağrısı) → `forge` (ortak bileşene
 çıkarma + UI) → `vera`
+
+**⚠️ DÜZELTME (10.08.2026, scout doğrulaması):** D2'deki "3 kopya" varsayımı
+yanlıştı. Gerçekte sadece **2 kopya** birebir aynı mantığı tekrarlıyor
+(`src/app/page.tsx:547`, `src/app/wallets/page.tsx:374` — sadece bunlar tek
+ortak bileşene çıkarılacak). Üçüncü yer, `src/app/bulk/distribute/page.tsx:78`,
+yapısal olarak farklı: envelope/gönderim entegrasyonu hiç yok, ekran açıkça
+"bu sürümde gönderim aktif değil" diyor; buna karşılık diğer ikisinde olmayan
+gerçek bakiye (ETH+WETH), gerçek gas tahmini ve Address Book alıcı seçimi var.
+**Emir'in kararı (10.08.2026):** bu ekran da gerçek gönderime bağlansın —
+mekanik olarak ortak bileşene sokulmayacak, `previewTransaction`/`runDistribution`
+(`src/lib/distribute.ts`) ile aynı zarf-korumalı gönderim yoluna kendi
+UI'ında (bakiye/gas/address-book özellikleri korunarak) bağlanacak. Bu üçüncü
+iş kalemi de T9 kapsamına eklendi — aşağıdaki "Bitti sayılır" listesi buna göre
+genişletildi.
 **Bitti sayılır:** CTA wallet detail'de görünüyor, fund transfer akışı çalışıyor,
 NFT transfer akışı en azından preview/dry-run seviyesinde doğrulanmış, zarf
-kapsıyor, `tsc` + `cargo check` temiz. Gerçek NFT gönderimi Emir onayı olmadan
-"bitti" sayılmaz — T8'e benzer şekilde onay bekleyen adım varsa açıkça yazılır.
+kapsıyor, `bulk/distribute/page.tsx` artık gerçek zarf-korumalı gönderime bağlı
+(kendi bakiye/gas/address-book özellikleri korunarak), `tsc` + `cargo check`
+temiz. Gerçek NFT gönderimi ve `bulk/distribute`'tan gerçek ilk gönderim Emir
+onayı olmadan "bitti" sayılmaz — T8'e benzer şekilde onay bekleyen adım varsa
+açıkça yazılır.
 
 **`vault` backend kısmı — ⚠️ KISMEN BİTTİ (10.08.2026).** Yeni Tauri komutu
 `transfer_nft` (`src-tauri/src/signing/mod.rs`) + calldata encoder
