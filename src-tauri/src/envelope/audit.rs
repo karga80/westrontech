@@ -23,10 +23,17 @@ impl AuditLog {
     pub fn write_entry(&self, entry: &AuditEntry) -> std::io::Result<()> {
         let date = Utc::now().format("%Y-%m-%d").to_string();
         let log_file = self.log_dir.join(format!("audit-{}.jsonl", date));
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file)?;
+        // The audit trail holds no key material, but it does hold the user's
+        // addresses and transaction values. Create it 0600 rather than letting
+        // the umask decide — same rule as every other file this app writes.
+        let mut options = OpenOptions::new();
+        options.create(true).append(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&log_file)?;
         let line = serde_json::to_string(entry)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         writeln!(file, "{}", line)?;
