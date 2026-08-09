@@ -1,27 +1,48 @@
-// Wallet persistence — localStorage-backed. Real wallets only; no seeded mock data.
+// walletStore — localStorage-backed wallet registry.
+//
+// `kind` separates owned wallets (private key imported, can sign) from
+// watched wallets (read-only, monitoring only). Existing entries without a
+// `kind` field are treated as 'owned' for backward compatibility.
+//
+// Usage:
+//   loadOwnedWallets()   — dashboard, bulk actions, signing flows
+//   loadWatchedWallets() — monitor page wallet watchlist
+//   loadWallets()        — all wallets (alerts, generic queries)
+//
+// Westron seeds NO fake wallets — the app starts empty and shows only wallets
+// the user adds.
 
 export interface StoredWallet {
   id: string;
   name: string;
   address: string;
+  /** 'owned' = private key imported (can sign). 'watched' = read-only monitor. */
+  kind: 'owned' | 'watched';
+  /** User-assigned labels for watched wallets (e.g. 'Whale', 'Trader'). */
+  tags?: string[];
 }
 
 const STORAGE_KEY = 'westron_wallets';
 
-// Kept as an empty export for backward-compat with any importer. Westron seeds
-// NO fake wallets — the app starts empty and shows only wallets the user adds.
+/** Kept as an empty export for backward-compat with any importer. */
 export const DEFAULT_WALLETS: StoredWallet[] = [];
 
-// A 64-hex string is never a valid Ethereum address. An earlier build stored
-// the private key in the address field, so any such entry is a leaked key: drop
-// it on read and rewrite the store, rather than ever sending it to an RPC.
+const VALID_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+// A 64-hex string is never a valid address, and an earlier build stored the
+// private key in the address field. VALID_ADDRESS already drops such an entry,
+// but a silent drop would hide the fact that a key leaked into local storage —
+// and that key must be treated as compromised. Detect it separately so the user
+// is told.
 const LEAKED_KEY_RE = /^(0x)?[0-9a-fA-F]{64}$/;
 
-function sanitize(wallets: StoredWallet[]): { clean: StoredWallet[]; removed: number } {
-  const clean = wallets.filter(w => !LEAKED_KEY_RE.test((w.address ?? '').trim()));
-  return { clean, removed: wallets.length - clean.length };
+/** Migrate legacy entries that predate the `kind` field — default to 'owned'. */
+function ensureKind(w: StoredWallet): StoredWallet {
+  if (!w.kind) return { ...w, kind: 'owned' };
+  return w;
 }
 
+/** All wallets (owned + watched). Use specific loaders where possible. */
 export function loadWallets(): StoredWallet[] {
   try {
     if (typeof window === 'undefined') return [];
@@ -29,19 +50,35 @@ export function loadWallets(): StoredWallet[] {
     if (raw) {
       const parsed = JSON.parse(raw) as StoredWallet[];
       if (Array.isArray(parsed)) {
-        const { clean, removed } = sanitize(parsed);
-        if (removed > 0) {
-          saveWallets(clean);
+        const leaked = parsed.filter(w => LEAKED_KEY_RE.test((w.address ?? '').trim())).length;
+        if (leaked > 0) {
           console.warn(
-            `[westron] Removed ${removed} wallet entry/entries whose address field held a private key. ` +
+            `[westron] Removed ${leaked} wallet entry/entries whose address field held a private key. ` +
             `Those keys must be considered compromised — move any funds and re-import from a new key.`
           );
         }
-        return clean;
+        const valid = parsed
+          .filter(w => VALID_ADDRESS.test((w.address ?? '').trim()))
+          .map(ensureKind);
+        // Persist the migration if any entry lacked a kind field or was dropped.
+        if (valid.length !== parsed.length || valid.some((w, i) => !('kind' in (parsed[i] ?? {})))) {
+          saveWallets(valid);
+        }
+        return valid;
       }
     }
   } catch {}
   return [];
+}
+
+/** Wallets with imported private keys — use in dashboard, bulk, signing flows. */
+export function loadOwnedWallets(): StoredWallet[] {
+  return loadWallets().filter(w => w.kind === 'owned');
+}
+
+/** Watch-only wallets — use in the Monitor page wallet watchlist. */
+export function loadWatchedWallets(): StoredWallet[] {
+  return loadWallets().filter(w => w.kind === 'watched');
 }
 
 export function saveWallets(wallets: StoredWallet[]): void {
@@ -52,7 +89,6 @@ export function saveWallets(wallets: StoredWallet[]): void {
 
 export function addWallet(wallet: StoredWallet): void {
   const wallets = loadWallets();
-  // Prevent duplicates by address
   if (wallets.some(w => w.address.toLowerCase() === wallet.address.toLowerCase())) return;
   wallets.push(wallet);
   saveWallets(wallets);
@@ -62,7 +98,9 @@ export function removeWallet(id: string): void {
   saveWallets(loadWallets().filter(w => w.id !== id));
 }
 
-export function updateWallet(id: string, patch: Partial<Pick<StoredWallet, 'name' | 'address'>>): void {
+export function updateWallet(
+  id: string,
+  patch: Partial<Pick<StoredWallet, 'name' | 'address' | 'tags'>>,
+): void {
   saveWallets(loadWallets().map(w => w.id === id ? { ...w, ...patch } : w));
 }
-

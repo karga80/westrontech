@@ -36,6 +36,26 @@ export interface TrackedNft {
 
 const STORAGE_KEY = 'westron_tracked_nfts';
 
+// In-memory cache — invalidated on every store write.
+// Avoids JSON.parse on every isTracked() call (called per NFT card render).
+let _cache: Set<string> | null = null;
+
+function getCache(): Set<string> {
+  if (_cache === null) {
+    _cache = new Set(loadTrackedNfts().map(n => n.id));
+  }
+  return _cache;
+}
+
+function invalidateCache(): void {
+  _cache = null;
+}
+
+/** @internal Exposed for unit tests only — resets the in-memory cache. */
+export function _resetCacheForTesting(): void {
+  _cache = null;
+}
+
 export const DEFAULT_NOTIFICATIONS: TrackedNftNotifications = {
   onListed: true,
   onListedBelow: null,
@@ -68,12 +88,14 @@ function saveTrackedNfts(list: TrackedNft[]): void {
     // Storage full / quota exceeded — fail silently; the UI still reflects state
     // via the in-memory subscribers.
   }
+  // Rebuild cache directly from the saved list — avoids a re-read on next isTracked().
+  _cache = new Set(list.map(n => n.id));
   notify();
 }
 
 export function isTracked(contract: string, tokenId: string): boolean {
   const id = trackedNftId(contract, tokenId);
-  return loadTrackedNfts().some(n => n.id === id);
+  return getCache().has(id);
 }
 
 export function addTrackedNft(

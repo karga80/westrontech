@@ -107,7 +107,9 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
               walletAddress,
               contractAddress: nft.collection, // placeholder until real contract addresses are stored
               tokenId: String(nft.id),
-              priceEth: parseFloat(prices[id] || String(nft.floor)),
+              // nft.floor may be undefined if the API field is missing — fall back to 0
+              // rather than letting parseFloat("undefined") silently produce NaN.
+              priceEth: parseFloat(prices[id] || String(nft.floor ?? 0)) || 0,
               marketplace: marketplace.toLowerCase() === 'blur' ? 'blur' : 'opensea',
               expiryHours: 72,
               apiKey,
@@ -287,7 +289,8 @@ export default function BulkListPage() {
   // Final filtered list
   const visibleNfts = walletNfts.filter(n => activeCollections.has(n.collection));
 
-  const autoPrice = (nft: NFT) => (nft.floor * (1 + (parseFloat(adjustment) || 0) / 100)).toFixed(2);
+  // nft.floor typed as number but may be undefined at runtime from API/mock — coerce to 0.
+  const autoPrice = (nft: NFT) => ((nft.floor ?? 0) * (1 + (parseFloat(adjustment) || 0) / 100)).toFixed(2);
 
   const toggleWallet = (id: string) => {
     setActiveWallets(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -495,8 +498,8 @@ export default function BulkListPage() {
                 const isSel     = selected.has(nft.id);
                 const isListed  = nft.listed || listedNfts.has(nft.id);
                 const dispPrice = listedNfts.has(nft.id) ? listedPrices[nft.id] : nft.listedPrice;
-                const rankNum   = parseInt(nft.rank.replace(/,/g, ''));
-                const rankColor = rankNum < 500 ? '#f97316' : rankNum < 1500 ? '#90a6ff' : '#6e7590';
+                const rankNum   = parseInt(nft.rank.replace(/,/g, ''), 10);
+                const rankColor = isNaN(rankNum) ? '#6E6E6E' : rankNum < 500 ? '#f97316' : rankNum < 1500 ? '#60a5fa' : '#6E6E6E';
                 const isFlipped = flippedCards.has(nft.id);
                 const traits    = getNftTraits(nft);
 

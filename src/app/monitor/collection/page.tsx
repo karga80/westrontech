@@ -589,8 +589,10 @@ function MonitorCollectionInner() {
           const toks = await getTokenBalances(w.address, apiKey);
           if (cancelled) return;
           const wethTok = toks.find(t => t.contract_address.toLowerCase() === WETH);
+          // Number(BigInt) loses precision above Number.MAX_SAFE_INTEGER (~9000 ETH).
+          // Divide in BigInt first (to micro-ETH) then convert — safe to ~9M ETH.
           const weth = wethTok?.token_balance && wethTok.token_balance !== '0x0' && wethTok.token_balance !== '0x00'
-            ? Number(BigInt(wethTok.token_balance)) / 1e18
+            ? Number(BigInt(wethTok.token_balance) / BigInt('1000000000000')) / 1_000_000
             : 0;
           setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), weth } }));
         } catch { failed += 1; }

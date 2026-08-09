@@ -10,6 +10,8 @@ const NAV_LINKS = [
   { label: 'Dashboard', href: '/',        pro: false },
   { label: 'Monitor',   href: '/monitor', pro: true  },
   { label: 'Bulk',      href: '/bulk',    pro: true  },
+  { label: 'Tasks',     href: '/tasks',     pro: true  },
+  { label: 'Sentiment', href: '/sentiment', pro: true  },
 ];
 
 

@@ -226,12 +226,13 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                     // Address is derived from the key, never taken from the form.
                     const cleanKey = normalizeKey(key);
                     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+                    // The address is derived from the key, never taken from the form.
                     let resolved = await deriveAddress(key);
                     if (inTauri) resolved = await importWallet({ private_key_hex: cleanKey });
                     if (addr && addr.toLowerCase() !== resolved.toLowerCase()) {
                       setImportError(`Imported as ${resolved} — derived from the private key.`);
                     }
-                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: resolved });
+                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: resolved, kind: 'owned' });
                     onAdded();
                     onClose();
                   } catch (e) {
@@ -240,7 +241,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                     setImporting(false);
                   }
                 } else {
-                  persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+                  persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr, kind: 'watched' });
                   onAdded();
                   onClose();
                 }

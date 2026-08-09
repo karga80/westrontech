@@ -4,22 +4,37 @@ import Link from 'next/link';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   getPortfolioSnapshot, getAssetTransfers, loadAlchemyKey, startBackgroundPolling,
-  realtimeInit, realtimeSetWatchSet,
-  type AssetTransfer, type PortfolioSnapshot,
+  realtimeInit, realtimeSetWatchSet, getPnlSummary,
+  type AssetTransfer, type PortfolioSnapshot, type PnlSummary,
 } from '@/lib/tauri';
 import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
-import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
+import { loadWallets, loadOwnedWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
+import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
+import { useTheme } from '@/lib/themeContext';
+import EthIcon from '@/components/EthIcon';
 import { importWallet } from '@/lib/tauri';
-import { deriveAddress, isValidAddress, normalizeKey } from '@/lib/walletImport';
+import { normalizeKey } from '@/lib/walletImport';
 import {
   runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
   type SendRow, type TransactionPreview,
 } from '@/lib/distribute';
-import { EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
-import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
-import { useTheme } from '@/lib/themeContext';
-import EthIcon from '@/components/EthIcon';
+import { formatBlockNum, parseHexBlock, formatChangePct } from '@/lib/formatters';
 
+// ─── Daily snapshot helpers (24h change) ──────────────────────────────────────
+
+const DAILY_SNAP_KEY = 'westron_daily_snap';
+interface DailySnap { date: string; values: Record<string, number> }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function loadDailySnap(): DailySnap | null {
+  if (typeof window === 'undefined') return null;
+  try { return JSON.parse(localStorage.getItem(DAILY_SNAP_KEY) ?? 'null'); } catch { return null; }
+}
+function writeDailySnap(snap: DailySnap) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DAILY_SNAP_KEY, JSON.stringify(snap));
+}
+
+/** Number of transactions shown in the collapsed preview before "Show all". */
 const PREVIEW_COUNT = 5;
 
 interface Wallet {
@@ -33,15 +48,12 @@ interface Tx {
   age: string; from: string; to: string; token: string; amount: string; gas: string;
 }
 
-const WALLETS: Wallet[] = [];
-
-const TRANSACTIONS: Tx[] = [];
 
 // ─── Live data helpers ──────────────────────────────────────────────────────
 
 // Map Alchemy AssetTransfer → internal Tx shape
 function mapTransfer(t: AssetTransfer, walletAddress: string): Tx {
-  const blockDec = parseInt(t.block_num, 16);
+  const blockDec = parseHexBlock(t.block_num);
   const isOutgoing = t.from.toLowerCase() === walletAddress.toLowerCase();
   const typeMap: Record<string, keyof typeof TX_TYPE_VARIANT> = {
     external: isOutgoing ? 'Sent' : 'Receive',
@@ -79,7 +91,10 @@ function mapTransfer(t: AssetTransfer, walletAddress: string): Tx {
 }
 
 // Build a Wallet display object from stored wallet + live snapshot
-function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: number): Wallet {
+function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, baselineUsd: number | null): Wallet {
+  const currentUsd = snap?.portfolio_value_usd ?? 0;
+  const change = baselineUsd != null ? currentUsd - baselineUsd : 0;
+  const changePct = baselineUsd != null && baselineUsd > 0 ? (change / baselineUsd) * 100 : 0;
   return {
     id: stored.id,
     name: stored.name,
@@ -88,18 +103,17 @@ function buildWallet(stored: StoredWallet, snap: PortfolioSnapshot | null, idx: 
       : stored.address,
     rawAddress: stored.address,
     badge: 'ETH',
-    usdValue:   snap?.portfolio_value_usd ?? 0,
-    change:     0,   // 24h change not available from Alchemy without extra call
-    changePct:  0,
-    nfts:       snap?.nft_count ?? 0,
-    floorPnl:   0,
-    coins:      snap?.token_count ?? 0,
-    pnl:        0,
+    usdValue:  currentUsd,
+    change,
+    changePct,
+    nfts:      snap?.nft_count ?? 0,
+    floorPnl:  0,
+    coins:     snap?.token_count ?? 0,
+    pnl:       0,
   };
 }
 
-// Direction colour: green up / red down. Purple is brand-only, never data.
-function pnlColor(n: number) { return n >= 0 ? 'var(--wr-buy-text)' : 'var(--wr-sell-text)'; }
+function pnlColor(n: number) { return n >= 0 ? 'var(--wr-accent)' : '#f87171'; }
 function pnlText(n: number) {
   const abs = Math.abs(n).toLocaleString();
   return n >= 0 ? `+$${abs}` : `-$${abs}`;
@@ -201,7 +215,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
         </div>
 
         {error && (
-          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginBottom: '16px' }}>
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#f87171', marginBottom: '16px' }}>
             {error}
           </div>
         )}
@@ -214,7 +228,7 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
           }}>Cancel</button>
           <button onClick={handleSave} style={{
             flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-            color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
+            color: '#000000', backgroundColor: '#BEFF00', border: 'none',
             padding: '11px 0', cursor: 'pointer',
           }}>Save Changes</button>
         </div>
@@ -224,188 +238,112 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
 }
 
 // ─── Wallet Card ───────────────────────────────────────────────────────────
-// Brand v2 §6 "Wallet card". Identity → address → balance → change → 2-cell
-// breakdown → Edit + ··· menu. Delete lives in the menu with typed
-// confirmation, never on the card face. The whole card opens wallet detail;
-// inner actions swallow the click.
-
-// Chain identity dot — colour is identity, never direction (brand §series).
-const CHAIN_DOT: Record<string, string> = {
-  ETH: '#7c5cff', WETH: '#7c5cff',
-  BNB: '#f6c445', BSC: '#f6c445',
-  MATIC: '#2fc4d6', POLYGON: '#2fc4d6',
-  ARB: '#2fc4d6', OP: '#ff8a5b', BASE: '#5b7cfa',
-};
 
 function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boolean; onDelete?: () => void; onEdit?: () => void }) {
   const chg = pnlColor(w.change);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [typed, setTyped] = useState('');
-  const menuRef = useRef<HTMLDivElement>(null);
-  const dotColor = CHAIN_DOT[w.badge?.toUpperCase()] ?? '#7c5cff';
-
-  // Split balance so the cents can be dimmed (brand §6.3).
-  const [whole, cents] = w.usdValue
-    .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    .split('.');
-
-  // Close the ··· menu on outside click.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuOpen]);
-
-  const swallow = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
-
   return (
     <div
-      className="flex flex-col transition-colors duration-150"
-      style={{ backgroundColor: 'var(--wr-row)', border: '1px solid rgba(242,242,247,.1)', borderRadius: '12px', position: 'relative' }}
-      onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'rgba(242,242,247,.2)'; el.style.backgroundColor = 'var(--wr-row-zebra)'; }}
-      onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'rgba(242,242,247,.1)'; el.style.backgroundColor = 'var(--wr-row)'; }}
+      className="flex flex-col border transition-all duration-150"
+      style={{ height: '239px', backgroundColor: 'var(--wr-surface)', borderColor: 'var(--wr-border)', position: 'relative' }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = 'var(--wr-border-hover)';
+        el.style.backgroundColor = 'var(--wr-hover-bg)';
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = 'var(--wr-border)';
+        el.style.backgroundColor = 'var(--wr-surface)';
+      }}
     >
       {/* Loading shimmer */}
       {loading && (
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-row)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, borderRadius: '12px' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--wr-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, borderRadius: 'inherit' }}>
           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', letterSpacing: '2px' }}>LOADING…</span>
         </div>
       )}
 
-      {/* Whole card opens wallet detail */}
-      <Link href={`/wallet/detail?id=${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '16px 16px 0', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
+      {/* Clickable area — navigates to wallet detail */}
+      <Link href={`/wallet/${w.id}`} style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '20px', paddingBottom: '12px', textDecoration: 'none', minHeight: 0, background: 'transparent' }}>
 
-        {/* 1 — Identity: name + chain badge */}
-        <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
-          <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(242,242,247,.06)', border: '1px solid rgba(242,242,247,.12)', borderRadius: '99px', padding: '3px 9px 3px 7px', fontSize: '10.5px', fontWeight: 600, letterSpacing: '.04em', color: 'var(--wr-text-2)' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '99px', background: dotColor }} />
-            {w.badge}
+      {/* Header */}
+      <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
+        <span style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>
+          {w.name}
+        </span>
+        <Tag variant={WALLET_TOKEN_VARIANT[w.badge] ?? 'neutral'}>{w.badge}</Tag>
+      </div>
+
+      {/* Address */}
+      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '8px' }}>
+        {w.address}
+      </div>
+
+      {/* Balance */}
+      <div style={{ marginBottom: '4px' }}>
+        <div style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 600, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>
+          ${w.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        <div className="flex items-center" style={{ gap: '4px' }}>
+          <span style={{ color: chg, fontSize: '10px' }}>{w.change >= 0 ? '↑' : '↓'}</span>
+          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: chg, fontVariantNumeric: 'tabular-nums' }}>
+            {w.change >= 0 ? '+' : ''}${Math.abs(w.change).toLocaleString()} ({formatChangePct(w.changePct)})
           </span>
-        </div>
-
-        {/* 2 — Address (click to copy) */}
-        <div
-          onClick={e => { swallow(e); if (w.rawAddress) navigator.clipboard?.writeText(w.rawAddress); }}
-          title="Click to copy"
-          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11.5px', color: 'var(--wr-text-3)', marginBottom: '14px', cursor: 'copy', width: 'fit-content' }}
-        >
-          {w.address}
-        </div>
-
-        {/* 3 — Balance, cents dimmed */}
-        <div style={{ fontFamily: 'var(--font-space)', fontSize: '26px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>
-          ${whole}<span style={{ color: 'var(--wr-text-3)', fontSize: '17px' }}>.{cents}</span>
-        </div>
-
-        {/* 4 — Change: arrow + amount + percentage, direction colour */}
-        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: chg, margin: '9px 0 14px', fontVariantNumeric: 'tabular-nums' }}>
-          {w.change >= 0 ? '↑' : '↓'} {w.change >= 0 ? '+' : '−'}${Math.abs(w.change).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({w.change >= 0 ? '+' : ''}{w.changePct.toFixed(2)}%)
-        </div>
-
-        {/* 5 — Breakdown: two cells, count folded into label */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '1px solid rgba(242,242,247,.08)' }}>
-          <div style={{ padding: '11px 0', borderRight: '1px solid rgba(242,242,247,.08)' }}>
-            <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: '5px' }}>{w.nfts} NFTs · floor</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: pnlColor(w.floorPnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.floorPnl)}</div>
-          </div>
-          <div style={{ padding: '11px 0 11px 12px' }}>
-            <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: '5px' }}>{w.coins} tokens · pnl</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: pnlColor(w.pnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.pnl)}</div>
-          </div>
-        </div>
-      </Link>
-
-      {/* 6 — Actions: Edit link + ··· menu */}
-      <div className="flex items-center justify-between" style={{ borderTop: '1px solid rgba(242,242,247,.08)', padding: '11px 16px', fontSize: '12.5px', position: 'relative' }}>
-        <button
-          onClick={e => { swallow(e); onEdit?.(); }}
-          className="cursor-pointer transition-opacity hover:opacity-80"
-          style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: 'var(--wr-accent-nav)', background: 'none', border: 'none', padding: 0 }}
-        >
-          Edit
-        </button>
-        <div ref={menuRef} style={{ position: 'relative' }}>
-          <button
-            onClick={e => { swallow(e); setMenuOpen(v => !v); }}
-            aria-label="More actions"
-            className="cursor-pointer transition-colors"
-            style={{ fontSize: '15px', lineHeight: 1, color: menuOpen ? 'var(--wr-text)' : 'var(--wr-text-3)', background: 'none', border: 'none', padding: '0 4px' }}
-          >
-            ···
-          </button>
-          {menuOpen && (
-            <div
-              onClick={swallow}
-              style={{ position: 'absolute', right: 0, bottom: 'calc(100% + 6px)', minWidth: '148px', background: 'var(--wr-surface)', border: '1px solid rgba(242,242,247,.12)', borderRadius: '8px', overflow: 'hidden', zIndex: 20, boxShadow: 'none' }}
-            >
-              <button
-                onClick={e => { swallow(e); setMenuOpen(false); onEdit?.(); }}
-                className="w-full text-left cursor-pointer transition-colors"
-                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-row-hover)'}
-                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'}
-                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-text)', background: 'transparent', border: 'none', padding: '10px 12px', display: 'block' }}
-              >
-                Edit wallet
-              </button>
-              <button
-                onClick={e => { swallow(e); setMenuOpen(false); setTyped(''); setConfirmOpen(true); }}
-                className="w-full text-left cursor-pointer transition-colors"
-                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-sell-tint)'}
-                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'}
-                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-sell-text)', background: 'transparent', border: 'none', borderTop: '1px solid rgba(242,242,247,.08)', padding: '10px 12px', display: 'block' }}
-              >
-                Delete wallet
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Delete — typed confirmation (brand §6.6: never on the card face) */}
-      {confirmOpen && (
-        <div
-          className="fixed inset-0 flex items-center justify-center z-[400]"
-          style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }}
-          onMouseDown={e => { if (e.target === e.currentTarget) setConfirmOpen(false); }}
-        >
-          <div style={{ width: '380px', background: 'var(--wr-surface)', border: '1px solid var(--wr-border)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-space)', fontSize: '17px', fontWeight: 600, color: 'var(--wr-text)', marginBottom: '6px' }}>Delete wallet</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', color: 'var(--wr-text-2)', lineHeight: 1.6 }}>
-                This removes <span style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{w.name}</span> from Westron. Your keys and on-chain funds are untouched. Type the wallet name to confirm.
-              </div>
-            </div>
-            <input
-              autoFocus
-              value={typed}
-              onChange={e => setTyped(e.target.value)}
-              placeholder={w.name}
-              className="focus:border-[#7c5cff]"
-              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text)', background: 'var(--wr-row)', border: '1px solid var(--wr-border)', borderRadius: '8px', padding: '10px 12px', outline: 'none' }}
-            />
-            <div className="flex items-center justify-end" style={{ gap: '8px' }}>
-              <button
-                onClick={() => setConfirmOpen(false)}
-                className="cursor-pointer"
-                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: 'var(--wr-text-2)', background: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', borderRadius: '8px', padding: '8px 14px' }}
-              >
-                Cancel
-              </button>
-              <button
-                disabled={typed.trim() !== w.name}
-                onClick={() => { setConfirmOpen(false); onDelete?.(); }}
-                className="transition-opacity"
-                style={{ fontFamily: 'var(--font-inter)', fontSize: '12.5px', fontWeight: 600, color: typed.trim() === w.name ? '#2b070c' : 'var(--wr-text-3)', background: typed.trim() === w.name ? 'var(--wr-sell)' : 'var(--wr-overlay)', border: '1px solid ' + (typed.trim() === w.name ? 'var(--wr-sell)' : 'var(--wr-border)'), borderRadius: '8px', padding: '8px 14px', cursor: typed.trim() === w.name ? 'pointer' : 'not-allowed' }}
-              >
-                Delete wallet
-              </button>
-            </div>
+      {/* Stats row */}
+      <div className="flex items-start mt-auto pt-3" style={{ borderTop: '1px solid var(--wr-border)', gap: '0' }}>
+        <div className="flex flex-1" style={{ gap: '20px' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>NFTs</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>{w.nfts}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Floor PnL</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: pnlColor(w.floorPnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.floorPnl)}</div>
           </div>
         </div>
-      )}
+        <div style={{ width: '1px', backgroundColor: 'var(--wr-border-hover)', alignSelf: 'stretch', margin: '0 16px' }} />
+        <div className="flex flex-1" style={{ gap: '20px' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>COINS</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)', fontVariantNumeric: 'tabular-nums' }}>{w.coins}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 500, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>PnL</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 500, color: pnlColor(w.pnl), fontVariantNumeric: 'tabular-nums' }}>{pnlText(w.pnl)}</div>
+          </div>
+        </div>
+      </div>
+
+      </Link>
+
+      {/* Action buttons */}
+      <div className="flex" style={{ borderTop: '1px solid var(--wr-border)', height: '27px' }}>
+        <button
+          className="flex-1 h-full cursor-pointer"
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+          onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-border-hover)'; }}
+          onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--wr-hover-bg)'; }}
+          onClick={onEdit}
+          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', borderRight: '1px solid var(--wr-border)', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
+        >
+          Edit
+        </button>
+        <button
+          className="flex-1 h-full transition-colors cursor-pointer"
+          onMouseEnter={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-danger)'; }}
+          onMouseDown={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? '#fecaca' : '#3d0f0f'; }}
+          onMouseUp={e => { const isDay = document.documentElement.getAttribute('data-theme') === 'day'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = isDay ? 'var(--wr-danger-bg)' : '#2d0a0a'; }}
+          onClick={onDelete}
+          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-danger)', backgroundColor: 'transparent', border: 'none', borderRadius: 0, transition: 'background-color 0.12s, color 0.12s' }}
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
@@ -434,43 +372,13 @@ function ModalBackdrop({ onClose, children }: { onClose: () => void; children: R
 
 type AddWalletTab = 'import' | 'watch';
 
-function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded?: () => void }) {
   const [tab, setTab] = useState<AddWalletTab>('import');
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  // The address is DERIVED from the private key, never typed and never taken
-  // from the key field. A previous build stored the key itself as the address,
-  // which leaked it to localStorage and to Alchemy.
-  const handleSubmit = async () => {
-    setError('');
-    if (!name.trim()) { setError('Wallet name is required.'); return; }
-    setBusy(true);
-    try {
-      let addr: string;
-      if (tab === 'import') {
-        addr = await deriveAddress(key);
-        const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-        if (inTauri) {
-          // Backend re-derives and returns the authoritative address.
-          addr = await importWallet({ private_key_hex: normalizeKey(key) });
-        }
-      } else {
-        addr = address.trim();
-        if (!isValidAddress(addr)) { setError('Invalid Ethereum address (0x + 40 hex characters).'); setBusy(false); return; }
-      }
-      persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
-      onAdded();
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [saving, setSaving] = useState(false);
 
   const FIELD = {
     fontFamily: 'var(--font-jetbrains)',
@@ -528,7 +436,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             <label style={LABEL}>Wallet Name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. Main Wallet"
-              className="placeholder-[#232533] focus:border-[#7c5cff]"
+              className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
               style={FIELD} />
           </div>
 
@@ -537,7 +445,7 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               <label style={LABEL}>Private Key</label>
               <input type="password" value={key} onChange={e => setKey(e.target.value)}
                 placeholder="0x..."
-                className="placeholder-[#232533] focus:border-[#7c5cff]"
+                className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
                 Your key never leaves this device. Stored in macOS Keychain.
@@ -548,16 +456,18 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               <label style={LABEL}>Wallet Address</label>
               <input value={address} onChange={e => setAddress(e.target.value)}
                 placeholder="0x..."
-                className="placeholder-[#232533] focus:border-[#7c5cff]"
+                className="placeholder-[#3a3a3a] focus:border-[#BEFF00]"
                 style={FIELD} />
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
-                Watch-only wallets are read-only — no signing.
+                Watch-only — no signing. Appears in <strong style={{ color: 'var(--wr-text-2)' }}>Monitor → Wallets</strong> only, not in your dashboard wallet list.
               </div>
             </div>
           )}
 
           {error && (
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96' }}>{error}</div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff4444', padding: '8px 12px', border: '1px solid #ff444433', backgroundColor: '#ff44440d' }}>
+              {error}
+            </div>
           )}
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -568,13 +478,53 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             }}>Cancel</button>
             <button
               className="btn-cta"
-              disabled={busy}
-              onClick={handleSubmit}
+              disabled={saving}
+              onClick={async () => {
+                setError('');
+                if (!name.trim()) { setError('Enter a wallet name.'); return; }
+                let finalAddress = '';
+                if (tab === 'import') {
+                  const rawKey = key.trim();
+                  if (!rawKey) { setError('Enter a private key.'); return; }
+                  try {
+                    const { privateKeyToAddress } = await import('viem/accounts');
+                    const hex = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`;
+                    finalAddress = privateKeyToAddress(hex as `0x${string}`);
+                  } catch {
+                    setError('Invalid private key.');
+                    return;
+                  }
+                } else {
+                  finalAddress = address.trim();
+                  if (!finalAddress) { setError('Enter a wallet address.'); return; }
+                  if (!/^0x[0-9a-fA-F]{40}$/.test(finalAddress)) { setError('Invalid Ethereum address.'); return; }
+                }
+                setSaving(true);
+                // Deriving the address is not enough — without import_wallet the
+                // private key is never stored and the wallet can never sign.
+                // The backend re-derives and returns the authoritative address.
+                if (tab === 'import') {
+                  try {
+                    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+                    if (inTauri) {
+                      finalAddress = await importWallet({ private_key_hex: normalizeKey(key) });
+                    }
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                    setSaving(false);
+                    return;
+                  }
+                }
+                // 'import' tab = private key wallet (owned). 'watch' tab = monitor-only (watched).
+                persistWallet({ id: Date.now().toString(), name: name.trim(), address: finalAddress, kind: tab === 'import' ? 'owned' : 'watched' });
+                onAdded?.();
+                onClose();
+              }}
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
+                color: '#000000', backgroundColor: '#BEFF00', border: 'none',
                 padding: '11px 0', cursor: 'pointer',
-              }}>{busy ? 'Importing…' : tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
+              }}>{tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
           </div>
         </div>
       </div>
@@ -609,7 +559,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
   const [previews, setPreviews] = useState<Record<string, TransactionPreview>>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
-  const [alchemyKey, setAlchemyKey] = useState('');
+  const [distKey, setDistKey] = useState('');
   const sendStartedRef = useRef(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
@@ -624,7 +574,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [sourceOpen]);
 
-  const allWallets = loadWallets();
+  const allWallets = loadOwnedWallets();
   const source = allWallets.find(w => w.id === sourceId);
   // Destinations = all wallets minus the source
   const destWallets = allWallets.filter(w => w.id !== sourceId);
@@ -651,17 +601,17 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
       ? parseFloat(equalAmount) > 0
       : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
 
-  // The Alchemy key is required to read the nonce and broadcast.
-  useEffect(() => { loadAlchemyKey().then(k => setAlchemyKey(k ?? '')).catch(() => setAlchemyKey('')); }, []);
+  // Real sending. This modal used to run a setTimeout chain that printed
+  // "Confirmed" after two seconds without signing anything.
+  useEffect(() => { loadAlchemyKey().then(k => setDistKey(k ?? '')).catch(() => setDistKey('')); }, []);
 
-  // Envelope verdict for every destination, from `preview_transaction` — which
-  // has no side effects, so re-running it costs nothing and spends nothing.
+  // Envelope verdict per destination. `preview_transaction` has no side effects,
+  // so re-running it costs nothing and spends nothing.
   useEffect(() => {
     if (step !== 2) return;
     let cancelled = false;
     (async () => {
-      setPreviewBusy(true);
-      setPreviewError(null);
+      setPreviewBusy(true); setPreviewError(null);
       try {
         const out: Record<string, TransactionPreview> = {};
         for (const w of selectedList) {
@@ -677,21 +627,16 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   const blockedRows = selectedList.filter(w => previews[w.id] && !previews[w.id].authorized);
-  const canSend =
-    !!source &&
-    !!alchemyKey &&
-    !previewBusy &&
-    !previewError &&
-    selectedList.length > 0 &&
-    selectedList.every(w => previews[w.id]?.authorized === true);
+  const canSend = !!source && !!distKey && !previewBusy && !previewError &&
+    selectedList.length > 0 && selectedList.every(w => previews[w.id]?.authorized === true);
 
   async function startSend() {
-    // A ref, not `sending`: React state updates are async and a double-click in
-    // the same tick would otherwise broadcast twice.
+    // A ref, not `sending`: state updates are async and a double-click in the
+    // same tick would otherwise broadcast twice.
     if (!canSend || sendStartedRef.current || !source) return;
     sendStartedRef.current = true;
     const rows: SendRow[] = [];
@@ -701,10 +646,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
       rows.push({ id: w.id, name: w.name, address: w.address, valueWei: wei, state: 'queued' });
     }
     if (rows.length === 0) { sendStartedRef.current = false; return; }
-    setSendRows(rows);
-    setSending(true);
-    setStep(3);
-    await runDistribution(source.address, rows, alchemyKey, setSendRows);
+    setSendRows(rows); setSending(true); setStep(3);
+    await runDistribution(source.address, rows, distKey, setSendRows);
     setSending(false);
   }
 
@@ -740,15 +683,15 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <div style={{
                     width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: active || done ? '#7c5cff' : 'var(--wr-overlay)',
+                    backgroundColor: active || done ? '#BEFF00' : 'var(--wr-overlay)',
                     border: `1px solid ${active || done ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-                    color: active || done ? '#0b0c14' : 'var(--wr-text-3)',
+                    color: active || done ? '#000000' : 'var(--wr-text-3)',
                   }}>{done ? '✓' : n}</div>
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? 'var(--wr-text)' : 'var(--wr-text-3)' }}>{label}</span>
                 </div>
-                {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', margin: '0 10px' }} />}
+                {i < 2 && <div style={{ flex: 1, height: '1px', backgroundColor: done ? '#BEFF00' : 'var(--wr-border)', margin: '0 10px' }} />}
               </React.Fragment>
             );
           })}
@@ -833,10 +776,10 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                       <div className="flex items-center gap-2" style={{ marginBottom: '3px' }}>
                         <div style={{
                           width: '13px', height: '13px', flexShrink: 0,
-                          backgroundColor: isChecked ? '#7c5cff' : 'transparent',
+                          backgroundColor: isChecked ? '#BEFF00' : 'transparent',
                           border: `1px solid ${isChecked ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '8px', color: '#0b0c14',
+                          fontSize: '8px', color: '#000000',
                         }}>{isChecked ? '✓' : ''}</div>
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
                       </div>
@@ -857,8 +800,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                       <button key={m} onClick={() => setAmountMode(m)} style={{
                         fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
                         padding: '3px 10px',
-                        backgroundColor: amountMode === m ? '#7c5cff' : 'var(--wr-surface-alt)',
-                        color: amountMode === m ? '#0b0c14' : 'var(--wr-text-3)',
+                        backgroundColor: amountMode === m ? '#BEFF00' : 'var(--wr-surface-alt)',
+                        color: amountMode === m ? '#000000' : 'var(--wr-text-3)',
                         border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px',
                       }}>{m === 'equal' ? 'Equal' : 'Custom'}</button>
                     ))}
@@ -870,7 +813,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
                     <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
                       <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                        placeholder="0.00" className="placeholder-[#232533]" style={AMOUNT_INPUT} />
+                        placeholder="0.00" className="placeholder-[#3a3a3a]" style={AMOUNT_INPUT} />
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>
                         <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle' }} />
                       </span>
@@ -883,7 +826,7 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)' }}>{w.name}</span>
                         <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
                           <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                            placeholder="0.00" className="placeholder-[#232533]" style={{ ...AMOUNT_INPUT, width: '70px' }} />
+                            placeholder="0.00" className="placeholder-[#3a3a3a]" style={{ ...AMOUNT_INPUT, width: '70px' }} />
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px' }}>
                             <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle' }} />
                           </span>
@@ -904,8 +847,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               }}>Cancel</button>
               <button onClick={() => step1Valid && setStep(2)} style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: step1Valid ? '#0b0c14' : 'var(--wr-text-4)',
-                backgroundColor: step1Valid ? '#7c5cff' : 'var(--wr-overlay)',
+                color: step1Valid ? '#000000' : 'var(--wr-text-4)',
+                backgroundColor: step1Valid ? '#BEFF00' : 'var(--wr-overlay)',
                 border: 'none', padding: '11px 0',
                 cursor: step1Valid ? 'pointer' : 'not-allowed',
               }}>
@@ -952,22 +895,6 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></span>
             </div>
 
-            {!alchemyKey && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
-                No Alchemy API key is stored. Add one in Settings — the signer needs it to read the nonce and broadcast.
-              </div>
-            )}
-            {previewError && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
-                Could not check the spending envelope: {previewError}
-              </div>
-            )}
-            {blockedRows.map(w => (
-              <div key={w.id} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
-                {w.name}: {explainSendError(previews[w.id]?.reject_reason ?? previews[w.id]?.reject_code ?? 'refused by the spending envelope')}
-              </div>
-            ))}
-
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button onClick={() => setStep(1)} style={{
                 flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
@@ -976,10 +903,8 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               }}>Back</button>
               <button onClick={startSend} disabled={!canSend} className="btn-cta" style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: canSend ? '#0b0c14' : 'var(--wr-text-4)',
-                backgroundColor: canSend ? '#7c5cff' : 'var(--wr-overlay)',
-                border: canSend ? 'none' : '1px solid var(--wr-border)',
-                padding: '11px 0', cursor: canSend ? 'pointer' : 'not-allowed',
+                color: '#000000', backgroundColor: '#BEFF00', border: 'none',
+                padding: '11px 0', cursor: 'pointer',
               }}>{previewBusy ? 'Checking…' : 'Confirm & Send'}</button>
             </div>
           </div>
@@ -990,65 +915,43 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
               <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{sending ? '⚡' : '✓'}</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>
-                {sending ? 'Signing and broadcasting' : 'Done'}
-              </div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{sending ? 'Signing and broadcasting' : 'Done'}</div>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
                 {sending
                   ? 'One at a time — a second send from the same address would reuse the nonce.'
                   : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
               </div>
             </div>
-
             {sendRows.map(r => {
-              const label =
-                r.state === 'broadcast' ? 'Broadcast' :
-                r.state === 'submitting' ? 'Signing…' :
-                r.state === 'failed' ? 'Failed' :
-                r.state === 'skipped' ? 'Not sent' : 'Queued';
-              const color =
-                r.state === 'broadcast' ? 'var(--wr-accent)' :
-                r.state === 'submitting' ? '#ffb020' :
-                r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
+              const label = r.state === 'broadcast' ? 'Broadcast' : r.state === 'submitting' ? 'Signing…' : r.state === 'failed' ? 'Failed' : r.state === 'skipped' ? 'Not sent' : 'Queued';
+              const color = r.state === 'broadcast' ? 'var(--wr-accent)' : r.state === 'submitting' ? '#FBBF24' : r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
               return (
                 <div key={r.id} style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{r.name}</div>
                       <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
                         {formatWeiToEth(r.valueWei)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /> → {r.address.slice(0, 6)}…{r.address.slice(-4)}
                       </div>
                     </div>
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{label}</span>
                   </div>
-
                   {r.hash && (
                     <a href={`https://etherscan.io/tx/${r.hash}`} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none' }}>
-                      {r.hash}
-                    </a>
+                      style={{ display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none' }}>{r.hash}</a>
                   )}
                   {r.error && (
-                    <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
-                      {explainSendError(r.error)}
-                    </div>
+                    <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(r.error)}</div>
                   )}
                 </div>
               );
             })}
-
-            <button
-              disabled={sending}
-              onClick={() => {
-                sendStartedRef.current = false;
-                setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount('');
-                setCustomAmounts({}); setSendRows([]); setPreviews({});
-                onClose();
-              }}
+            <button disabled={sending}
+              onClick={() => { sendStartedRef.current = false; setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); setSendRows([]); setPreviews({}); onClose(); }}
               style={{
                 width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: sending ? 'var(--wr-text-4)' : '#0b0c14',
-                backgroundColor: sending ? 'var(--wr-overlay)' : '#7c5cff',
+                color: sending ? 'var(--wr-text-4)' : '#000000',
+                backgroundColor: sending ? 'var(--wr-overlay)' : '#BEFF00',
                 border: 'none', padding: '11px 0', cursor: sending ? 'not-allowed' : 'pointer', marginTop: '8px',
               }}>{sending ? 'Working…' : 'Done'}</button>
           </div>
@@ -1060,10 +963,10 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
 
 // ─── Address Cell ──────────────────────────────────────────────────────────
 
-function AddrCell({ addr, wallets }: { addr: string; wallets: Wallet[] }) {
-  const wallet = wallets.find(w => w.address === addr || w.rawAddress === addr);
-  if (wallet) {
-    return <Tag variant={WALLET_TOKEN_VARIANT[wallet.badge] ?? 'neutral'}>{wallet.name}</Tag>;
+function AddrCell({ addr }: { addr: string }) {
+  const match = loadWallets().find(w => w.address.toLowerCase() === addr.toLowerCase());
+  if (match) {
+    return <Tag variant="neutral">{match.name}</Tag>;
   }
   return (
     <div className="flex items-center min-w-0" style={{ gap: '4px' }}>
@@ -1090,13 +993,18 @@ export default function Dashboard() {
   const [snapshots, setSnapshots] = useState<Record<string, PortfolioSnapshot>>({});
   const [liveTransactions, setLiveTransactions] = useState<Tx[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [dailyBaseline, setDailyBaseline] = useState<Record<string, number>>({});
+  const [pnlSummaries, setPnlSummaries] = useState<Record<string, PnlSummary>>({});
 
   // Detect Tauri + bootstrap wallets + API key
   useEffect(() => {
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     setIsTauri(inTauri);
-    const wallets = loadWallets();
+    const wallets = loadOwnedWallets();
     setStoredWallets(wallets);
+    const storedSnap = loadDailySnap();
+    if (storedSnap) setDailyBaseline(storedSnap.values);
 
     if (inTauri) {
       // If there are no wallets, nothing to load — clear the loading state.
@@ -1107,13 +1015,12 @@ export default function Dashboard() {
           // No API key configured → don't block the UI on a fetch that won't happen.
           else setLoadingData(false);
         })
-        .catch(() => { setLoadingData(false); });
+        .catch(() => { setDataError('Failed to load API key'); setLoadingData(false); });
     } else {
-      // Browser mode (no Tauri backend) — show empty state, no API calls possible
-      const emptySnaps: Record<string, PortfolioSnapshot> = {};
-      wallets.forEach(w => { emptySnaps[w.id] = EMPTY_SNAPSHOT; });
-      setSnapshots(emptySnaps);
-      setLiveTransactions(EMPTY_TRANSFERS.map(t => mapTransfer(t, wallets[0]?.address ?? '')));
+      // Browser / dev mode — use mock data so the UI is never blank
+      // Browser mode has no Tauri backend and therefore no data. Showing mock
+      // transfers here made an empty app look populated.
+      setLiveTransactions([]);
       setLoadingData(false);
     }
   }, []);
@@ -1139,19 +1046,57 @@ export default function Dashboard() {
         if (cancelled) return;
         const newSnaps: Record<string, PortfolioSnapshot> = {};
         snapEntries.forEach(r => { if (r.status === 'fulfilled') newSnaps[r.value.id] = r.value.snap; });
-        // Merge, don't replace — a wallet whose fetch failed this round (e.g. a
-        // transient 429 from the burst of requests a newly-added wallet triggers)
-        // must keep its last-known-good snapshot instead of reverting to blank.
-        setSnapshots(prev => ({ ...prev, ...newSnaps }));
+        setSnapshots(newSnaps);
 
-        // Fetch transactions for first wallet (merge later)
-        const primaryWallet = storedWallets[0];
-        try {
-          const transfers = await getAssetTransfers(primaryWallet.address, apiKey);
-          if (!cancelled) {
-            setLiveTransactions(transfers.map(t => mapTransfer(t, primaryWallet.address)));
-          }
-        } catch {}
+        // Update daily baseline — only writes when the date changes
+        const today = todayStr();
+        const existingSnap = loadDailySnap();
+        if (!existingSnap || existingSnap.date !== today) {
+          const baseline: Record<string, number> = {};
+          Object.entries(newSnaps).forEach(([id, s]) => { baseline[id] = s.portfolio_value_usd; });
+          writeDailySnap({ date: today, values: baseline });
+          if (!cancelled) setDailyBaseline(baseline);
+        }
+
+        // Fetch PnL for all wallets in background
+        Promise.allSettled(
+          storedWallets.map(w => getPnlSummary(w.address, apiKey).then(p => ({ id: w.id, pnl: p })))
+        ).then(results => {
+          if (cancelled) return;
+          const map: Record<string, PnlSummary> = {};
+          results.forEach(r => { if (r.status === 'fulfilled') map[r.value.id] = r.value.pnl; });
+          setPnlSummaries(map);
+        }).catch((e: unknown) => { if (!cancelled) setDataError(e instanceof Error ? e.message : 'Failed to load PnL data'); });
+
+        // Fetch transactions for ALL wallets, merge newest-first
+        const txResults = await Promise.allSettled(
+          storedWallets.map(w =>
+            getAssetTransfers(w.address, apiKey).then(transfers =>
+              transfers.map(t => mapTransfer(t, w.address))
+            )
+          )
+        );
+        if (!cancelled) {
+          const seen = new Set<string>();
+          const merged: Tx[] = [];
+          txResults.forEach(r => {
+            if (r.status === 'fulfilled') {
+              r.value.forEach(tx => {
+                if (!seen.has(tx.hash)) {
+                  seen.add(tx.hash);
+                  merged.push(tx);
+                }
+              });
+            }
+          });
+          // Sort by block number descending (Rust already sorted per-wallet; re-sort after merge)
+          merged.sort((a, b) => {
+            const an = formatBlockNum(a.block);
+            const bn = formatBlockNum(b.block);
+            return bn - an;
+          });
+          setLiveTransactions(merged);
+        }
 
         // Start background polling daemon (idempotent — Rust guards against double-start)
         if (!cancelled && storedWallets.length > 0) {
@@ -1170,7 +1115,7 @@ export default function Dashboard() {
               priceSymbols: ['ETH', 'USDC', 'USDT', 'WETH'],
               subscribeBlocks: true,
             });
-          } catch (e) { /* eslint-disable-next-line no-console */ console.warn('realtime bootstrap:', e); }
+          } catch (_e) { /* realtime is best-effort — silent failure is acceptable */ }
         }
       } finally {
         // Always release the loading state — never leave the UI stuck if a
@@ -1229,27 +1174,32 @@ export default function Dashboard() {
   }, [realtimeConn?.connected]);
 
   // Build display wallets from stored + snapshots
-  const displayWallets: Wallet[] = storedWallets.length > 0
-    ? storedWallets.map((w, i) => buildWallet(w, snapshots[w.id] ?? null, i))
-    : WALLETS;
+  const displayWallets: Wallet[] = storedWallets.map(
+    w => buildWallet(w, snapshots[w.id] ?? null, dailyBaseline[w.id] ?? null)
+  );
 
-  const displayTransactions = liveTransactions.length > 0 ? liveTransactions : TRANSACTIONS;
+  const displayTransactions = liveTransactions;
 
   const totalPortfolioUsd = Object.values(snapshots).reduce((s, snap) => s + snap.portfolio_value_usd, 0);
   const totalNfts = Object.values(snapshots).reduce((s, snap) => s + snap.nft_count, 0);
   const totalCoins = Object.values(snapshots).reduce((s, snap) => s + snap.token_count, 0);
   const totalAssets = totalNfts + totalCoins;
 
+  const ethPriceUsd = Object.values(snapshots)[0]?.eth_price_usd ?? 0;
+  const allPnlEntries = Object.entries(pnlSummaries);
+  const totalPnlEth = allPnlEntries.reduce((s, [, p]) => s + p.realized_pnl_eth + p.unrealized_pnl_eth, 0);
+  const pnl7dUsd = allPnlEntries.length > 0 && ethPriceUsd > 0 ? totalPnlEth * ethPriceUsd : null;
+
   return (
     <main className="min-h-full text-white" style={{ backgroundColor: 'var(--wr-bg)', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)} onAdded={() => setStoredWallets(loadWallets())} />}
+      {showAddWallet  && <AddWalletModal   onClose={() => setShowAddWallet(false)} onAdded={() => setStoredWallets(loadOwnedWallets())} />}
       {showDistribute && <DistributeModal  onClose={() => setShowDistribute(false)} />}
       {editTarget && (
         <EditWalletModal
           wallet={editTarget}
           allWallets={storedWallets}
           onClose={() => setEditTarget(null)}
-          onSaved={() => setStoredWallets(loadWallets())}
+          onSaved={() => setStoredWallets(loadOwnedWallets())}
         />
       )}
 
@@ -1260,7 +1210,7 @@ export default function Dashboard() {
         </h1>
       </div>
 
-      {/* Stat cards — gap-as-border: #14161f bg, gap-px, cells #14161f */}
+      {/* Stat cards — gap-as-border: #1A1A1A bg, gap-px, cells #111111 */}
       <div
         className="grid grid-cols-4 overflow-hidden gap-px"
         style={{ backgroundColor: 'var(--wr-border)', border: '1px solid var(--wr-border)' }}
@@ -1269,12 +1219,17 @@ export default function Dashboard() {
           {
             label: 'Total Portfolio',
             value: loadingData ? '—' : `$${totalPortfolioUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: loadingData ? 'Loading…' : 'Across all wallets',
+            valueColor: 'var(--wr-text)', subUp: true, subColor: 'var(--wr-accent)', sub: loadingData ? 'Loading…' : 'Across all wallets',
           },
           {
-            label: '7D PnL',
-            value: '—',
-            valueColor: 'var(--wr-text-3)', subUp: null, subColor: 'var(--wr-text-3)', sub: 'Not available yet',
+            label: 'Total PnL',
+            value: pnl7dUsd != null
+              ? (pnl7dUsd >= 0 ? `+$${Math.abs(pnl7dUsd).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : `-$${Math.abs(pnl7dUsd).toLocaleString('en-US', { maximumFractionDigits: 0 })}`)
+              : loadingData ? '—' : '$0',
+            valueColor: pnl7dUsd == null || pnl7dUsd >= 0 ? 'var(--wr-accent)' : '#f87171',
+            subUp: pnl7dUsd == null || pnl7dUsd >= 0,
+            subColor: pnl7dUsd == null || pnl7dUsd >= 0 ? 'var(--wr-accent)' : '#f87171',
+            sub: pnl7dUsd != null ? `${totalPnlEth >= 0 ? '+' : ''}${totalPnlEth.toFixed(4)} ETH` : loadingData ? 'Loading…' : 'No trades found',
           },
           {
             label: 'Wallets',
@@ -1284,7 +1239,7 @@ export default function Dashboard() {
           {
             label: 'Assets',
             value: loadingData ? '—' : String(totalAssets),
-            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: `${totalNfts || '—'} NFTs · ${totalCoins || '—'} tokens`,
+            valueColor: 'var(--wr-text)', subUp: null, subColor: 'var(--wr-text-3)', sub: `${totalNfts} NFTs · ${totalCoins} tokens`,
           },
         ].map((card, i) => (
           <div key={i} style={{ backgroundColor: 'var(--wr-surface)', padding: '24px' }}>
@@ -1326,7 +1281,7 @@ export default function Dashboard() {
               className="btn-cta"
               style={{
                 fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600,
-                color: '#0b0c14', backgroundColor: '#7c5cff',
+                color: '#000000', backgroundColor: '#BEFF00',
                 padding: '6px 14px', border: 'none', borderRadius: 0, cursor: 'pointer',
               }}
             >
@@ -1345,17 +1300,26 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
-        {displayWallets.length === 0 && !loadingData ? (
-          <div style={{ padding: '32px 0', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
-            No wallets added yet — click &quot;Add Wallet&quot; to get started.
+        {displayWallets.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '12px' }}>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', color: 'var(--wr-text-3)', letterSpacing: '1px' }}>
+              No wallets added yet
+            </div>
+            <button
+              onClick={() => setShowAddWallet(true)}
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.05em' }}
+            >
+              + ADD YOUR FIRST WALLET
+            </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+          <div className="grid grid-cols-3" style={{ gap: '16px' }}>
             {displayWallets.map(w => (
               <WalletCard key={w.id} w={w} loading={loadingData && !snapshots[w.id]}
                 onDelete={() => {
                   deleteWallet(w.id);
-                  setStoredWallets(loadWallets());
+                  setStoredWallets(prev => prev.filter(sw => sw.id !== w.id));
+                  setSnapshots(prev => { const next = { ...prev }; delete next[w.id]; return next; });
                 }}
                 onEdit={() => setEditTarget({ id: w.id, name: w.name, rawAddress: w.rawAddress })}
               />
@@ -1385,17 +1349,17 @@ export default function Dashboard() {
             style={{ gridTemplateColumns: TX_GRID, height: '40px', backgroundColor: 'var(--wr-bg)', borderBottom: '1px solid var(--wr-border)', padding: '0 20px' }}
           >
             {['Tx Hash', 'Type', 'Block', 'Age', 'From', '', 'To', 'Token', 'Amount', 'Gas Fee'].map((h, i) => (
-              <span key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: '#6e7590', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</span>
+              <span key={i} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: '#71717A', letterSpacing: '1px', textTransform: 'uppercase' }}>{h}</span>
             ))}
           </div>
 
           {/* Rows */}
-          {displayTransactions.length === 0 && !loadingData ? (
-            <div style={{ padding: '32px 0', textAlign: 'center', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
-              No transactions yet.
+          {displayTransactions.length === 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px' }}>
+              {loadingData ? 'Loading transactions…' : dataError ? dataError : 'No transactions yet — add a wallet to get started'}
             </div>
-          ) : (
-          <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#232533 #0b0c14' } : {}}>
+          )}
+          <div style={txExpanded ? { maxHeight: '392px', overflowY: 'scroll', scrollbarWidth: 'thin', scrollbarColor: '#3a3a3a #0A0A0A' } : {}}>
           {(txExpanded ? displayTransactions : displayTransactions.slice(0, PREVIEW_COUNT)).map((tx, i) => (
             <div
               key={i}
@@ -1406,21 +1370,21 @@ export default function Dashboard() {
             >
               <div className="flex items-center min-w-0 pr-2" style={{ gap: '5px' }}>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.hash}</span>
-                <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: 'var(--wr-text-3)', lineHeight: 1, display: 'flex' }} className="hover:text-[#9298b8] transition-colors">
+                <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: 'var(--wr-text-3)', lineHeight: 1, display: 'flex' }} className="hover:text-[#a1a1aa] transition-colors">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </a>
               </div>
               <div><TxBadge type={tx.type} /></div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#5b7cfa' }}>{tx.block}</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#3b82f6' }}>{tx.block}</span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{tx.age}</span>
               <div className="flex items-center min-w-0 pr-1">
-                <AddrCell addr={tx.from} wallets={displayWallets} />
+                <AddrCell addr={tx.from} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px' }}>
-                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 4h10M8 1l3 3-3 3" stroke="#232533" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 4h10M8 1l3 3-3 3" stroke="#3a3a3a" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
               <div className="flex items-center min-w-0 pr-1">
-                <AddrCell addr={tx.to} wallets={displayWallets} />
+                <AddrCell addr={tx.to} />
               </div>
               <div className="flex items-center" style={{ gap: '4px' }}>
                 <span style={{ color: 'var(--wr-text-3)', fontSize: '9px' }}>◈</span>
@@ -1431,7 +1395,6 @@ export default function Dashboard() {
             </div>
           ))}
           </div>
-          )}
         </div>
       </div>
     </main>

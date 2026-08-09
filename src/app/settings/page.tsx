@@ -112,6 +112,16 @@ function EmailVerificationModal({ email, onClose }: { email: string; onClose: ()
   );
 }
 
+const PROFILE_KEY = 'westron_profile';
+function loadProfile(): { displayName?: string; email?: string; country?: string } {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveProfileData(data: { displayName: string; email: string; country: string }) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
+}
+
 function ProfileSection() {
   const [displayName, setDisplayName] = useState('gthu_dba.eth');
   const [email, setEmail] = useState('john@example.com');
@@ -121,10 +131,23 @@ function ProfileSection() {
   const [walletAddress, setWalletAddress] = useState('');
   // Seed with the SSR-stable default so the first client render matches the
   // static HTML; the effect below loads the real subscription from storage.
+  // Calling loadSubscription() during the first render would read localStorage
+  // and produce a hydration mismatch.
   const [sub, setSub] = useState<SubscriptionState>(DEFAULT_SUBSCRIPTION);
+  const [saved, setSaved] = useState(false);
   const isPro = isSubscriptionActive(sub);
 
+  function handleSaveProfile() {
+    saveProfileData({ displayName, email, country });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
   useEffect(() => {
+    const saved = loadProfile();
+    if (saved.displayName) setDisplayName(saved.displayName);
+    if (saved.email) setEmail(saved.email);
+    if (saved.country) setCountry(saved.country);
     const wallets = loadWallets();
     if (wallets[0]) setWalletAddress(wallets[0].address);
     setSub(loadSubscription());
@@ -215,8 +238,9 @@ function ProfileSection() {
       </div>
 
       {/* Save */}
-      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="hover:opacity-90 transition-opacity" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveProfile} className="hover:opacity-90 transition-opacity" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>
@@ -278,7 +302,7 @@ function ImportWalletModal({ onClose, onImported }: { onClose: () => void; onImp
       // so a typo in the address field can no longer file a key wrongly.
       let resolved = await deriveAddress(privateKey);
       if (isTauri) resolved = await importWallet({ address: addr, private_key_hex: key });
-      addWallet({ id: Date.now().toString(), name: name.trim(), address: resolved });
+      addWallet({ id: Date.now().toString(), name: name.trim(), address: resolved, kind: 'owned' });
       onImported();
       onClose();
     } catch (e) {
@@ -341,6 +365,22 @@ function SecuritySection() {
   const [osKey, setOsKey] = useState('');
   const [osKeyInput, setOsKeyInput] = useState('');
   const [osKeySaving, setOsKeySaving] = useState(false);
+  // ── Sentiment API Keys (localStorage) ──────────────────────────────────────
+  const [twitterRapidKey,      setTwitterRapidKey]      = useState('');
+  const [twitterRapidInput,    setTwitterRapidInput]    = useState('');
+  const [twitterRapidMsg,      setTwitterRapidMsg]      = useState('');
+  const [heliusKey,            setHeliusKey]            = useState('');
+  const [heliusInput,          setHeliusInput]          = useState('');
+  const [heliusMsg,            setHeliusMsg]            = useState('');
+  const [birdeyeKey,           setBirdeyeKey]           = useState('');
+  const [birdeyeInput,         setBirdeyeInput]         = useState('');
+  const [birdeyeMsg,           setBirdeyeMsg]           = useState('');
+  const [saved, setSaved] = useState(false);
+
+  function handleSaveSecurity() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
   const [osKeyMsg, setOsKeyMsg] = useState('');
   const [esKey, setEsKey] = useState('');
   const [esKeyInput, setEsKeyInput] = useState('');
@@ -366,6 +406,13 @@ function SecuritySection() {
       loadOpenSeaKey().then(k => { if (k) { setOsKey(k); setOsKeyInput(k); } }).catch(() => {});
       loadEtherscanKey().then(k => { if (k) { setEsKey(k); setEsKeyInput(k); } }).catch(() => {});
     }
+    // Load sentiment keys from localStorage
+    const tr = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-twitter-rapid') ?? '' : '';
+    const he = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-helius') ?? '' : '';
+    const be = typeof window !== 'undefined' ? localStorage.getItem('wr-apikey-birdeye') ?? '' : '';
+    setTwitterRapidKey(tr); setTwitterRapidInput(tr);
+    setHeliusKey(he);       setHeliusInput(he);
+    setBirdeyeKey(be);      setBirdeyeInput(be);
     reloadWallets();
   }, []);
 
@@ -434,6 +481,30 @@ function SecuritySection() {
     } catch { setEsKeyMsg('Error removing key.'); }
     setTimeout(() => setEsKeyMsg(''), 2000);
   };
+  // ── Sentiment key handlers ──────────────────────────────────────────────────
+  const makeLsHandlers = (
+    lsKey: string,
+    setValue: (v: string) => void,
+    setInput: (v: string) => void,
+    setMsg: (v: string) => void,
+  ) => ({
+    save: (input: string) => {
+      localStorage.setItem(lsKey, input.trim());
+      setValue(input.trim());
+      setMsg('Saved.');
+      setTimeout(() => setMsg(''), 2000);
+    },
+    remove: () => {
+      localStorage.removeItem(lsKey);
+      setValue(''); setInput('');
+      setMsg('Removed.');
+      setTimeout(() => setMsg(''), 2000);
+    },
+  });
+
+  const twitterRapidHandlers = makeLsHandlers('wr-apikey-twitter-rapid', setTwitterRapidKey, setTwitterRapidInput, setTwitterRapidMsg);
+  const heliusHandlers        = makeLsHandlers('wr-apikey-helius',        setHeliusKey,       setHeliusInput,       setHeliusMsg);
+  const birdeyeHandlers       = makeLsHandlers('wr-apikey-birdeye',       setBirdeyeKey,      setBirdeyeInput,      setBirdeyeMsg);
 
   const handleRemoveWallet = (id: string) => {
     removeWallet(id);
@@ -556,7 +627,7 @@ function SecuritySection() {
           )}
         </div>
         {/* OpenSea row */}
-        <div>
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
           <div style={rowStyle}>
             <span style={labelStyle}>OpenSea Key</span>
             <input
@@ -579,8 +650,8 @@ function SecuritySection() {
         </div>
 
         {/* Etherscan row (powers the Sister Wallet Finder) */}
-        <div>
-          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
             <span style={labelStyle}>Etherscan Key</span>
             <input
               type="password"
@@ -599,6 +670,36 @@ function SecuritySection() {
           {esKeyMsg && (
             <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: esKeyMsg.includes('Error') ? 'var(--wr-danger)' : 'var(--wr-success)' }}>{esKeyMsg}</div>
           )}
+        </div>
+        {/* Twitter RapidAPI row */}
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Twitter Rapid</span>
+            <input type="password" value={twitterRapidInput} onChange={e => setTwitterRapidInput(e.target.value)} placeholder="RapidAPI key (twitter241)…" style={inputStyle} />
+            <button onClick={() => twitterRapidHandlers.save(twitterRapidInput)} disabled={!twitterRapidInput.trim()} style={{ ...inlineBtn, opacity: !twitterRapidInput.trim() ? 0.4 : 1, cursor: !twitterRapidInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {twitterRapidKey && <button onClick={twitterRapidHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {twitterRapidMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: twitterRapidMsg.includes('Removed') || twitterRapidMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{twitterRapidMsg}</div>}
+        </div>
+        {/* Helius row */}
+        <div style={{ borderBottom: '1px solid var(--wr-border)' }}>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Helius Key</span>
+            <input type="password" value={heliusInput} onChange={e => setHeliusInput(e.target.value)} placeholder="Helius API key (Solana)…" style={inputStyle} />
+            <button onClick={() => heliusHandlers.save(heliusInput)} disabled={!heliusInput.trim()} style={{ ...inlineBtn, opacity: !heliusInput.trim() ? 0.4 : 1, cursor: !heliusInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {heliusKey && <button onClick={heliusHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {heliusMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: heliusMsg.includes('Removed') || heliusMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{heliusMsg}</div>}
+        </div>
+        {/* Birdeye row */}
+        <div>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
+            <span style={labelStyle}>Birdeye Key</span>
+            <input type="password" value={birdeyeInput} onChange={e => setBirdeyeInput(e.target.value)} placeholder="Birdeye API key (Solana price)…" style={inputStyle} />
+            <button onClick={() => birdeyeHandlers.save(birdeyeInput)} disabled={!birdeyeInput.trim()} style={{ ...inlineBtn, opacity: !birdeyeInput.trim() ? 0.4 : 1, cursor: !birdeyeInput.trim() ? 'not-allowed' : 'pointer' }}>Save</button>
+            {birdeyeKey && <button onClick={birdeyeHandlers.remove} style={dangerBtn}>Remove</button>}
+          </div>
+          {birdeyeMsg && <div style={{ padding: '4px 16px 8px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: birdeyeMsg.includes('Removed') || birdeyeMsg === 'Saved.' ? 'var(--wr-success)' : 'var(--wr-danger)' }}>{birdeyeMsg}</div>}
         </div>
       </div>
 
@@ -634,8 +735,9 @@ function SecuritySection() {
       </div>
 
       {/* Save */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveSecurity} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>
@@ -662,6 +764,7 @@ function NotificationsSection() {
   const [quietOn, setQuietOn] = useState(true);
   const [quietFrom, setQuietFrom] = useState('22:00');
   const [quietTo, setQuietTo] = useState('08:00');
+  const [saved, setSaved] = useState(false);
 
   // Load persisted prefs on mount
   useEffect(() => {
@@ -669,10 +772,30 @@ function NotificationsSection() {
     if (prefs.discordWebhook) { setDiscordUrl(prefs.discordWebhook); setDiscordOn(true); }
     setQuietFrom(prefs.quietFrom);
     setQuietTo(prefs.quietTo);
+    try {
+      const saved = JSON.parse(localStorage.getItem('westron_notif_toggles') ?? 'null');
+      if (saved) {
+        if (saved.trading) setTrading(s => ({ ...s, ...saved.trading }));
+        if (saved.portfolio) setPortfolio(s => ({ ...s, ...saved.portfolio }));
+        if (saved.inApp !== undefined) setInApp(saved.inApp);
+        if (saved.emailOn !== undefined) setEmailOn(saved.emailOn);
+        if (saved.email) setEmail(saved.email);
+        if (saved.telegramOn !== undefined) setTelegramOn(saved.telegramOn);
+      }
+    } catch {}
   }, []);
 
   function handleDiscordBlur() {
     saveNotificationPrefs({ discordWebhook: discordUrl, quietFrom, quietTo });
+  }
+
+  function handleSaveNotifications() {
+    saveNotificationPrefs({ discordWebhook: discordUrl, quietFrom, quietTo });
+    localStorage.setItem('westron_notif_toggles', JSON.stringify({
+      trading, portfolio, inApp, emailOn, email: emailOn ? email : '', telegramOn,
+    }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   function handleQuietChange(field: 'quietFrom' | 'quietTo', value: string) {
@@ -814,7 +937,8 @@ function NotificationsSection() {
 
       {/* Save */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
+        {saved && <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)' }}>✓ Saved</span>}
+        <button onClick={handleSaveNotifications} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', backgroundColor: 'var(--wr-accent)', color: 'var(--wr-accent-text)', border: 'none', padding: '7px 16px', cursor: 'pointer' }}>
           SAVE CHANGES
         </button>
       </div>

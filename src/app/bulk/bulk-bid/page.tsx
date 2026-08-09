@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { loadWallets } from '@/lib/walletStore';
+import { loadOwnedWallets } from '@/lib/walletStore';
 import { loadAlchemyKey, marketplacePlaceBid } from '@/lib/tauri';
 import { Tag, type TagVariant } from '@/components/Tag';
 import ProGate from '@/components/ProGate';
@@ -91,7 +91,7 @@ export default function BulkBidPage() {
   const [activeWalletId, setActiveWalletId] = useState('w1');
 
   useEffect(() => {
-    const stored = loadWallets();
+    const stored = loadOwnedWallets();
     if (stored.length > 0) {
       const mapped: BidWallet[] = stored.map((w, i) => ({
         id: `w${i + 1}`,
@@ -585,7 +585,7 @@ function CollectionModal({ col, traits, existingBids, onAdd, onRemove, onClose }
                 </div>
                 {/* % of floor */}
                 <div style={{ fontSize: '11px', color: '#555', marginTop: '6px' }}>
-                  {col.floor > 0 ? `${((parseFloat(collectionPrice) / col.floor) * 100).toFixed(1)}% of floor` : ''}
+                  {(() => { const p = parseFloat(collectionPrice); return col.floor > 0 && Number.isFinite(p) ? `${((p / col.floor) * 100).toFixed(1)}% of floor` : ''; })()}
                 </div>
               </div>
               {/* Quick price buttons */}

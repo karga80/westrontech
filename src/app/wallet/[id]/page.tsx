@@ -9,7 +9,10 @@ export function generateStaticParams() {
   return [{ id: 'detail' }];
 }
 
-export const dynamicParams = false;
+// Client-side fallback: any id not pre-generated is still rendered through
+// React hydration of the sentinel page, which reads the real id from the URL.
+// Note: dynamicParams must NOT be exported — "output: export" (static site for
+// Tauri) forbids it. The 'detail' sentinel above is the fallback mechanism.
 
 export default async function WalletDetailPage({
   params,

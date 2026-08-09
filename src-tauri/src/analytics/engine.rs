@@ -302,39 +302,73 @@ pub async fn get_portfolio_snapshot(
     wallet_address: String,
     api_key: String,
 ) -> Result<PortfolioSnapshot, String> {
-    let client = AlchemyClient::new(&api_key);
+    use crate::data::WalletDataProvider;
 
-    // ETH price now comes from Alchemy Prices API via the data layer.
-    let eth_price_future = async {
-        use crate::data::PriceProvider;
-        let provider = crate::data::default_provider(&api_key);
-        provider.get_eth_price_usd().await.map_err(|e| e.to_string())
+    let provider = crate::data::default_provider(&api_key);
+    let rpc_client = AlchemyClient::new(&api_key);
+
+    // Run both in parallel; neither failure is fatal
+    let (portfolio_result, nfts_result) = tokio::join!(
+        provider.get_wallet_portfolio(&wallet_address),
+        rpc_client.get_nfts_for_owner(&wallet_address, None),
+    );
+
+    // Prefer the premium Data API (full ERC-20 USD values). If unavailable (free/standard
+    // plan returns 401/403), fall back to standard RPC endpoints that work on every tier.
+    let (eth_balance, eth_price_usd, token_count, token_total_usd) = match portfolio_result {
+        Ok(portfolio) => {
+            let count = portfolio.tokens.len() as u32;
+            let price = portfolio.eth_price_usd.unwrap_or(0.0);
+            (portfolio.eth_balance, price, count, portfolio.total_usd)
+        }
+        Err(_) => {
+            // Standard RPC fallback — available on all Alchemy plan tiers
+            let http = crate::data::alchemy::AlchemyHttpClient::new(&api_key);
+            let (eth_result, tok_result, price_result) = tokio::join!(
+                rpc_client.get_eth_balance(&wallet_address),
+                rpc_client.get_token_balances(&wallet_address),
+                crate::data::alchemy::prices::get_eth_price_usd(&http),
+            );
+            let eth_bal = eth_result.map(|b| b.eth).unwrap_or(0.0);
+            let eth_price = price_result.unwrap_or(0.0);
+            let tok_count = tok_result.map(|v| v.len() as u32).unwrap_or(0);
+            (eth_bal, eth_price, tok_count, eth_bal * eth_price)
+        }
     };
 
-    let (eth_balance_result, eth_price_result, token_balances_result, nfts_result) =
-        tokio::try_join!(
-            client.get_eth_balance(&wallet_address),
-            eth_price_future,
-            client.get_token_balances(&wallet_address),
-            client.get_nfts_for_owner(&wallet_address, None),
-        )?;
+    // Sum highest bid (top offer) for each NFT. Falls back to floor price if no OpenSea key.
+    let (nft_count, nft_value_usd) = match nfts_result {
+        Ok(nfts) => {
+            let count = nfts.total_count as u32;
+            let opensea_key = crate::wallet::keychain::fetch_opensea_key().unwrap_or_default();
 
-    let eth_balance = eth_balance_result.eth;
-    let eth_price_usd = eth_price_result;
-    let portfolio_value_usd = eth_balance * eth_price_usd;
+            let nft_eth = if !opensea_key.is_empty() && !nfts.owned_nfts.is_empty() {
+                let mp = crate::marketplace::client::MarketplaceClient::new("", &opensea_key);
+                let pairs: Vec<(String, String)> = nfts.owned_nfts.iter()
+                    .map(|n| (n.contract.address.clone(), n.token_id.clone()))
+                    .collect();
+                let results = futures_util::future::join_all(
+                    pairs.iter().map(|(c, t)| mp.fetch_nft_detail(c, t))
+                ).await;
+                results.into_iter()
+                    .filter_map(|r| r.ok())
+                    .filter_map(|d| d.top_offer_eth)
+                    .sum::<f64>()
+            } else {
+                nfts.owned_nfts.iter()
+                    .filter_map(|n| n.contract.opensea_floor_price)
+                    .sum::<f64>()
+            };
 
-    // ERC-20 tokens with non-zero balance
-    let token_count = token_balances_result
-        .iter()
-        .filter(|t| t.token_balance != "0x0000000000000000000000000000000000000000000000000000000000000000" && t.error.is_none())
-        .count() as u32;
-
-    let nft_count = nfts_result.total_count as u32;
+            (count, nft_eth * eth_price_usd)
+        }
+        Err(_) => (0, 0.0),
+    };
 
     Ok(PortfolioSnapshot {
         eth_balance,
         eth_price_usd,
-        portfolio_value_usd,
+        portfolio_value_usd: token_total_usd + nft_value_usd,
         token_count,
         nft_count,
     })

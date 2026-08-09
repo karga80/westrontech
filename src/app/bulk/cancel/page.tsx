@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { loadWallets } from '@/lib/walletStore';
+import { loadOwnedWallets } from '@/lib/walletStore';
 import { loadAlchemyKey, marketplaceCancelOrder } from '@/lib/tauri';
 import { Tag, type TagVariant } from '@/components/Tag';
 import ProGate from '@/components/ProGate';
@@ -66,7 +66,7 @@ export default function BulkCancelPage() {
   const [wallets, setWallets] = useState(STATIC_WALLETS);
 
   useEffect(() => {
-    const stored = loadWallets();
+    const stored = loadOwnedWallets();
     if (stored.length > 0) {
       setWallets(stored.map((w, i) => ({
         id: `w${i + 1}`,
@@ -126,7 +126,7 @@ export default function BulkCancelPage() {
 
     if (isTauri) {
       let apiKey = '';
-      const wallets = loadWallets();
+      const wallets = loadOwnedWallets();
       const walletAddress = wallets[0]?.address ?? '';
       try { apiKey = await loadAlchemyKey(); } catch { /* key not set */ }
 
@@ -400,7 +400,8 @@ function OrderRow({ order: o, sel, wallet, onToggle }: {
   onToggle: () => void;
 }) {
   const [hover, setHover] = useState(false);
-  const diff = ((o.price - o.floor) / o.floor * 100).toFixed(1);
+  // Guard: floor can be 0 for unlisted NFTs — division by zero would render 'Infinity'.
+  const diff = o.floor > 0 ? ((o.price - o.floor) / o.floor * 100).toFixed(1) : '—';
   const above = o.price >= o.floor;
 
   return (

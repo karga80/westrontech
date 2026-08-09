@@ -105,6 +105,13 @@ export interface AssetTransfer {
   block_num: string;
   token_id?: string;
   metadata?: { block_timestamp?: string };
+  rawContract?: { address?: string };
+}
+
+export interface NftDetail {
+  rarity_rank?: number;
+  listing_price_eth?: number;
+  top_offer_eth?: number;
 }
 
 export async function getEthBalance(address: string, apiKey: string): Promise<EthBalance> {
@@ -308,6 +315,13 @@ export async function getNftsForOwner(
     apiKey,
     pageKey: pageKey ?? null,
   });
+}
+
+export async function fetchNftDetail(
+  contractAddress: string,
+  tokenId: string
+): Promise<NftDetail> {
+  return invoke<NftDetail>('fetch_nft_detail', { contractAddress, tokenId });
 }
 
 export async function getFloorPrice(
