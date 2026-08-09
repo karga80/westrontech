@@ -4,6 +4,7 @@ mod control;
 mod data;
 mod envelope;
 mod marketplace;
+mod nft;
 mod stream;
 mod wallet;
 mod rpc;
@@ -816,6 +817,7 @@ pub fn run() {
         start_background_polling,
         signing::send_eth,
         signing::estimate_gas,
+        signing::transfer_nft,
         create_snipe_rule,
         list_snipe_rules,
         delete_snipe_rule,

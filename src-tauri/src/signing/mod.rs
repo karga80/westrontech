@@ -179,6 +179,7 @@ impl LocalSigner {
                 estimate_gas_inner(
                     &http,
                     &url,
+                    Some(wallet_address),
                     &tx_request.to,
                     &tx_request.value_wei,
                     tx_request.data.as_deref(),
@@ -254,9 +255,17 @@ impl LocalSigner {
 }
 
 /// Gas estimate yardımcı fonksiyonu — dahili ve Tauri command'ı için paylaşımlı.
+///
+/// `from` matters for anything beyond a plain value transfer: a contract call
+/// like `transferFrom` reverts unless the node evaluates it as sent by the
+/// actual owner/approved account, and `eth_estimateGas` defaults `from` to
+/// the zero address when it is omitted. Plain ETH sends do not depend on it,
+/// which is why every existing caller kept working when this parameter was
+/// added — but NFT transfer calldata does, so it must be threaded through.
 pub async fn estimate_gas_inner(
     client: &reqwest::Client,
     url: &str,
+    from: Option<&str>,
     to: &str,
     value_wei: &str,
     data: Option<&str>,
@@ -270,6 +279,9 @@ pub async fn estimate_gas_inner(
         "to": to,
         "value": value_hex,
     });
+    if let Some(f) = from {
+        call_obj["from"] = serde_json::Value::String(f.to_string());
+    }
     if let Some(d) = data {
         call_obj["data"] = serde_json::Value::String(d.to_string());
     }
@@ -335,6 +347,105 @@ pub async fn send_eth(
     }
 }
 
+/// Tauri command: direkt cüzdandan cüzdana NFT transferi (ERC-721/1155).
+///
+/// A marketplace sale is a different code path (Bulk Actions / Seaport) —
+/// this is a bare `safeTransferFrom`. Per the T9 decision
+/// (`docs/DECISIONS-PENDING.md` D2) this reuses the exact same envelope
+/// `evaluate()` an ETH send goes through, called with `value_wei = 0`: the
+/// kill switch, expiry, and scope guards all apply for free, and no new
+/// cap/allowlist is introduced. The cost of that reuse is explicit: `to`
+/// must already be in the wallet's ETH scope, or this is refused with
+/// `out_of_scope` exactly like an ETH send to an unlisted address would be.
+///
+/// `token_id` and `amount` are decimal strings, not JS numbers — an ERC-721
+/// token id or an ERC-1155 amount can exceed what an f64 represents exactly.
+#[tauri::command]
+pub async fn transfer_nft(
+    wallet_address: String,
+    contract_address: String,
+    token_id: String,
+    to: String,
+    token_standard: crate::nft::TokenStandard,
+    amount: Option<String>,
+    api_key: String,
+    envelope_engine: tauri::State<'_, std::sync::Arc<crate::envelope::engine::EnvelopeEngine>>,
+) -> Result<String, String> {
+    // Envelope kontrolü: value_wei = 0, `to` = NFT'nin gideceği adres (kontrat
+    // adresi değil) — zarfın scope listesi alıcıyı, yani gerçek insan
+    // hedefini kontrol eder.
+    let tx_req_envelope = crate::envelope::types::TransactionRequest {
+        to: to.clone(),
+        value_wei: 0,
+        calldata: String::new(),
+    };
+    envelope_engine
+        .check_and_authorize(&tx_req_envelope)
+        .map_err(|e| format!("Envelope rejected: {e:?}"))?;
+
+    // Envelope kabul etti; artık başarısız her adım (adres/parse hatası,
+    // imzalama, yayın) `send_eth` ile aynı sebepten geri alınmalı — aksi
+    // halde yayınlanmamış bir NFT transferi için harcama kaydı kalıcı olur.
+    let result = build_and_send_nft_transfer(
+        &wallet_address,
+        &contract_address,
+        &token_id,
+        &to,
+        token_standard,
+        amount.as_deref(),
+        &api_key,
+    )
+    .await;
+
+    if result.is_err() {
+        envelope_engine.rollback_authorization(&tx_req_envelope);
+    }
+    result
+}
+
+/// `transfer_nft`'in imzalama/yayın kısmı — envelope kontrolünden bağımsız,
+/// böylece rollback her hata yolunu tek bir yerden kapsar.
+async fn build_and_send_nft_transfer(
+    wallet_address: &str,
+    contract_address: &str,
+    token_id: &str,
+    to: &str,
+    token_standard: crate::nft::TokenStandard,
+    amount: Option<&str>,
+    api_key: &str,
+) -> Result<String, String> {
+    use alloy::primitives::{Address, U256};
+
+    let from_addr: Address = wallet_address
+        .parse()
+        .map_err(|e| format!("Invalid wallet address: {e}"))?;
+    let to_addr: Address = to.parse().map_err(|e| format!("Invalid `to` address: {e}"))?;
+    let token_id_u256: U256 = token_id
+        .parse()
+        .map_err(|e| format!("Invalid token_id: {e}"))?;
+    let amount_u256: U256 = match amount {
+        Some(a) => a.parse().map_err(|e| format!("Invalid amount: {e}"))?,
+        None => U256::from(1u64),
+    };
+
+    let calldata = crate::nft::encode_transfer(
+        token_standard,
+        from_addr,
+        to_addr,
+        token_id_u256,
+        amount_u256,
+    );
+    let calldata_hex = format!("0x{}", hex::encode(&calldata));
+
+    let request = TxRequest {
+        to: contract_address.to_string(),
+        value_wei: "0".to_string(),
+        data: Some(calldata_hex),
+        gas_limit: None,
+    };
+    LocalSigner::sign_and_send(wallet_address, request, api_key).await
+}
+
 /// Tauri command: Gas tahmini
 #[tauri::command]
 pub async fn estimate_gas(
@@ -345,5 +456,5 @@ pub async fn estimate_gas(
 ) -> Result<u64, String> {
     let http = reqwest::Client::new();
     let url = alchemy_url(&api_key);
-    estimate_gas_inner(&http, &url, &to, &value_wei, data.as_deref()).await
+    estimate_gas_inner(&http, &url, None, &to, &value_wei, data.as_deref()).await
 }
