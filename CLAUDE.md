@@ -101,6 +101,32 @@ kaybeder ya da kaybettiğini sanır.
    `Err` değil. Kullanıcıya "yüklenemedi" demek, aslında gösterilecek bir şey
    olmadığında yanlış bilgidir.
 
+## Kod Kuralları (Westron'a özel)
+
+**Rust — `src-tauri/`**
+- Cüzdan kimliği private key'den türetilir (`PrivateKeySigner` → `address()`).
+  Çağırandan gelen adres yalnızca bir iddiadır; eşleşmezse işlem reddedilir.
+- Private key loglanmaz, komuttan dönmez, dosyaya yazılmaz, hata mesajına girmez.
+- Keychain hesapları küçük harfle anahtarlanır. Adresin iki geçerli yazımı var ve
+  birebir eşleşme yanlış yazımda imzalama anında "key not found" ile patlar.
+- Para hareket eden her yol zarftan geçer. `evaluate()` hem yan etkisiz
+  `preview_transaction`'ı hem de bütçe düşen `check_and_authorize`'ı besleyen tek
+  saf fonksiyondur — ikisinin ayrışmasına asla izin verilmez.
+- Aynı adresten gönderimler **sıralıdır**. Eşzamanlı iki gönderim aynı nonce'u okur
+  ve ikincisi birincinin yerine geçer; kullanıcı iki transfer sanır, biri hiç olmaz.
+- Boş sonuç `Ok(vec![])` döner, `Err` değil.
+
+**Frontend — `src/`**
+- `src/lib/tauri.ts` Rust'a tek köprüdür; `invoke` başka yerde çağrılmaz.
+- Adres `import_wallet`'tan geri gelir; kullanıcı yazmaz, key alanından alınmaz.
+  Tek doğruluk kaynağı `src/lib/walletImport.ts`.
+- Tutarlar BigInt ile hesaplanır. `parseFloat('0.1') * 1e18` doğru sonuç vermez —
+  `parseEthToWei` (`src/lib/distribute.ts`) kullanılır.
+- Hata mesajları kullanıcının anlayacağı dilde yazılır. `explainSendError` istenen
+  tonu gösteriyor: "out_of_scope" değil, "bu adres zarfın kapsamında değil".
+- Yeni bir ekran yazmadan önce aynı işi yapan başka ekran var mı diye bakılır.
+  Bu repo defalarca aynı akışın iki üç sürümünü büyütüp birbirinden ayırdı.
+
 ## Doğrulama Zorunluluğu
 
 **Testlerin geçmesi ekranın çalıştığı anlamına gelmez.** 09.08.2026'da 86/86 test

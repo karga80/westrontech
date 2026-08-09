@@ -1,6 +1,10 @@
 {
   "permissions": {
-    "allow": ["Bash", "Edit", "Write"]
+    "allow": [
+      "Bash",
+      "Edit",
+      "Write"
+    ]
   },
   "hooks": {
     "PreToolUse": [
@@ -10,6 +14,15 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/pre-tool.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/no-fake-success.sh"
           }
         ]
       }
