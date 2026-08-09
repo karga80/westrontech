@@ -490,6 +490,57 @@ Westron'u açıp bir zarf (envelope) oluşturduktan sonra, düşük tutarlı ger
 bir Distribute Funds gönderimini `bulk/distribute` ekranından bizzat onaylayıp
 Etherscan'de teyit etmeli — bu ekrandan yapılacak ilk gerçek mainnet işlemi.
 
+**`forge` — T9d, Bulk Actions'taki ölü `NftSendModal` kaldırıldı — BİTTİ
+(10.08.2026).** Önceki forge turunun bıraktığı çelişki: aynı ekranda iki "NFT
+gönder" giriş noktası vardı — Distribute CTA'sından açılan gerçek
+`DistributeModal`'ın Send NFT sekmesi (T9b) ve Bulk Actions araç çubuğundaki
+"Send NFTs" ikonundan açılan `NftSendModal` (her zaman "Sending unavailable"
+diyen dürüst ama işlevsiz iskelet). CLAUDE.md'nin tek-implementasyon kuralı
+gereği ikinci sürüm kaldırıldı, tetikleyici gerçek akışa bağlandı.
+
+- `NftSendModal` fonksiyonu ve `showNftSendModal` state'i tamamen silindi.
+- Bulk Actions'taki "Send NFTs" düğmesi artık `DistributeModal`'ı Send NFT
+  sekmesinde, tıklanan NFT önceden seçili olarak açıyor. Bunun için
+  `DistributeModal`'a yeni bir prop eklendi: `preselectedNftKey?: string`
+  (`nftKey(nft)` formatı — `contract.address + token_id`, Bulk Actions'ın
+  seçim anahtarıyla birebir aynı). Prop verildiğinde modal doğrudan
+  `tab='nft'`, `selectedNftKey=preselectedNftKey` ile açılıyor; anahtar
+  `nfts` listesinde yoksa (ör. veri henüz gelmediyse) sessizce hiçbir şey
+  seçilmeden normal varsayılana (Send Funds sekmesi) düşüyor — hayali bir
+  seçim göstermiyor.
+- **Ürün kararı — çoklu seçim (Emir'in onayı gerekebilir, varsayım olarak
+  işaretliyorum):** `transfer_nft` komutu tek seferde tek NFT gönderiyor
+  (imza: `contract_address, token_id, to, token_standard, amount` — hepsi
+  tekil). `DistributeModal`'ın Send NFT sekmesi de zaten tek seçim
+  (`selectedNftKey: string | null`) üzerine kurulu; sıralı çoklu gönderim
+  desteği eklemek hem bu görevin kapsamını hem riskini büyütürdü (aynı
+  kaynaktan art arda imzalar, nonce sıralaması, kısmi başarısızlıkta hangi
+  NFT'lerin gittiğini gösterme UI'ı — hiçbiri mevcut değil). Bunun yerine
+  **(a) yolunu seçtim**: Bulk Actions'ta birden fazla NFT seçiliyken "Send
+  NFTs" düğmesi devre dışı kalıyor, üzerine gelince "Select exactly one NFT
+  to send — NFT transfers move one item at a time" açıklaması çıkıyor. Tam
+  bir NFT seçiliyken aktifleşiyor. Bu, sessiz bir kısıtlama değil — düğme
+  görünür şekilde devre dışı ve nedeni yazıyor. Emir çoklu NFT'yi tek
+  tıkla göndermeyi gerçekten istiyorsa bu ayrı bir görev (transfer_nft'i
+  sırayla çağıran bir kuyruk, T9c'deki `runDistribution`'a benzer bir desen)
+  olarak ele alınmalı.
+
+Dosyalar: `src/app/wallet/[id]/WalletDetailClient.tsx`,
+`src/components/DistributeModal.tsx`.
+
+Doğrulanan: `npx tsc --noEmit` temiz, `npx jest` 24/24 geçti, `npx eslint`
+bu iki dosyada yeni hata/uyarı eklemedi (`git stash` ile taban alındı — hem
+öncesi hem sonrası aynı 1 hata + 3 uyarı, hepsi bu değişikliklerden bağımsız
+satırlarda: `AddressBookTab`'ın effect'i, `NftThumb`'ın `<img>` kullanımı,
+`DistributeModal`'ın önceden var olan `n.has(id) ? ... : ...` deseni).
+
+**DOĞRULANAMADI:** Bu ortamda gerçek uygulamayı açıp tıklayan bir araç yoktu
+(T1/T9/T10'daki aynı Accessibility izni blokajı) — Bulk Actions'ta bir NFT
+seçilip "Send NFTs" düğmesine tıklandığında `DistributeModal`'ın gerçekten
+Send NFT sekmesinde, o NFT önceden seçili şekilde açıldığı **gözle
+görülmedi**. Yalnızca kod/tip/lint/test seviyesinde kanıt var. Gerçek bir
+NFT gönderimi bu görevde kesinlikle tetiklenmedi.
+
 ---
 
 ## T10 — Etherscan link'leri eksik  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi

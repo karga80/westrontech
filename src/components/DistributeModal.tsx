@@ -78,6 +78,14 @@ export interface DistributeModalProps {
    *  so this component does not fetch its own copy. Defaults to empty,
    *  which renders an honest "no NFTs" state rather than nothing. */
   nfts?: OwnedNft[];
+  /** `nftKey(nft)` (contract address + token id) of an NFT to open the modal
+   *  with already selected, on the Send NFT tab. Used by entry points that
+   *  start from an already-chosen NFT (e.g. a Bulk Actions single selection)
+   *  so the user doesn't have to find and re-pick it in Step 1. Only takes
+   *  effect if that key is present in `nfts`; otherwise the modal opens on
+   *  its normal default (Send Funds tab, nothing selected) rather than
+   *  silently failing to preselect. */
+  preselectedNftKey?: string;
 }
 
 type DistStep = 1 | 2 | 3;
@@ -148,9 +156,11 @@ function UnitLabel({ skin, size = 10 }: { skin: DistributeModalSkin; size?: numb
 
 export default function DistributeModal({
   wallets, onClose, skin = 'dashboard', lockedSourceId, enableTabs = false, nfts = [],
+  preselectedNftKey,
 }: DistributeModalProps) {
   const c = SKIN[skin];
-  const [tab, setTab] = useState<'funds' | 'nft'>('funds');
+  const hasPreselectedNft = enableTabs && !!preselectedNftKey && nfts.some(n => nftKey(n) === preselectedNftKey);
+  const [tab, setTab] = useState<'funds' | 'nft'>(hasPreselectedNft ? 'nft' : 'funds');
   const [step, setStep] = useState<DistStep>(1);
   const [sourceId, setSourceId] = useState(lockedSourceId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -170,7 +180,7 @@ export default function DistributeModal({
   // Send NFT tab — single-item select (one transfer per confirm, matching
   // `transfer_nft`'s signature), free-text destination (an NFT can go to any
   // address in the envelope's scope, not just another imported wallet).
-  const [selectedNftKey, setSelectedNftKey] = useState<string | null>(null);
+  const [selectedNftKey, setSelectedNftKey] = useState<string | null>(hasPreselectedNft ? preselectedNftKey! : null);
   const [nftToAddress, setNftToAddress] = useState('');
   const [nftPreview, setNftPreview] = useState<TransactionPreview | null>(null);
   const [nftPreviewError, setNftPreviewError] = useState<string | null>(null);

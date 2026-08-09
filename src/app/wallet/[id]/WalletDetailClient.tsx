@@ -1517,67 +1517,6 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
   );
 }
 
-function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; walletAddress: string; onClose: () => void }) {
-  const [toAddress, setToAddress] = React.useState('');
-  const isValid = ADDR_RE.test(toAddress.trim());
-
-  return (
-    <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={MODAL_BOX}>
-        <div style={MODAL_HDR}>
-          <span style={MODAL_TITLE}>Send NFT{nfts.length !== 1 ? 's' : ''} · {nfts.length} item{nfts.length !== 1 ? 's' : ''}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
-        </div>
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: 1 }}>
-          <div style={{ ...LABEL_SM, marginBottom: '2px' }}>Sending</div>
-          {nfts.map(n => {
-            const k = n.contract.address + n.token_id;
-            return (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--wr-border)' }}>
-                <NftThumb nft={n} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{n.name ?? `#${n.token_id}`}</div>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.contract.address}</div>
-                </div>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)', border: '1px solid var(--wr-border)', padding: '2px 6px', flexShrink: 0 }}>
-                  {n.contract.token_type ?? 'ERC-721'}
-                </span>
-              </div>
-            );
-          })}
-          <div style={{ marginTop: '8px' }}>
-            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>From</div>
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '9px 10px', backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid var(--wr-border)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {walletAddress || '0x…'}
-            </div>
-          </div>
-          <div>
-            <div style={{ ...LABEL_SM, marginBottom: '6px' }}>To Address</div>
-            <input
-              type="text" placeholder="0x…"
-              value={toAddress} onChange={e => setToAddress(e.target.value)}
-              style={{ ...INPUT_SM, borderColor: toAddress && !isValid ? 'rgba(248,113,113,0.6)' : 'var(--wr-border-hover)' }}
-            />
-            {toAddress && !isValid && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>Invalid Ethereum address</div>
-            )}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '4px 0' }}>
-            <span>Estimated gas</span><span>{EM_DASH}</span>
-          </div>
-          <UnwiredNotice what="Sending an NFT" />
-        </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          <button onClick={onClose} style={BTN_GHOST}>Close</button>
-          <button disabled style={{ ...BTN_LIME, opacity: 0.35, cursor: 'default' }}>
-            Sending unavailable
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 // ── Live data helpers ─────────────────────────────────────────────────────────
@@ -1634,7 +1573,12 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
   const [showNftEditModal, setShowNftEditModal] = useState(false);
   const [showNftCancelModal, setShowNftCancelModal] = useState(false);
   const [showNftAcceptModal, setShowNftAcceptModal] = useState(false);
-  const [showNftSendModal, setShowNftSendModal] = useState(false);
+  // Bulk Actions "Send" opens the same DistributeModal the Distribute CTA
+  // uses (real transfer_nft call, envelope-guarded) instead of the old
+  // dead-end NftSendModal. `transfer_nft` moves one NFT per call, so this
+  // only ever holds a single key — the toolbar button is disabled unless
+  // exactly one NFT is selected (see the Bulk Actions action bar below).
+  const [sendNftKey, setSendNftKey] = useState<string | null>(null);
   const [alchemyKey, setAlchemyKey] = useState('');
   const [keyError, setKeyError] = useState<string | null>(null);
   const [etherscanOpenError, setEtherscanOpenError] = useState<string | null>(null);
@@ -2142,11 +2086,16 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                   Accept {selectedNfts.size} offer{selectedNfts.size !== 1 ? 's' : ''}
                 </button>
                 <button
-                  onClick={() => setShowNftSendModal(true)}
-                  title="Send NFTs"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', cursor: 'pointer', color: 'var(--wr-text)', flexShrink: 0 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
+                  onClick={() => {
+                    if (selectedNfts.size !== 1) return;
+                    setSendNftKey([...selectedNfts][0]);
+                    setShowDistribute(true);
+                  }}
+                  disabled={selectedNfts.size !== 1}
+                  title={selectedNfts.size === 1 ? 'Send NFT' : 'Select exactly one NFT to send — NFT transfers move one item at a time'}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', cursor: selectedNfts.size === 1 ? 'pointer' : 'not-allowed', color: selectedNfts.size === 1 ? 'var(--wr-text)' : 'var(--wr-text-4)', opacity: selectedNfts.size === 1 ? 1 : 0.5, flexShrink: 0 }}
+                  onMouseEnter={e => { if (selectedNfts.size !== 1) return; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-accent)'; }}
+                  onMouseLeave={e => { if (selectedNfts.size !== 1) return; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--wr-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--wr-text)'; }}
                 >
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                     <path d="M1.5 6.5h10M7.5 2.5l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2513,7 +2462,12 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
           enableTabs
           lockedSourceId={wallet.id}
           nfts={liveNfts ?? []}
-          onClose={() => setShowDistribute(false)}
+          preselectedNftKey={sendNftKey ?? undefined}
+          onClose={() => {
+            setShowDistribute(false);
+            if (sendNftKey) setSelectedNfts(new Set());
+            setSendNftKey(null);
+          }}
         />
       )}
       {(() => {
@@ -2523,7 +2477,6 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
           {showNftEditModal   && <NftEditListingModal  nfts={selNfts} onClose={close(setShowNftEditModal)} />}
           {showNftCancelModal && <NftCancelListingModal nfts={selNfts} onClose={close(setShowNftCancelModal)} />}
           {showNftAcceptModal && <NftAcceptOfferModal  nfts={selNfts} onClose={close(setShowNftAcceptModal)} />}
-          {showNftSendModal   && <NftSendModal nfts={selNfts} walletAddress={walletAddr} onClose={close(setShowNftSendModal)} />}
         </>);
       })()}
     </main>
