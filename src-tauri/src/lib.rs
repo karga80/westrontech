@@ -1,5 +1,6 @@
 mod alerts;
 mod analytics;
+mod control;
 mod data;
 mod envelope;
 mod marketplace;
@@ -11,13 +12,13 @@ mod sniping;
 mod sister;
 mod subscription;
 mod pnl;
+mod persist;
 
 use envelope::engine::EnvelopeEngine;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use chrono::Utc;
 use tauri::Emitter;
-use uuid::Uuid;
+use tauri::Manager;
 
 static POLLING_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -45,21 +46,8 @@ fn create_envelope(
     ttl_hours: u64,
     engine: tauri::State<Arc<EnvelopeEngine>>,
 ) -> Result<serde_json::Value, String> {
-    let eth_to_wei = |eth: f64| -> u128 { (eth * 1e18) as u128 };
-    let now = Utc::now().timestamp();
-    let max_ttl_hours: u64 = 168; // 7 gün
-    let ttl = ttl_hours.min(max_ttl_hours);
-
-    let env = envelope::types::Envelope {
-        id: Uuid::new_v4(),
-        created_at: now,
-        expires_at: now + (ttl as i64 * 3600),
-        per_tx_ceiling_wei: eth_to_wei(per_tx_ceiling_eth),
-        hard_cap_wei: eth_to_wei(hard_cap_eth),
-        spent_wei: 0,
-        scope: scope_addresses,
-        kill_switch_active: false,
-    };
+    // Shared with the control server's POST /envelope so the two cannot drift.
+    let env = envelope::build_envelope(per_tx_ceiling_eth, hard_cap_eth, scope_addresses, ttl_hours);
     let envelope_id = env.id.to_string();
     let expires_at = env.expires_at;
     engine.create_envelope(env);
@@ -75,6 +63,18 @@ fn revoke_envelope(engine: tauri::State<Arc<EnvelopeEngine>>) -> bool {
     true
 }
 
+/// **Consumes spend budget — this is not a pre-flight check.**
+///
+/// Despite the name, a successful call adds `value_eth` to the envelope's
+/// `spent_wei` and persists it. Calling it to ask "would this be allowed?" and
+/// then sending charges the hard cap twice for one transfer, and for any value
+/// above half the remaining headroom the second call trips the automatic kill
+/// switch without any ETH having moved.
+///
+/// Behaviour and signature are deliberately unchanged — the webview may still
+/// call it — but new callers want [`preview_transaction`], which runs the
+/// identical guards and mutates nothing. Call this one exactly once,
+/// immediately before signing.
 #[tauri::command]
 fn check_transaction(
     to: String,
@@ -92,6 +92,34 @@ fn check_transaction(
         Ok(()) => serde_json::json!({ "authorized": true }),
         Err(e) => serde_json::json!({ "authorized": false, "reject_reason": format!("{:?}", e) }),
     }
+}
+
+/// Read-only sibling of [`check_transaction`]: runs every guard the real
+/// authorisation runs — active envelope, kill switch, expiry, scope, per-tx
+/// ceiling, hard-cap headroom — and returns a structured verdict **without**
+/// touching `spent_wei`, engaging the kill switch, writing an audit entry, or
+/// persisting anything.
+///
+/// `value_wei` is a decimal string rather than an f64 of ETH: wei does not
+/// survive a round trip through a JS number, and a pre-flight check that
+/// silently re-rounds the amount it is checking is not a check.
+#[tauri::command]
+fn preview_transaction(
+    to: String,
+    value_wei: String,
+    calldata: Option<String>,
+    engine: tauri::State<Arc<EnvelopeEngine>>,
+) -> Result<envelope::engine::TransactionPreview, String> {
+    let value_wei: u128 = value_wei
+        .trim()
+        .parse()
+        .map_err(|_| format!("value_wei must be a decimal wei amount, got {value_wei:?}"))?;
+    let request = envelope::types::TransactionRequest {
+        to,
+        value_wei,
+        calldata: calldata.unwrap_or_default(),
+    };
+    Ok(engine.preview(&request))
 }
 
 #[tauri::command]
@@ -278,6 +306,14 @@ fn load_alchemy_key() -> Result<String, String> {
 #[tauri::command]
 fn delete_alchemy_key_cmd() -> Result<(), String> {
     wallet::keychain::delete_alchemy_key()
+}
+
+/// Where secrets are stored, plus the outcome of the one-time move of any
+/// plaintext `*.key` files into the macOS Keychain. `pending > 0` means a key
+/// is still on disk because its Keychain copy could not be verified.
+#[tauri::command]
+fn get_keychain_status() -> wallet::keychain::KeychainStatus {
+    wallet::keychain::keychain_status()
 }
 
 #[tauri::command]
@@ -671,18 +707,24 @@ async fn get_stream_status(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let engine = Arc::new(EnvelopeEngine::new());
+  // Persisted: spend cap, accumulated spend and kill switch all survive a
+  // restart. An expired envelope is not restored as active.
+  let engine = Arc::new(EnvelopeEngine::load_or_new());
   let stream_manager = Arc::new(stream::StreamManager::new());
   // Realtime manager is built lazily by `realtime_init` — store an empty slot
   // so the Tauri command handler can fill it in once we have the API key.
   let realtime_slot: std::sync::Mutex<Option<Arc<data::realtime::RealtimeManager>>> =
       std::sync::Mutex::new(None);
 
+  // Clone for the control server / scheduler, which are started from `setup`
+  // (the first point where an `AppHandle` exists for event emission).
+  let control_engine = engine.clone();
+
   tauri::Builder::default()
     .manage(engine)
     .manage(stream_manager)
     .manage(realtime_slot)
-    .setup(|app| {
+    .setup(move |app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -690,6 +732,11 @@ pub fn run() {
             .build(),
         )?;
       }
+      // Loopback control server (Bearer-token auth) + snipe scheduler loop.
+      // Both share the live EnvelopeEngine so the kill switch means the same
+      // thing from the UI, from Claude, and inside the loop.
+      let scheduler = control::start(control_engine.clone(), app.handle().clone());
+      app.manage(scheduler);
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -697,6 +744,7 @@ pub fn run() {
         create_envelope,
         revoke_envelope,
         check_transaction,
+        preview_transaction,
         activate_kill_switch,
         deactivate_kill_switch,
         get_envelope_status,
@@ -709,6 +757,7 @@ pub fn run() {
         save_alchemy_key,
         load_alchemy_key,
         delete_alchemy_key_cmd,
+        get_keychain_status,
         save_opensea_key,
         load_opensea_key,
         delete_opensea_key_cmd,

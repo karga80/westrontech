@@ -69,15 +69,14 @@ impl AlchemyHttpClient {
             "params": params,
         });
 
-        let resp = self.http.post(self.rpc_url())
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| super::map_reqwest(e, &format!("rpc {method}")))?;
+        let resp = with_429_retry(|| async {
+            self.http.post(self.rpc_url())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| super::map_reqwest(e, &format!("rpc {method}")))
+        }).await?;
 
-        if resp.status().as_u16() == 429 {
-            return Err(DataProviderError::RateLimited);
-        }
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let text = resp.text().await.unwrap_or_default();
@@ -151,11 +150,13 @@ impl AlchemyHttpClient {
         query: &Q,
         bearer: Option<&str>,
     ) -> ProviderResult<T> {
-        let mut req = self.http.get(url).query(query);
-        if let Some(token) = bearer {
-            req = req.bearer_auth(token);
-        }
-        let resp = req.send().await.map_err(|e| super::map_reqwest(e, "GET"))?;
+        let resp = with_429_retry(|| async {
+            let mut req = self.http.get(url).query(query);
+            if let Some(token) = bearer {
+                req = req.bearer_auth(token);
+            }
+            req.send().await.map_err(|e| super::map_reqwest(e, "GET"))
+        }).await?;
         Self::handle_rest_response(resp).await
     }
 
@@ -165,11 +166,13 @@ impl AlchemyHttpClient {
         body: &B,
         bearer: Option<&str>,
     ) -> ProviderResult<T> {
-        let mut req = self.http.post(url).json(body);
-        if let Some(token) = bearer {
-            req = req.bearer_auth(token);
-        }
-        let resp = req.send().await.map_err(|e| super::map_reqwest(e, "POST"))?;
+        let resp = with_429_retry(|| async {
+            let mut req = self.http.post(url).json(body);
+            if let Some(token) = bearer {
+                req = req.bearer_auth(token);
+            }
+            req.send().await.map_err(|e| super::map_reqwest(e, "POST"))
+        }).await?;
         Self::handle_rest_response(resp).await
     }
 
@@ -177,9 +180,6 @@ impl AlchemyHttpClient {
         resp: reqwest::Response,
     ) -> ProviderResult<T> {
         let status = resp.status();
-        if status.as_u16() == 429 {
-            return Err(DataProviderError::RateLimited);
-        }
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             return Err(DataProviderError::Upstream {
@@ -188,5 +188,30 @@ impl AlchemyHttpClient {
             });
         }
         resp.json::<T>().await.map_err(|e| DataProviderError::Decode(e.to_string()))
+    }
+}
+
+/// Send a request up to 3 times, backing off (200ms, 600ms) whenever Alchemy
+/// answers with HTTP 429. Adding wallets fires a burst of concurrent requests
+/// (balance + tokens + NFTs + price per wallet) that easily trips the free-tier
+/// rate limit; without this, one 429'd call fails that wallet's entire
+/// snapshot for the whole fetch cycle with no second attempt.
+async fn with_429_retry<F, Fut>(mut send: F) -> ProviderResult<reqwest::Response>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ProviderResult<reqwest::Response>>,
+{
+    const BACKOFFS_MS: [u64; 2] = [200, 600];
+    let mut attempt = 0;
+    loop {
+        let resp = send().await?;
+        if resp.status().as_u16() != 429 {
+            return Ok(resp);
+        }
+        if attempt >= BACKOFFS_MS.len() {
+            return Err(DataProviderError::RateLimited);
+        }
+        tokio::time::sleep(Duration::from_millis(BACKOFFS_MS[attempt])).await;
+        attempt += 1;
     }
 }

@@ -1,4 +1,5 @@
 use reqwest::Client;
+use std::time::Duration;
 use crate::rpc::types::*;
 
 pub struct AlchemyClient {
@@ -18,13 +19,12 @@ impl AlchemyClient {
         &self,
         request: &RpcRequest,
     ) -> Result<T, String> {
-        let response = self
-            .client
-            .post(&self.base_url)
-            .json(request)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let response = with_429_retry(|| {
+            self.client
+                .post(&self.base_url)
+                .json(request)
+                .send()
+        }).await?;
 
         let rpc_response: RpcResponse<T> = response
             .json()
@@ -244,13 +244,12 @@ impl AlchemyClient {
             query.push(("pageKey", key.to_string()));
         }
 
-        let response = self
-            .client
-            .get(format!("{}/getNFTsForOwner", nft_url))
-            .query(&query)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let response = with_429_retry(|| {
+            self.client
+                .get(format!("{}/getNFTsForOwner", nft_url))
+                .query(&query)
+                .send()
+        }).await?;
 
         #[derive(serde::Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -344,13 +343,12 @@ impl AlchemyClient {
     /// Koleksiyon floor fiyatı (Alchemy NFT API)
     pub async fn get_floor_price(&self, contract_address: &str) -> Result<NftFloorPrice, String> {
         let nft_url = self.nft_base_url();
-        let response = self
-            .client
-            .get(format!("{}/getFloorPrice", nft_url))
-            .query(&[("contractAddress", contract_address)])
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let response = with_429_retry(|| {
+            self.client
+                .get(format!("{}/getFloorPrice", nft_url))
+                .query(&[("contractAddress", contract_address)])
+                .send()
+        }).await?;
 
         #[derive(serde::Deserialize)]
         struct FloorResponse {
@@ -390,5 +388,30 @@ impl AlchemyClient {
     #[allow(dead_code)]
     pub async fn get_eth_price_usd(&self) -> Result<f64, String> {
         Err("get_eth_price_usd moved to crate::data::alchemy::prices — use the data layer".to_string())
+    }
+}
+
+/// Send a request up to 3 times, backing off (200ms, 600ms) whenever Alchemy answers
+/// with HTTP 429. `get_portfolio_snapshot` joins `get_eth_balance` + `get_token_balances`
+/// + `get_nfts_for_owner` with `tokio::try_join!`, so a single 429 on any one of them
+/// (easy to trip when adding a wallet fires a burst of concurrent per-wallet requests)
+/// used to fail that wallet's entire snapshot for the whole fetch cycle with no retry.
+async fn with_429_retry<F, Fut>(mut build_and_send: F) -> Result<reqwest::Response, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
+{
+    const BACKOFFS_MS: [u64; 2] = [200, 600];
+    let mut attempt = 0;
+    loop {
+        let resp = build_and_send().await.map_err(|e| e.to_string())?;
+        if resp.status().as_u16() != 429 {
+            return Ok(resp);
+        }
+        if attempt >= BACKOFFS_MS.len() {
+            return Err("rate limited (429) after retries".to_string());
+        }
+        tokio::time::sleep(Duration::from_millis(BACKOFFS_MS[attempt])).await;
+        attempt += 1;
     }
 }
