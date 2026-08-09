@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import {
-  getPortfolioSnapshot, loadAlchemyKey, importWallet,
+  getPortfolioSnapshot, loadAlchemyKey, importWallet, openExternalUrl,
   type PortfolioSnapshot,
 } from '@/lib/tauri';
 import {
@@ -406,6 +406,16 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
   const [previewBusy, setPreviewBusy] = useState(false);
   const [distKey, setDistKey] = useState('');
   const sendStartedRef = useRef(false);
+  const [linkOpenError, setLinkOpenError] = useState<string | null>(null);
+
+  async function openInBrowser(url: string) {
+    setLinkOpenError(null);
+    try {
+      await openExternalUrl(url);
+    } catch (e) {
+      setLinkOpenError(`Could not open the default browser: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   useEffect(() => { loadAlchemyKey().then(k => setDistKey(k ?? '')).catch(() => setDistKey('')); }, []);
 
@@ -638,8 +648,17 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{label}</span>
                   </div>
                   {r.hash && (
-                    <a href={`https://etherscan.io/tx/${r.hash}`} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none' }}>{r.hash}</a>
+                    <button
+                      type="button"
+                      onClick={() => { void openInBrowser(`https://etherscan.io/tx/${r.hash}`); }}
+                      style={{
+                        display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px',
+                        color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none', background: 'none',
+                        border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>TXN:</span> {r.hash}
+                    </button>
                   )}
                   {r.error && (
                     <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(r.error)}</div>
@@ -647,6 +666,9 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
                 </div>
               );
             })}
+            {linkOpenError && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{linkOpenError}</div>
+            )}
             <button disabled={sending}
               onClick={() => { sendStartedRef.current = false; setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); setSendRows([]); setPreviews({}); onClose(); }}
               style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: sending ? 'not-allowed' : 'pointer', marginTop: '8px' }}>

@@ -108,8 +108,26 @@ switch acil fren olur, varsayılanı kural belirler). T4'ten önce ele alma.
 ---
 
 ## T6 — Dört küçük kusur
-a. **Sessiz gönder düğmesi** — `WalletDetailClient.runSends`, `canSend` sağlanmazsa
-   geri bildirimsiz `return` ediyor. Hangi koşulun eksik olduğu ekranda yazmalı. → `forge`
+a. **Sessiz gönder düğmesi** — ✅ `forge` KAPANDI (10.08.2026). `runSends`
+   artık `!canSend`'de sessizce `return` etmiyor: aynı koşullardan hangileri
+   eksikse (`envelope` hazır ama checkbox işaretlenmemiş / "SEND" yazılmamış)
+   ayrı bir `confirmGate` listesi hesaplanıp düğmenin hemen üstünde "Before you
+   can send:" başlığıyla gösteriliyor — önceden bu iki koşul (checkbox,
+   "SEND" yazısı) `BlockerList`'te hiç görünmüyordu, düğme sebepsizce gri
+   duruyordu. Ayrıca `runSends` içindeki iki savunma amaçlı erken `return`
+   (`!canSend` ve `rows.length === 0`) artık `sendGuardMessage` state'ine
+   yazıp ekranda gösteriyor — normal kullanımda düğme zaten HTML `disabled`
+   olduğu için bu yollara ulaşılamaz, ama ulaşılırsa da sessiz kalmıyor.
+   Dosya: `src/app/wallet/[id]/WalletDetailClient.tsx`.
+   Doğrulandı: `tsc --noEmit` temiz, `eslint` bu dosyada yeni hata eklemedi
+   (mevcut tek `error` — satır ~1124, `AddressBookTab`'daki effect-içi
+   `setState` uyarısı — bu görevden önce de vardı, diff ile doğrulandı).
+   **DOĞRULANAMADI:** canlı uygulamada checkbox/SEND alanını boş bırakıp
+   düğmeye tıklayarak mesajın gerçekten ekranda çıktığı gözle görülmedi —
+   masaüstünde bu oturumda aynı anda başka canlı ajan pencereleri (ChatGPT
+   masaüstü, muhtemelen gerçek tarayıcı sekmeleri) açıktı ve otomatik tıklama
+   T1'de kayıtlı riski taşıyordu (yanlış pencereye tıklama). Kod seviyesinde
+   doğrulandı, ekranda değil.
 b. **Kendine gönderim tutarsız** — ✅ `orion` karar verdi (10.08.2026, bkz.
    `DECISIONS-PENDING.md` D2). Filtre adres bazlı olsun (id değil) + step-2'de
    adres eşleşirse uyarı satırı + modalda "kaynak hedef listesinde görünmez" notu.
@@ -124,8 +142,14 @@ c. **Zarf ön-düşümü** — ✅ `vault` KAPANDI (10.08.2026). `check_and_auth
    geri alıyor, rollback sıfırın altına inmiyor). Gerçek bir başarısız
    broadcast senaryosu canlı uygulamada denenmedi — bu senaryo yalnızca birim
    testiyle doğrulandı, ekranda değil. Commit: `f77bb3f`.
-d. **main'den gelen tip hataları** — `src/app/sentiment/*` örtük `any`,
-   `formatters.test.ts` için `@types/jest` eksik. → `forge`
+d. **main'den gelen tip hataları** — ✅ KAPALI, kod değişikliği gerekmedi
+   (10.08.2026, `forge` doğrulaması). `c8ddc71` merge'ü main'in sentiment
+   düzeltmelerini zaten getirmiş: `src/app/sentiment/` ve `src/components/
+   sentiment/`'te örtük `any` yok, `@types/jest` `package.json`'da (satır 26)
+   zaten var ve `node_modules`'e kurulu. Doğrulandı: `npx tsc --noEmit` sıfır
+   hatayla temiz, `npx jest src/lib/__tests__/formatters.test.ts` 15/15 geçti.
+   Bu maddenin iddiası artık geçersiz (T2'deki gibi) — muhtemelen görev
+   kuyruğu merge'den önce yazılmıştı.
 
 ---
 
@@ -274,6 +298,48 @@ gerçekten OS tarayıcısını açıyor mu, önce ölçülsün; açmıyorsa `plu
 geçilsin. → `forge` (mekanik UI değişikliği) → `vera`
 **Bitti sayılır:** her iki link de gerçek Etherscan sayfasını varsayılan
 tarayıcıda açıyor (localhost'a değil), doğru adres/hash'e gidiyor.
+
+**⚠️ KISMEN BİTTİ (10.08.2026, `forge`).** `plugin-shell` kurulmadı —
+kontrol ederken zaten çalışan bir eşdeğeri bulundu: `open_external_url`
+Tauri komutu (`src-tauri/src/lib.rs:467`, `open` crate'ini kullanıyor, sadece
+`https://` kabul ediyor) ve frontend köprüsü `openExternalUrl()`
+(`src/lib/tauri.ts:827`) zaten vardı ve `monitor/page.tsx` ile sentiment
+panellerinde (OpenSea/tweet linkleri) canlı kullanılıyordu. Aynı pattern
+tekrarlandı, yeni bağımlılık eklenmedi:
+- **a)** `WalletDetailClient.tsx`'teki `<a target="_blank">` Etherscan
+  düğmesi `<button onClick={() => openInBrowser(...)}>`'a çevrildi.
+  `openExternalUrl` başarısız olursa (`Result<(), String>` bir hata
+  dönerse) düğmenin altında kırmızı bir satırla neden gösteriliyor — önceki
+  `<a>` sessizce hiçbir şey yapmıyor olabilirdi, artık başarısızlık da görünür.
+- **b)** `src/app/page.tsx` ve `src/app/wallets/page.tsx`'teki Process
+  adımında, `r.hash` linkinin önüne **"TXN:"** etiketi eklendi, `<a>`
+  yerine aynı `openExternalUrl` pattern'iyle `<button>` kullanıldı, açma
+  hatası için görünür satır eklendi (ikisi de `bulk/distribute/page.tsx`'e
+  dokunmadı — o T9 kapsamında).
+
+Dosyalar: `src/app/wallet/[id]/WalletDetailClient.tsx`, `src/app/page.tsx`,
+`src/app/wallets/page.tsx`.
+
+Doğrulandı: `npx tsc --noEmit` temiz, `cd src-tauri && cargo check` temiz
+(Rust tarafına dokunulmadı — komut zaten vardı), `npx eslint` bu üç dosyada
+yeni hata eklemedi (WalletDetailClient'taki tek pre-existing `error`
+diff'le doğrulandı, bu görevden önce de vardı), `npx jest` 24/24 geçti.
+
+**DOĞRULANAMADI — canlı uygulamada gerçekten tıklanıp tarayıcı açıldığı
+gözle görülmedi.** Masaüstünde bu oturumda aynı anda başka pencereler
+açıktı (ChatGPT masaüstü uygulaması kendi ajan oturumunu çalıştırıyordu,
+üstte görünür şekilde), `screencapture` ile tek bir salt-okunur ekran
+görüntüsü alındı (Westron penceresi `System Events` ile frontmost yapıldı,
+dashboard gerçek verilerle göründü) ama otomatik tıklama denenmedi — T1'de
+kayıtlı "yanlış pencereye tıklama" riski (o olayda canlı bir Chrome/OpenSea
+sekmesine gidilmişti) burada da geçerliydi ve bu görev "düşük risk" olarak
+tanımlansa da riski göze almaya değmedi. `openExternalUrl`/`open_external_url`
+çifti zaten `monitor/page.tsx`'te ve sentiment panellerinde canlı kullanımda
+olduğu için kod yolu battle-tested, ama bu spesifik iki yeni çağrı yeri
+(header Etherscan düğmesi, TXN linki) ekranda tıklanıp doğrulanmadı.
+**Kalan iş:** Accessibility izni netleşince (T1'deki aynı blokaj)
+`vera` bu iki linki gerçekten tıklayıp OS tarayıcısının açıldığını
+gözlemlesin.
 
 ---
 

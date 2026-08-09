@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { invoke } from '@tauri-apps/api/core';
 import {
   getNftsForOwner, getWalletPortfolio, getAssetTransfers, loadAlchemyKey,
-  getEnvelopeStatus, sendEth, estimateGas, getEthBalance,
+  getEnvelopeStatus, sendEth, estimateGas, getEthBalance, openExternalUrl,
   getNftPnl, getPnlSummary,
   type OwnedNft, type AssetTransfer, type WalletToken, type WalletPortfolio,
   type EnvelopeStatus, type NftPnlSummary, type PnlSummary,
@@ -294,6 +294,10 @@ function TransferModal({
 
   const [sendRows, setSendRows] = useState<SendRow[]>([]);
   const [batchStopped, setBatchStopped] = useState<string | null>(null);
+  /** Set only when the send button is clicked while it cannot actually send —
+   *  normally unreachable (the button is `disabled`), but a guard must never
+   *  fail silently, so this is the visible fallback if it ever is reached. */
+  const [sendGuardMessage, setSendGuardMessage] = useState<string | null>(null);
   /** Latched the moment a send starts. Never reset: one modal, one attempt. */
   const sendStartedRef = useRef(false);
 
@@ -357,6 +361,7 @@ function TransferModal({
     setPreviewFor(null);
     setVerified(new Set());
     setTypedConfirm('');
+    setSendGuardMessage(null);
 
     if (!isTauri) { setPreviewLoading(false); return; }
     const rows = parsed
@@ -492,27 +497,54 @@ function TransferModal({
   }
 
   const allVerified = destinations.length > 0 && destinations.every(d => verified.has(d.key));
-  const canSend =
+  const envelopeReady =
     phase === 'authorise' &&
     blockers.length === 0 &&
     !previewLoading &&
     !previewError &&
     previewFor === previewSignature &&
     previewableRows.length > 0 &&
-    previewableRows.every(d => preview[d.key]?.authorized === true) &&
-    allVerified &&
-    typedConfirm.trim().toUpperCase() === 'SEND';
+    previewableRows.every(d => preview[d.key]?.authorized === true);
+  const canSend = envelopeReady && allVerified && typedConfirm.trim().toUpperCase() === 'SEND';
+
+  /** Reasons the button is inert that `BlockerList` does not already cover —
+   *  the deliberate-confirmation gate itself. Shown only once the envelope
+   *  has actually cleared the transfer, so it never contradicts a real
+   *  blocker above it. A disabled button with no visible reason is a silent
+   *  failure the same as a swallowed error. */
+  const confirmGate: string[] = [];
+  if (envelopeReady) {
+    if (!allVerified) confirmGate.push('Tick the confirmation box on each destination above — the address and amount must be read, not assumed.');
+    if (typedConfirm.trim().toUpperCase() !== 'SEND') confirmGate.push('Type SEND in the box above to authorise this transfer.');
+  }
 
   async function runSends() {
     // React state updates are async, so `phase` alone cannot stop a second
     // click landing in the same tick. A ref flips synchronously — without it a
     // double-click could broadcast the same transfer twice.
-    if (!canSend || sendStartedRef.current) return;
+    if (sendStartedRef.current) return; // already sending or sent — the button is disabled, this is belt and braces
+    if (!canSend) {
+      // The button is `disabled` whenever this is false, so a real click
+      // should never reach here — but a handler that no-ops on a condition
+      // it doesn't explain is exactly the silent failure this app forbids.
+      // If this ever fires, say why instead of doing nothing.
+      setSendGuardMessage(
+        confirmGate.length > 0
+          ? confirmGate.join(' ')
+          : 'This transfer cannot be sent yet — see the messages above.',
+      );
+      return;
+    }
+    setSendGuardMessage(null);
     sendStartedRef.current = true;
     const rows: SendRow[] = parsed
       .filter((p): p is { d: Destination; amount: { wei: bigint } } => 'wei' in p.amount)
       .map(p => ({ ...p.d, valueWei: p.amount.wei, state: 'queued' as SendState }));
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      sendStartedRef.current = false;
+      setSendGuardMessage('No destination with a valid amount was found to send — add a destination and amount and try again.');
+      return;
+    }
     setSendRows(rows);
     setPhase('sending');
 
@@ -954,9 +986,18 @@ function TransferModal({
                     style={{ ...inputStyle, letterSpacing: '2px' }}
                   />
                 </div>
+                {confirmGate.length > 0 && (
+                  <div style={{ ...warnBox, marginTop: '10px' }}>
+                    <div style={{ fontWeight: 700, marginBottom: '4px' }}>Before you can send:</div>
+                    {confirmGate.map((m, i) => <div key={i} style={{ marginTop: '3px' }}>· {m}</div>)}
+                  </div>
+                )}
+                {sendGuardMessage && (
+                  <div style={{ ...noteBox, marginTop: '10px' }}>{sendGuardMessage}</div>
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
-                <button onClick={() => { setPhase('review'); setTypedConfirm(''); setVerified(new Set()); }} style={btnSecondary}>← Back</button>
+                <button onClick={() => { setPhase('review'); setTypedConfirm(''); setVerified(new Set()); setSendGuardMessage(null); }} style={btnSecondary}>← Back</button>
                 <button
                   disabled={!canSend || sendStartedRef.current}
                   onClick={() => { void runSends(); }}
@@ -1604,6 +1645,13 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
   const [showNftSendModal, setShowNftSendModal] = useState(false);
   const [alchemyKey, setAlchemyKey] = useState('');
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [etherscanOpenError, setEtherscanOpenError] = useState<string | null>(null);
+
+  async function openInBrowser(url: string) {
+    setEtherscanOpenError(null);
+    const res = await settle(() => openExternalUrl(url));
+    if (!res.ok) setEtherscanOpenError(`Could not open the default browser: ${res.error}`);
+  }
 
   // ── Wallet identity ─────────────────────────────────────────────────────────
   // Resolved on the client from the wallet store only. There is no placeholder
@@ -1820,19 +1868,25 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
           )}
         </div>
         {wallet && (
-          <a
-            href={`https://etherscan.io/address/${wallet.address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
-              border: '1px solid var(--wr-border)', padding: '6px 12px', textDecoration: 'none',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}
-            className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
-          >
-            Etherscan <ExternalLinkIcon />
-          </a>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+            <button
+              type="button"
+              onClick={() => { void openInBrowser(`https://etherscan.io/address/${wallet.address}`); }}
+              style={{
+                fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
+                border: '1px solid var(--wr-border)', padding: '6px 12px', backgroundColor: 'transparent',
+                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+              }}
+              className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
+            >
+              Etherscan <ExternalLinkIcon />
+            </button>
+            {etherscanOpenError && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', maxWidth: '260px', textAlign: 'right' }}>
+                {etherscanOpenError}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
