@@ -15,6 +15,7 @@ import { parseUnits, formatEther } from 'viem';
 import { loadAddressBook, saveAddressEntry, deleteAddressEntry, updateAddressEntry, type AddressEntry } from '@/lib/addressBook';
 import { EMPTY_NFTS_RESPONSE, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
+import DistributeModal from '@/components/DistributeModal';
 
 // ─── Wallet Detail Client ─────────────────────────────────────────────────────
 //
@@ -1639,6 +1640,7 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [tokenSort, setTokenSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'HELD VALUE', dir: 'desc' });
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showDistribute, setShowDistribute] = useState(false);
   const [showNftEditModal, setShowNftEditModal] = useState(false);
   const [showNftCancelModal, setShowNftCancelModal] = useState(false);
   const [showNftAcceptModal, setShowNftAcceptModal] = useState(false);
@@ -1869,18 +1871,32 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
         </div>
         {wallet && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-            <button
-              type="button"
-              onClick={() => { void openInBrowser(`https://etherscan.io/address/${wallet.address}`); }}
-              style={{
-                fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
-                border: '1px solid var(--wr-border)', padding: '6px 12px', backgroundColor: 'transparent',
-                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
-              }}
-              className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
-            >
-              Etherscan <ExternalLinkIcon />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowDistribute(true)}
+                style={{
+                  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#0b0c14',
+                  border: 'none', padding: '7px 14px', backgroundColor: '#7c5cff',
+                  display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+                }}
+                className="hover:opacity-90 transition-opacity"
+              >
+                Distribute
+              </button>
+              <button
+                type="button"
+                onClick={() => { void openInBrowser(`https://etherscan.io/address/${wallet.address}`); }}
+                style={{
+                  fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
+                  border: '1px solid var(--wr-border)', padding: '6px 12px', backgroundColor: 'transparent',
+                  display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
+                }}
+                className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
+              >
+                Etherscan <ExternalLinkIcon />
+              </button>
+            </div>
             {etherscanOpenError && (
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', maxWidth: '260px', textAlign: 'right' }}>
                 {etherscanOpenError}
@@ -2498,6 +2514,15 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
           isTauri={isTauri}
           tokenSymbol={selectedTokenSymbol}
           onClose={() => setShowTransferModal(false)}
+        />
+      )}
+      {showDistribute && wallet && (
+        <DistributeModal
+          wallets={loadWallets().map(w => ({ id: w.id, name: w.name, address: w.address }))}
+          skin="wallets"
+          enableTabs
+          lockedSourceId={wallet.id}
+          onClose={() => setShowDistribute(false)}
         />
       )}
       {(() => {

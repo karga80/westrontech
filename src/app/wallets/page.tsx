@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  getPortfolioSnapshot, loadAlchemyKey, importWallet, openExternalUrl,
+  getPortfolioSnapshot, loadAlchemyKey, importWallet,
   type PortfolioSnapshot,
 } from '@/lib/tauri';
 import {
@@ -11,14 +11,10 @@ import {
   updateWallet as updateWalletInStore, type StoredWallet,
 } from '@/lib/walletStore';
 import { deriveAddress, normalizeKey } from '@/lib/walletImport';
-import {
-  runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
-  type SendRow, type TransactionPreview,
-} from '@/lib/distribute';
 import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import SisterWalletFinder from '@/components/SisterWalletFinder';
-import { useTheme } from '@/lib/themeContext';
+import DistributeModal from '@/components/DistributeModal';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -362,324 +358,6 @@ function EditWalletModal({ wallet, allWallets, onClose, onSaved }: {
 
 // ─── Distribute Funds Modal ──────────────────────────────────────────────────
 
-type DistStep = 1 | 2 | 3;
-const DIST_STEPS = ['Select & Amounts', 'Confirm', 'Process'] as const;
-
-const LABEL_S: React.CSSProperties = {
-  fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700,
-  letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)',
-  display: 'block', marginBottom: '6px',
-};
-
-function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () => void }) {
-  const { theme } = useTheme();
-  const isDay = theme === 'day';
-  void isDay; // used for conditional styles below
-  const [step, setStep] = useState<DistStep>(1);
-  const [sourceId, setSourceId] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [amountMode, setAmountMode] = useState<'equal' | 'custom'>('equal');
-  const [equalAmount, setEqualAmount] = useState('');
-  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
-
-  const source = wallets.find(w => w.id === sourceId);
-  const destWallets = wallets.filter(w => w.id !== sourceId);
-  const toggleDest = (id: string) => setSelected(s => {
-    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
-  });
-  const getAmount = (id: string) => amountMode === 'equal' ? equalAmount : (customAmounts[id] ?? '');
-  const selectedList = destWallets.filter(w => selected.has(w.id));
-  const totalEth = selectedList.reduce((acc, w) => {
-    const v = parseFloat(getAmount(w.id)); return acc + (isNaN(v) ? 0 : v);
-  }, 0);
-  const step1Valid = !!sourceId && selected.size > 0 &&
-    (amountMode === 'equal'
-      ? parseFloat(equalAmount) > 0
-      : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
-
-  // Real sending. This modal previously ran a setTimeout that printed
-  // "Confirmed" without signing anything.
-  const [sendRows, setSendRows] = useState<SendRow[]>([]);
-  const [sending, setSending] = useState(false);
-  const [previews, setPreviews] = useState<Record<string, TransactionPreview>>({});
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewBusy, setPreviewBusy] = useState(false);
-  const [distKey, setDistKey] = useState('');
-  const sendStartedRef = useRef(false);
-  const [linkOpenError, setLinkOpenError] = useState<string | null>(null);
-
-  async function openInBrowser(url: string) {
-    setLinkOpenError(null);
-    try {
-      await openExternalUrl(url);
-    } catch (e) {
-      setLinkOpenError(`Could not open the default browser: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  useEffect(() => { loadAlchemyKey().then(k => setDistKey(k ?? '')).catch(() => setDistKey('')); }, []);
-
-  useEffect(() => {
-    if (step !== 2) return;
-    let cancelled = false;
-    (async () => {
-      setPreviewBusy(true); setPreviewError(null);
-      try {
-        const out: Record<string, TransactionPreview> = {};
-        for (const w of selectedList) {
-          const wei = parseEthToWei(getAmount(w.id));
-          if (wei == null) continue;
-          out[w.id] = await previewTransaction({ to: w.address, valueWei: wei.toString() });
-        }
-        if (!cancelled) setPreviews(out);
-      } catch (e) {
-        if (!cancelled) setPreviewError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setPreviewBusy(false);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  const blockedRows = selectedList.filter(w => previews[w.id] && !previews[w.id].authorized);
-  const canSend = !!source && !!distKey && !previewBusy && !previewError &&
-    selectedList.length > 0 && selectedList.every(w => previews[w.id]?.authorized === true);
-
-  async function startSend() {
-    if (!canSend || sendStartedRef.current || !source) return;
-    sendStartedRef.current = true;
-    const rows: SendRow[] = [];
-    for (const w of selectedList) {
-      const wei = parseEthToWei(getAmount(w.id));
-      if (wei == null) continue;
-      rows.push({ id: w.id, name: w.name, address: w.rawAddress || w.address, valueWei: wei, state: 'queued' });
-    }
-    if (rows.length === 0) { sendStartedRef.current = false; return; }
-    setSendRows(rows); setSending(true); setStep(3);
-    await runDistribution(source.rawAddress || source.address, rows, distKey, setSendRows);
-    setSending(false);
-  }
-
-  const AMOUNT_INPUT: React.CSSProperties = {
-    fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)',
-    backgroundColor: 'var(--wr-surface-alt)', border: 'none', padding: '5px 8px',
-    outline: 'none', width: '60px', textAlign: 'right',
-  };
-
-  return (
-    <ModalBackdrop onClose={onClose}>
-      <div style={{ width: '500px', backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border)', padding: '28px' }}
-        onMouseDown={e => e.stopPropagation()}>
-
-        <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
-          <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>Distribute Funds</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px', lineHeight: 1 }}>×</button>
-        </div>
-        <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '24px' }}>
-          Send ETH from one wallet to one or more destinations
-        </p>
-
-        {/* Step indicator */}
-        <div className="flex items-center" style={{ marginBottom: '24px' }}>
-          {DIST_STEPS.map((label, i) => {
-            const n = (i + 1) as DistStep;
-            const done = n < step; const active = n === step;
-            return (
-              <div key={n} className="flex items-center">
-                <div className="flex items-center gap-2">
-                  <div style={{
-                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: active || done ? '#7c5cff' : 'var(--wr-overlay)',
-                    border: `1px solid ${active || done ? 'var(--wr-accent)' : 'var(--wr-border-hover)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700,
-                    color: active || done ? '#0b0c14' : 'var(--wr-text-3)',
-                  }}>{done ? '✓' : n}</div>
-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: active ? 'var(--wr-text)' : 'var(--wr-text-3)' }}>{label}</span>
-                </div>
-                {i < 2 && <div style={{ width: '28px', height: '1px', backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', margin: '0 8px' }} />}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Step 1 */}
-        {step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <label style={LABEL_S}>From (funding wallet)</label>
-              <div style={{ position: 'relative' }}>
-                <select value={sourceId} onChange={e => { setSourceId(e.target.value); setSelected(s => { const n = new Set(s); n.delete(e.target.value); return n; }); }}
-                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: sourceId ? '#f2f2f7' : '#6e7590', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 36px 10px 12px', width: '100%', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
-                  <option value="" disabled>Choose a wallet…</option>
-                  {wallets.map(w => <option key={w.id} value={w.id}>{w.name} — {w.address}</option>)}
-                </select>
-                <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--wr-text-3)', fontSize: '10px', pointerEvents: 'none' }}>▾</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between" style={{ marginBottom: '8px' }}>
-                <label style={{ ...LABEL_S, marginBottom: 0 }}>To</label>
-                <div className="flex" style={{ border: '1px solid var(--wr-border)', overflow: 'hidden' }}>
-                  {(['equal', 'custom'] as const).map(m => (
-                    <button key={m} onClick={() => setAmountMode(m)} style={{
-                      fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
-                      padding: '3px 10px', backgroundColor: amountMode === m ? '#7c5cff' : 'var(--wr-surface-alt)',
-                      color: amountMode === m ? '#0b0c14' : 'var(--wr-text-3)', border: 'none', cursor: 'pointer', textTransform: 'uppercase',
-                    }}>{m === 'equal' ? 'Equal' : 'Custom'}</button>
-                  ))}
-                </div>
-              </div>
-
-              {amountMode === 'equal' && (
-                <div className="flex items-center justify-between" style={{ marginBottom: '8px', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 12px' }}>
-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
-                  <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
-                    <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                      placeholder="0.00" className="placeholder-[#232533]" style={AMOUNT_INPUT} />
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>ETH</span>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', opacity: !sourceId ? 0.4 : 1 }}>
-                {destWallets.map(w => {
-                  const isChecked = selected.has(w.id);
-                  return (
-                    <div key={w.id} onClick={() => sourceId && toggleDest(w.id)} style={{
-                      backgroundColor: isChecked ? 'var(--wr-accent-dim)' : 'var(--wr-surface-alt)',
-                      border: `1px solid ${isChecked ? 'var(--wr-accent)' : 'var(--wr-border)'}`,
-                      padding: '8px 10px', cursor: sourceId ? 'pointer' : 'not-allowed',
-                    }}>
-                      <div className="flex items-center gap-2" style={{ marginBottom: '3px' }}>
-                        <div style={{ width: '13px', height: '13px', flexShrink: 0, backgroundColor: isChecked ? '#7c5cff' : 'transparent', border: `1px solid ${isChecked ? 'var(--wr-accent)' : '#232533'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#0b0c14' }}>{isChecked ? '✓' : ''}</div>
-                        <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginLeft: '19px' }}>{w.address}</div>
-                      {amountMode === 'custom' && isChecked && (
-                        <div className="flex items-center" style={{ marginTop: '6px', border: '1px solid var(--wr-border)' }} onClick={e => e.stopPropagation()}>
-                          <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                            placeholder="0.00" className="placeholder-[#232533]" style={{ ...AMOUNT_INPUT, width: '100%', flex: 1 }} />
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px', whiteSpace: 'nowrap' }}>ETH</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', paddingTop: '4px', borderTop: '1px solid var(--wr-border)' }}>
-              <button onClick={onClose} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => step1Valid && setStep(2)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: step1Valid ? '#0b0c14' : 'var(--wr-text-4)', backgroundColor: step1Valid ? '#7c5cff' : 'var(--wr-overlay)', border: 'none', padding: '11px 0', cursor: step1Valid ? 'pointer' : 'not-allowed' }}>
-                Review {selected.size > 0 ? `(${selected.size} wallet${selected.size > 1 ? 's' : ''})` : ''}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2 */}
-        {step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px', marginBottom: '4px' }}>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' }}>From</div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)' }}>{source?.name}</div>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{source?.address}</div>
-                </div>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-2)' }}>${source?.usdValue.toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', letterSpacing: '1px', textTransform: 'uppercase' }}>Sending To</div>
-            {selectedList.map(w => (
-              <div key={w.id} className="flex items-center justify-between" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 500, color: 'var(--wr-text)' }}>{w.name}</div>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{w.address}</div>
-                </div>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-accent)' }}>{getAmount(w.id)} ETH</span>
-              </div>
-            ))}
-
-            <div className="flex items-center justify-between" style={{ padding: '10px 14px', borderTop: '1px solid var(--wr-border)' }}>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Total</span>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, color: 'var(--wr-text)' }}>{totalEth.toFixed(4)} ETH</span>
-            </div>
-            <div className="flex items-center justify-between" style={{ padding: '0 14px 8px' }}>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Gas estimate</span>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 ETH</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              <button onClick={() => setStep(1)} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>Back</button>
-              <button onClick={startSend} disabled={!canSend} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: canSend ? '#0b0c14' : 'var(--wr-text-4)', backgroundColor: canSend ? '#7c5cff' : 'var(--wr-overlay)', border: canSend ? 'none' : '1px solid var(--wr-border)', padding: '11px 0', cursor: canSend ? 'pointer' : 'not-allowed' }}>{previewBusy ? 'Checking…' : 'Confirm & Send'}</button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3 — real broadcast status */}
-        {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
-              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{sending ? '⚡' : '✓'}</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{sending ? 'Signing and broadcasting' : 'Done'}</div>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
-                {sending
-                  ? 'One at a time — a second send from the same address would reuse the nonce.'
-                  : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
-              </div>
-            </div>
-            {sendRows.map(r => {
-              const label = r.state === 'broadcast' ? 'Broadcast' : r.state === 'submitting' ? 'Signing…' : r.state === 'failed' ? 'Failed' : r.state === 'skipped' ? 'Not sent' : 'Queued';
-              const color = r.state === 'broadcast' ? 'var(--wr-accent)' : r.state === 'submitting' ? '#ffb020' : r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
-              return (
-                <div key={r.id} style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{r.name}</div>
-                      <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
-                        {formatWeiToEth(r.valueWei)} ETH → {r.address.slice(0, 6)}…{r.address.slice(-4)}
-                      </div>
-                    </div>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{label}</span>
-                  </div>
-                  {r.hash && (
-                    <button
-                      type="button"
-                      onClick={() => { void openInBrowser(`https://etherscan.io/tx/${r.hash}`); }}
-                      style={{
-                        display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px',
-                        color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none', background: 'none',
-                        border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <span style={{ fontWeight: 700 }}>TXN:</span> {r.hash}
-                    </button>
-                  )}
-                  {r.error && (
-                    <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(r.error)}</div>
-                  )}
-                </div>
-              );
-            })}
-            {linkOpenError && (
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{linkOpenError}</div>
-            )}
-            <button disabled={sending}
-              onClick={() => { sendStartedRef.current = false; setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); setSendRows([]); setPreviews({}); onClose(); }}
-              style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: sending ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
-              {sending ? 'Working…' : 'Done'}</button>
-          </div>
-        )}
-      </div>
-    </ModalBackdrop>
-  );
-}
-
 // ─── Wallet Card ─────────────────────────────────────────────────────────────
 
 function WalletCard({ w, loading, onDelete, onEdit }: { w: Wallet; loading?: boolean; onDelete: () => void; onEdit: () => void }) {
@@ -946,7 +624,11 @@ export default function WalletsPage() {
         <AddWalletModal onClose={() => setShowAddWallet(false)} onAdded={refresh} />
       )}
       {showDistribute && (
-        <DistributeModal wallets={wallets} onClose={() => setShowDistribute(false)} />
+        <DistributeModal
+          wallets={wallets.map(w => ({ id: w.id, name: w.name, address: w.rawAddress || w.address, usdValue: w.usdValue }))}
+          skin="wallets"
+          onClose={() => setShowDistribute(false)}
+        />
       )}
       {deleteTarget && (
         <DeleteModal wallet={deleteTarget} onConfirm={confirmDelete} onClose={() => setDeleteTarget(null)} />

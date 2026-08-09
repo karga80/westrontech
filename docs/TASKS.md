@@ -128,10 +128,28 @@ a. **Sessiz gönder düğmesi** — ✅ `forge` KAPANDI (10.08.2026). `runSends`
    masaüstü, muhtemelen gerçek tarayıcı sekmeleri) açıktı ve otomatik tıklama
    T1'de kayıtlı riski taşıyordu (yanlış pencereye tıklama). Kod seviyesinde
    doğrulandı, ekranda değil.
-b. **Kendine gönderim tutarsız** — ✅ `orion` karar verdi (10.08.2026, bkz.
-   `DECISIONS-PENDING.md` D2). Filtre adres bazlı olsun (id değil) + step-2'de
-   adres eşleşirse uyarı satırı + modalda "kaynak hedef listesinde görünmez" notu.
-   Üç `DistributeModal` kopyasının hepsine uygulanır. → `forge`
+b. **Kendine gönderim tutarsız** — ✅ `forge` KAPANDI (10.08.2026). Karar
+   (`DECISIONS-PENDING.md` D2) uygulandı: filtre artık **adres bazlı**
+   (case-insensitive `w.address.toLowerCase() === source.address.toLowerCase()`),
+   id bazlı değil — iki farklı id'li kayıt aynı adresi paylaşıyorsa da hedef
+   listesinden düşüyor. Step 2'de (Confirm) seçili bir hedefin adresi kaynağın
+   adresiyle eşleşirse sarı uyarı kutusu ("this destination is the same
+   address as the source. The transfer would only cost gas.") görünüyor, ve
+   modal açıklamasının altına "kaynak cüzdan hedef listesinde asla görünmez"
+   notu eklendi. Bu mantık artık `src/components/DistributeModal.tsx`'te tek
+   yerde yaşıyor — iki gerçek kopya (`page.tsx`, `wallets/page.tsx`) T9'un
+   Görev 1'i kapsamında bu bileşene taşındığı için otomatik uyguluyor (aşağıya
+   bakın). `bulk/distribute/page.tsx` bu bileşeni kullanmıyor, T9c kapsamında
+   ayrı ele alınacak, bu maddeye dahil değil.
+   Doğrulandı: `npx tsc --noEmit` temiz, `npx eslint` bu üç dosyada yeni
+   hata/uyarı eklemedi (git stash ile taban alınıp karşılaştırıldı), `npx
+   jest` 24/24 geçti. **DOĞRULANAMADI:** uyarı kutusunun canlı uygulamada
+   gerçekten göründüğü gözle görülmedi — bu oturumda "gerçek Send'e asla
+   tıklama" kısıtı vardı ve ekran etkileşimini otomatik tıklayacak bir
+   tarayıcı aracı bu ortamda yoktu; `npm run dev` sunucusu zaten çalışıyordu,
+   `/`, `/wallets/`, `/wallet/test-id` route'ları 200 döndü (sunucu tarafında
+   çökme yok) ama Select→Confirm adımlarına tıklanarak görsel doğrulama
+   yapılamadı.
 c. **Zarf ön-düşümü** — ✅ `vault` KAPANDI (10.08.2026). `check_and_authorize`
    hâlâ imzalamadan önce çalışıyor (yetkisiz bir işlem hiç imzalanmasın diye),
    ama artık `LocalSigner::sign_and_send` (imzalama/nonce/RPC/yayın) başarısız
@@ -273,6 +291,61 @@ calldata'nın tam word düzeni, boş `bytes` kuyruğu, standart bazlı dispatch)
 cüzdana veya kontrata karşı hiç çalıştırılmadı — görev talimatı gereği
 yasaktı, sadece derleme + tip + birim testi seviyesinde kanıt var. Frontend
 tarafı (`forge`) henüz bu komutu çağırmıyor. Commit: `5582cf2`.
+
+**`forge` frontend kısmı — ⚠️ KISMEN BİTTİ (10.08.2026).** Bu oturumun kapsamı
+sadece Görev 1 (ortak bileşene çıkarma) ve Görev 3'ün Send Funds tarafıydı;
+NFT sekmesi (T9b) ve `bulk/distribute/page.tsx`'in gerçek gönderime bağlanması
+(T9c) **bilerek dokunulmadı**, ayrı görev olarak kalıyor.
+
+- **Görev 1 (çıkarma):** `src/app/page.tsx:547` ve `src/app/wallets/page.tsx:374`
+  deki iki `DistributeModal` kopyası tek `src/components/DistributeModal.tsx`'e
+  taşındı. Farklar prop oldu: `skin: 'dashboard' | 'wallets'` (renk/dropdown-vs-select
+  gibi salt görsel farklar — hepsi orijinallerden birebir kopyalandı), `wallets`
+  (her sayfa kendi cüzdan listesini besliyor: dashboard `loadOwnedWallets()`,
+  wallets sayfası kendi `wallets` state'i), `lockedSourceId` ve `enableTabs` (T9
+  Görev 3 için, aşağıda). Davranış birebir korundu — 3 adımlı akış (Select →
+  Confirm → Process), `parseEthToWei`/BigInt hesap, T10'daki "TXN:" Etherscan
+  linki, hepsi aynı. İki çağrı yeri artık bu paylaşılan bileşeni kullanıyor,
+  ikisi de kendi eski görsel "skin"ini koruyor.
+- **Görev 2 (T6b):** yukarıda T6.b maddesinde anlatıldı — artık paylaşılan
+  bileşende tek yerde yaşadığı için her iki tüketici de otomatik alıyor.
+- **Görev 3 (T9 asıl istek, Send Funds tarafı):** `src/app/wallet/[id]/
+  WalletDetailClient.tsx` header'ına, Etherscan düğmesinin **soluna**,
+  "Distribute" CTA'sı eklendi (Emir'in ekran görüntüsündeki kırmızı kutuya
+  denk gelen yer). Tıklanınca aynı paylaşılan `DistributeModal` açılıyor,
+  `lockedSourceId={wallet.id}` ile kaynak cüzdan bu sayfanın cüzdanına
+  sabitleniyor — Step 1'deki kaynak seçici burada görünmüyor, yerine salt-okunur
+  "{isim} — {kısa adres}" satırı çıkıyor (cüzdan bir sebepten listede yoksa
+  "Wallet not found" yazıyor, sessizce boş görünmüyor). `enableTabs` prop'u
+  ile "Send Funds" / "Send NFT" sekme çubuğu render ediliyor, ama "Send NFT"
+  şimdilik **disabled** ve `title="Send NFT — not available yet"` — iç `tab`
+  state'i var ama hiçbir şey ona göre dallanmıyor; NFT tarafının kendisi bu
+  görevde **bilerek implemente edilmedi** (T9b'nin işi). Hedef listesi
+  `loadWallets()` (owned + watched, wallets sayfasıyla aynı davranış) —
+  kaynağın kendisi adres bazlı filtreyle (T6b) otomatik düşüyor.
+  Dosyalar: `src/components/DistributeModal.tsx` (yeni), `src/app/page.tsx`,
+  `src/app/wallets/page.tsx`, `src/app/wallet/[id]/WalletDetailClient.tsx`.
+
+Doğrulanan: `npx tsc --noEmit` temiz (4 dosya), `npx eslint` yeni hata/uyarı
+eklemedi — `git stash` ile taban alınıp fark karşılaştırıldı; kalan tek
+`error` (`WalletDetailClient.tsx` ~1125, `AddressBookTab` effect-içi
+`setState` uyarısı) ve `DistributeModal.tsx`'teki tek `no-unused-expressions`
+uyarısı (`n.has(id) ? n.delete(id) : n.add(id)`) ikisi de orijinal
+dosyalardan birebir kopya, bu görevden önce de vardı. `npx jest` 24/24 geçti.
+`npm run dev` zaten çalışan bir sunucuydu (port 3000, PID 37529/37530) —
+kapatılmadı, üstüne ikinci bir instance başlatılmadı (Turbopack kendi kendine
+"Another next dev server is already running" deyip çıktı, artık process
+kalmadı). `curl` ile `/`, `/wallets/`, `/wallet/test-id` route'larının
+üçü de 200 döndü — sunucu tarafında render çökmesi yok.
+
+**DOĞRULANAMADI:** Bu ortamda gerçek bir tarayıcıya tıklayan bir araç yoktu,
+o yüzden şu üçü **gözle görülmedi**: (a) dashboard'daki Distribute akışının
+Select→Confirm'de görsel olarak eskisiyle aynı göründüğü, (b) wallets
+sayfasındaki aynı akış, (c) wallet detail sayfasında yeni "Distribute"
+CTA'sının gerçekten Etherscan'ın solunda çıktığı ve modalı kaynak kilitli
+şekilde açtığı. Kod/tip/lint/test seviyesinde kanıt var, ekranda değil —
+`npm run dev` ile `http://localhost:3000` açılıp elle bakılmalı (Send'e asla
+tıklanmadan, en fazla Confirm adımına kadar).
 
 ---
 
