@@ -3,6 +3,101 @@
 Öncelik sırasıyla. Her görevde hangi ajanın, hangi sırayla çalışacağı yazılı.
 Ayrıntılı bağlam: `docs/HANDOFF-2026-08-09.md`. Kurallar: `CLAUDE.md`.
 
+## `vera` bağımsız doğrulama turu (10.08.2026, gece — kod + komut kanıtlı, GUI'siz)
+
+Önceki forge/vault turlarının hiçbiri gerçek tıklamayla doğrulanmamıştı. Bu tur
+komut çıktısı ve kod kanıtıyla sınırlı kaldı — nedeni aşağıda madde madde.
+
+**T1 (Monitor/collection WETH) — ⚠️ HÂLÂ DOĞRULANAMADI, ama ortam notu değişti.**
+`osascript -e 'tell application "System Events" to get name of first application
+process whose frontmost is true'` artık **başarıyla** "ChatGPT" döndürdü (exit 0) —
+önceki turların bildirdiği `-25211 not allowed assistive access` hatası artık
+YOK, Accessibility izni bir şekilde açılmış. Ama `System Events` üzerinden Westron
+app process'inin ("app") pencere listesi boş döndü (`window 1` → "Invalid index
+-1719") — process arka planda çalışıyor (`ps` PID 37340 tauri / 37530 next
+doğrulandı) ama accessibility'nin görebileceği bir pencere şu an yok (gizli/arka
+planda/başka masaüstünde olabilir). Masaüstünde aynı anda Google Chrome açık ve
+T1'de daha önce canlı bir cüzdan bağlı sekmeye yanlış tıklama riski kayıtlı
+olduğu için, pencere bulunamadığı bu durumda kör koordinat tıklaması
+**denenmedi**. **Kalan iş değişmedi:** biri Westron penceresini öne getirip
+Monitor → collection detayına tıklayıp WETH rakamını gözle görmeli; artık
+Accessibility izni engel değil, engel sadece pencerenin bulunup öne getirilmesi.
+
+**T6a (Before you can send uyarısı) — ✅ DOĞRULANDI (kod).**
+`WalletDetailClient.tsx:517-520` — `confirmGate` dizisi checkbox ve "SEND"
+yazısı eksikse ayrı ayrı doğru mesaj push ediyor; `:991-995` bu diziyi
+"Before you can send:" başlığıyla render ediyor. Canlı tıklamayla görsel
+teyit hâlâ yapılmadı (yukarıdaki pencere bulunamama sorunu) ama kod, iddia
+edilen davranışla birebir eşleşiyor.
+
+**T6d (tsc/jest) — ✅ DOĞRULANDI (bağımsız çalıştırıldı).**
+`npx tsc --noEmit` → 0 hata. `npx jest` → `Test Suites: 2 passed, 2 total,
+Tests: 24 passed, 24 total`. Önceki ajanların iddiasıyla birebir örtüşüyor.
+
+**T7 (Claude Desktop Tools menüsü) — ⚠️ DOĞRULANAMADI, bilerek denenmedi.**
+`~/Library/Application Support/Claude/claude_desktop_config.json` içinde
+`mcpServers.westron` girdisi doğrulandı (`command: node`, `args: [...
+standalone.mjs]`). Claude Desktop'ı yeniden başlatmak bu oturumun kendisini
+de kesintiye uğratabileceği için tetiklenmedi. **Emir'in yapması gereken:**
+Claude Desktop'ı ⌘Q ile tamamen kapatıp yeniden açmak, sonra Tools menüsünde
+`westron_*` araçlarının listelendiğini gözle kontrol etmek.
+
+**T6b (kendine gönderim uyarısı) — ✅ DOĞRULANDI (kod).**
+`DistributeModal.tsx:250-253` adres bazlı (case-insensitive) filtre;
+`:296-297` NFT sekmesi için aynı mantık; `:856-859` Confirm adımında uyarı
+satırı render ediliyor. İddia edilenle birebir eşleşiyor.
+
+**T9a (paylaşılan DistributeModal + wallet-detail CTA) — ✅ DOĞRULANDI (kod +
+sunucu), ⚠️ GÖRSEL TIKLAMA YOK.** `npm run dev` zaten çalışıyordu (port 3000,
+PID 37530) — dokunulmadı. `curl` ile `/` → 200, `/wallets/` → 200,
+`/bulk/distribute` → 308 (redirect, beklenen — trailing slash). Sunucu
+render çökmesi yok. `WalletDetailClient.tsx:1811-1819` "Distribute" CTA'sı
+mevcut, `:2458-2463` `lockedSourceId={wallet.id}` ile modalı açıyor. Kod
+seviyesinde iddia doğru; canlı tıklamayla Select→Confirm gezintisi bu turda
+da yapılamadı (T1'deki pencere bulunamama sorunu).
+
+**T9b (Send NFT sekmesi) — ✅ DOĞRULANDI (kod).** `DistributeModal.tsx:538-757`
+`tab === 'nft'` dalı gerçek `nfts` prop'unu render ediyor, boş liste "No NFTs
+held..." dürüst mesajı basıyor (satır civarı doğrulandı), `preselectedNftKey`
+mantığı (`:159-183`) mevcut. Gerçek tıklama testi yapılmadı.
+
+**T9c (bulk/distribute gerçek gönderim) — ✅ DOĞRULANDI (kod).** Eski sahte
+metinler ("not enabled", "Continue (nothing is sent)", "SIMULATED") dosyada
+**yok** (grep boş döndü). `previewTransaction`/`runDistribution` gerçekten
+çağrılıyor (`:247-291`), "Confirm & Send" düğmesi mevcut (`:719`). Gerçek
+Send'e kesinlikle tıklanmadı.
+
+**T9d (NftSendModal birleştirme) — ✅ DOĞRULANDI (kod).** `NftSendModal`
+tanımı repoda yok (aranmadı bulunamadı), Bulk Actions'taki "Send NFTs"
+düğmesi `disabled={selectedNfts.size !== 1}` ile gerçekten devre dışı
+kalıyor, `title` doğru açıklamayı gösteriyor (`WalletDetailClient.tsx:2088-2095`),
+tek seçili NFT `sendNftKey` üzerinden `DistributeModal`'a `preselectedNftKey`
+olarak geçiyor (`:2465`). İddia edilenle birebir eşleşiyor.
+
+**T10 (Etherscan/TXN linkleri) — ✅ DOĞRULANDI (kod), ⚠️ gerçek tıklama
+yapılmadı.** `WalletDetailClient.tsx:1823` header Etherscan düğmesi
+`openInBrowser` → `openExternalUrl` (Tauri komutu) çağırıyor, hata durumunda
+`etherscanOpenError` görünür satırla gösteriliyor (`:1586-1590`).
+`bulk/distribute/page.tsx:337,344` "TXN:" etiketi + aynı `openExternalUrl`
+deseni. Gerçek tıklayıp tarayıcının açıldığı bu turda da gözlenmedi — hem
+pencere bulunamadı hem de masaüstünde Chrome/ChatGPT gibi başka pencereler
+vardı, yanlış tıklama riskini göze almaya değmedi. Kod yolu zaten
+`monitor/page.tsx` ve sentiment panellerinde canlı kullanımda (battle-tested),
+bu iki yeni çağrı yeri aynı deseni tekrarlıyor.
+
+**Sonuç:** Bu turda kod/derleme/test seviyesinde **hiçbir kırık şey
+bulunmadı** — tüm iddialar (T6a, T6b, T9a-d, T10) kodda birebir doğrulandı,
+`tsc`/`jest` temiz. Görsel/tıklama doğrulaması hâlâ eksik (T1, T7, ve T9/T10'un
+canlı Select→Confirm gezintisi) — bunun nedeni artık Accessibility izni değil
+(izin var), Westron penceresinin accessibility'den görünür şekilde bulunamaması
+ve masaüstünde başka canlı pencerelerin (Chrome) bulunması. Bu, CLAUDE.md'nin
+"testler geçti demek ekran çalışıyor demek değildir" ilkesine göre görevleri
+"bitti" yapmaz ama kod tabanında hiçbir çürütülmüş iddia da yok. **Bir sonraki
+oturum için kesin adım:** Westron penceresini manuel olarak öne getirip (Dock'tan
+tıklayarak, otomasyon değil) bu ortamda `cliclick`/`osascript` ile nav
+tıklamalarının artık gerçekten iletildiğini doğrulamak, sonra T1/T9/T10'un
+görsel turunu tamamlamak.
+
 ---
 
 ## T1 — Birleşik sürüm hiç çalıştırılmadı  ⚠️ KISMEN DOĞRULANDI (10.08.2026)
