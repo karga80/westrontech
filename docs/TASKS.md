@@ -15,8 +15,8 @@ Ayrıntılı bağlam: `docs/HANDOFF-2026-08-09.md`. Kurallar: `CLAUDE.md`.
 - ✅ Wallet detail — gerçek veri + kaynağı belirten dürüst boş durumlar
   ("Alchemy returned no owned NFTs..."), NaN koruması gözle görüldü
 - ✅ Monitor (liste) — gerçek floor/hacim verisi, dürüst boş durumlar
-- ⚠️ **Monitor/collection detay — ekranda AÇILAMADI/görülemedi**, ortam kısıtı
-  yüzünden (bkz. not aşağıda). Kod düzeyinde doğrulandı, ekranda değil.
+- ⚠️ **Monitor/collection detay — ekranda hâlâ DOĞRULANAMADI**, `vera`'nın
+  10.08.2026 turundan sonra da. Kod düzeyinde doğrulandı, ekranda değil.
 - Gezilmeyen (kapsam dışı bırakıldı, düşük risk): settings, alerts/rules,
   gallery, bulk, sniping, login
 
@@ -28,9 +28,35 @@ tetiklenmedi, hiçbir işlem yapılmadı, `orion` riski görüp GUI tıklamayı
 kendiliğinden durdurdu. Bir sonraki ekran-yürüme turunda: ya Accessibility
 izni verilsin ya da test öncesi cüzdan bağlı diğer tarayıcı sekmeleri kapatılsın.
 
-**Kalan iş:** monitor/collection ekranını fiilen açıp WETH rakamını gözle
-doğrulamak. **Ajan:** `vera` (daha güvenli/hedefli bir yöntemle, örn. doğrudan
-URL navigasyonu).
+**`vera` 10.08.2026 denemesi (DOĞRULANAMADI):**
+- Güvenlik: `ps`/`lsof` ile Chrome/tarayıcı süreçleri kontrol edildi; canlı
+  cüzdan bağlı bir sekme ekranda **görünür/frontmost değildi** (screencapture
+  ile pasif tam ekran görüntüsü — hiçbir Chrome/OpenSea penceresi yoktu).
+  Bu turda hiçbir para hareket ettiren düğmeye ("Buy/List/Approve/Confirm/Send")
+  tıklanmadı, tıklanan tek şey nav bar'daki metin sekmeleriydi (Monitor).
+- Yol 1 — `curl http://localhost:3000/monitor/collection`: sadece boş bir
+  redirect gövdesi (`/monitor/collection/`) döndü. Sebep: sayfa tamamen
+  client-render — WETH rakamı Tauri IPC (`invoke`) üzerinden Rust backend'den
+  gelip webview içinde hydrate ediliyor; düz `curl` bu veriyi göremez. Bu yol
+  yapısal olarak WETH doğrulaması için kullanılamaz.
+- Yol 2 — GUI tıklama (`cliclick`, `osascript`): `osascript`'in System Events
+  erişimi yok (`-25211 execution error: not allowed assistive access`).
+  `cliclick` exit 0 döndürdü ama nav sekmesine (Monitor) art arda 3 tıklama
+  ekranı Dashboard'da bıraktı — hiç geçiş olmadı. Sonuç: bu ortamda sentetik
+  tıklamalar hedef pencereye ulaşmıyor (Accessibility izni yok), bu yüzden
+  hem güvenli hem etkisiz — riskli bir yanlış tıklama da olmadı ama ekran da
+  açılamadı.
+- Ekstra gözlem: uygulama penceresi otomasyon sırasında bir kez kendiliğinden
+  yeniden başladı (PID değişti, `cargo`/`tauri dev` dosya izleyicisi kaynaklı
+  görünüyor, tıklamayla ilişkisi kanıtlanamadı) — veri kaybı yok, Dashboard
+  rakamları canlı güncellenmeye devam etti (`$13.41` → `$13.42`).
+
+**Kalan iş (kapanmadı):** monitor/collection ekranını fiilen açıp WETH
+rakamını gözle doğrulamak. Bunu kapatacak kesin adım: bu makineye
+**Accessibility izni** verilmesi (System Settings → Privacy & Security →
+Accessibility → Terminal/ilgili process'e izin), ondan sonra nav
+tıklamalarının gerçekten iletildiği doğrulanır. İzin verilene kadar bu madde
+kod-düzeyinde doğrulandı, ekranda doğrulanamadı olarak kalır.
 
 ---
 
@@ -84,20 +110,134 @@ switch acil fren olur, varsayılanı kural belirler). T4'ten önce ele alma.
 ## T6 — Dört küçük kusur
 a. **Sessiz gönder düğmesi** — `WalletDetailClient.runSends`, `canSend` sağlanmazsa
    geri bildirimsiz `return` ediyor. Hangi koşulun eksik olduğu ekranda yazmalı. → `forge`
-b. **Kendine gönderim tutarsız** — cüzdan detayında uyarı, Distribute modalında
-   hedef listesi kaynağı hiç göstermiyor. → `orion` (ne olmalı) → `forge`
-c. **Zarf ön-düşümü** — `send_eth` önce limiti düşürüp sonra yayınlıyor; yayın
-   başarısız olursa limit düşmüş ama işlem olmamış olur. → `vault`
+b. **Kendine gönderim tutarsız** — ✅ `orion` karar verdi (10.08.2026, bkz.
+   `DECISIONS-PENDING.md` D2). Filtre adres bazlı olsun (id değil) + step-2'de
+   adres eşleşirse uyarı satırı + modalda "kaynak hedef listesinde görünmez" notu.
+   Üç `DistributeModal` kopyasının hepsine uygulanır. → `forge`
+c. **Zarf ön-düşümü** — ✅ `vault` KAPANDI (10.08.2026). `check_and_authorize`
+   hâlâ imzalamadan önce çalışıyor (yetkisiz bir işlem hiç imzalanmasın diye),
+   ama artık `LocalSigner::sign_and_send` (imzalama/nonce/RPC/yayın) başarısız
+   olan her yolda `EnvelopeEngine::rollback_authorization` ile düşülen harcama
+   geri alınıyor. `evaluate()` dokunulmadı — `preview_transaction` ve
+   `check_and_authorize` hâlâ aynı saf fonksiyonu besliyor. Doğrulandı:
+   `cargo check` temiz, `cargo test` 88/88 (2 yeni test: rollback harcamayı
+   geri alıyor, rollback sıfırın altına inmiyor). Gerçek bir başarısız
+   broadcast senaryosu canlı uygulamada denenmedi — bu senaryo yalnızca birim
+   testiyle doğrulandı, ekranda değil. Commit: `f77bb3f`.
 d. **main'den gelen tip hataları** — `src/app/sentiment/*` örtük `any`,
    `formatters.test.ts` için `@types/jest` eksik. → `forge`
 
 ---
 
-## T7 — MCP kaydı ve telefondan deneme
-`tools/westron-mcp/standalone.mjs` commit'lendi ama Claude desktop'a kaydedilmedi.
-Yönerge: `FAZ1-DEMO.md`.
+## T7 — MCP kaydı ve telefondan deneme  ⚠️ KISMEN BİTTİ (10.08.2026, `vault`)
+`standalone.mjs` doğrulandı: bağımsız süreç olarak başlatılıp stdio üzerinden
+gerçek JSON-RPC (`initialize` → `tools/list` → `tools/call westron_status`)
+gönderildi; **gerçek çalışan Westron kontrol sunucusuna** (127.0.0.1:7777)
+ulaştı ve gerçek `/status` cevabını döndürdü (15 tool listelendi, cevapta
+`app_version`, `scheduler`, `keychain` alanları doluydu). Bu salt-okunur bir
+çağrıydı (`GET /status`) — `DECISIONS-PENDING.md`'deki "mainnet'e okuma
+serbest" kuralına giriyor, para/anahtar/imza tetiklemedi.
 
-**Ajanlar:** `vault` (shim'i doğrula, kayıt adımlarını çalıştır) → `vera`
+`~/Library/Application Support/Claude/claude_desktop_config.json` bulundu
+(boş değildi — Cowork masaüstü uygulamasının kendi `preferences` ayarlarını
+tutuyordu) ve **sadece ekleme** yapıldı: `mcpServers.westron` anahtarı
+eklendi (`command: node`, `args: [".../tools/westron-mcp/standalone.mjs"]`),
+mevcut hiçbir alan silinmedi/değiştirilmedi (diff ile doğrulandı,
+`preferences` birebir aynı kaldı). Orijinalin yedeği oturumun scratchpad
+dizininde duruyor.
+
+**index.js değil standalone.mjs kaydedildi** — görev talimatı böyleydi;
+ama `FAZ1-DEMO.md` ve `README.md` hâlâ `index.js`'i (npm bağımlılığı
+`@modelcontextprotocol/sdk` gerektiren sürüm) örnek veriyor. İki dosya da
+çalışıyor (`npm install` bu ortamda sorunsuz kuruldu, `node --check` ikisi
+için de temiz) — hangisinin kalıcı standart olacağı ürün/altyapı kararı,
+burada seçilmedi, sadece görevde istenen kaydedildi.
+
+**DOĞRULANAMADI (kapsam dışı bırakıldı):** Claude Desktop'un Tools menüsünde
+`westron_*` araçlarının gerçekten göründüğü — bunun için uygulamanın
+tamamen kapatılıp (⌘Q) yeniden açılması gerekiyor, bu oturumdan
+tetiklenmedi (kullanıcının aktif masaüstü oturumunu kesintiye uğratabilir).
+**Kalan iş:** `vera` uygulamayı yeniden başlatıp Tools menüsünü gözle
+doğrulasın.
+
+---
+
+## T9 — Wallet detail: Distribute CTA + NFT transferi  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi, ÖNCELİKLİ
+Dashboard'da olan "Distribute" (fund transfer) CTA'sı tekil cüzdan detay sayfasında
+(`/wallet/[id]`) yok. Emir'in isteği (ekran görüntüsü — kırmızı kutu, Etherscan
+düğmesinin solunda boş alan):
+1. Wallet detail sayfasına da bir Distribute CTA eklenmeli — dashboard'daki
+   fund-transfer akışının aynısı (aynı `DistributeFundsModal`, muhtemelen tek
+   fark: kaynak cüzdan burada zaten sabit).
+2. Aynı CTA'dan (veya ayrı bir CTA'dan — orion karar verir) **NFT transferi**
+   yapılabilmeli: bir NFT'yi doğrudan başka bir adrese göndermek. Bu yeni bir
+   yetenek — mevcut Bulk Actions (list/cancel/bid) marketplace işlemi, bu ise
+   doğrudan cüzdandan cüzdana transfer (satış değil).
+
+**Para/işlem sınırı:** NFT transferi de zarftan (envelope) geçmeli — ETH
+transferiyle aynı güvenlik modeli (spend cap kapsamına NFT transferi giriyorsa
+`evaluate()` genişletilmeli; girmiyorsa neden girmediği açıkça gerekçelendirilmeli).
+Gerçek bir NFT'yi gerçek bir adrese **test sırasında fiilen göndermek yasak** —
+sadece preview/dry-run ile doğrulanır, gerçek gönderim Emir'in onayını bekler.
+
+**Ajanlar:** ✅ `orion` karar verdi (10.08.2026, bkz. `DECISIONS-PENDING.md` D2):
+tek "Distribute" CTA'sı, header'da Etherscan'ın solunda; modal iki sekmeli
+(Send Funds / Send NFT); önce üç `DistributeModal` kopyası tek ortak bileşene
+çıkarılacak (dördüncü kopya açılmayacak); NFT transferi mevcut `evaluate()`'i
+`value_wei=0` ile çağırıp scope/kill-switch/expiry'yi bedelsiz devralacak, yeni
+cap/allowlist eklenmeyecek; Confirm adımı zorunlu (Select→Confirm→Process).
+→ `vault` (NFT transferi için Tauri komutu, zarf çağrısı) → `forge` (ortak bileşene
+çıkarma + UI) → `vera`
+**Bitti sayılır:** CTA wallet detail'de görünüyor, fund transfer akışı çalışıyor,
+NFT transfer akışı en azından preview/dry-run seviyesinde doğrulanmış, zarf
+kapsıyor, `tsc` + `cargo check` temiz. Gerçek NFT gönderimi Emir onayı olmadan
+"bitti" sayılmaz — T8'e benzer şekilde onay bekleyen adım varsa açıkça yazılır.
+
+**`vault` backend kısmı — ⚠️ KISMEN BİTTİ (10.08.2026).** Yeni Tauri komutu
+`transfer_nft` (`src-tauri/src/signing/mod.rs`) + calldata encoder
+`src-tauri/src/nft/mod.rs`: kontrat adresi + token id + hedef adres + standart
+(ERC-721/1155) alır, `safeTransferFrom` calldata'sını elle ABI-encode eder
+(selector çalışma zamanında `keccak256(imza)`'dan hesaplanıyor, hardcode
+değil), `check_and_authorize`'ı `value_wei=0` ve `to=alıcı` (kontrat değil)
+ile çağırır — D2 kararındaki gibi. Başarısız her adımda (adres parse,
+imzalama, RPC, yayın) T6c'deki aynı `rollback_authorization` deseniyle
+harcama geri alınır. `estimate_gas_inner` artık opsiyonel `from` alıyor —
+`transferFrom` gibi bir kontrat çağrısı `from` olmadan `eth_estimateGas`'ta
+revert eder; mevcut çağıranlar (`send_eth`, `estimate_gas` komutu)
+bozulmadı.
+
+Doğrulanan: `cargo check` temiz, `cargo test` 93/93 (5 yeni `nft::` testi —
+her iki selector yayınlanmış 4-byte değerlerle eşleşiyor, ERC-721/1155
+calldata'nın tam word düzeni, boş `bytes` kuyruğu, standart bazlı dispatch).
+**Doğrulanmadı (bilerek):** `check_and_authorize`/imzalama/yayın gerçek bir
+cüzdana veya kontrata karşı hiç çalıştırılmadı — görev talimatı gereği
+yasaktı, sadece derleme + tip + birim testi seviyesinde kanıt var. Frontend
+tarafı (`forge`) henüz bu komutu çağırmıyor. Commit: `5582cf2`.
+
+---
+
+## T10 — Etherscan link'leri eksik  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi
+İki yer (ekran görüntüleriyle işaretlendi):
+a. Wallet detail sayfasındaki "Etherscan" düğmesi — tıklanınca işletim sisteminin
+   varsayılan tarayıcısında o cüzdanın Etherscan adres sayfasını açmalı
+   (`https://etherscan.io/address/{adres}`). Şu an muhtemelen hiçbir şey yapmıyor
+   veya bağlı değil — doğrulanacak.
+b. Distribute Funds modalının son adımında ("Process", işlem tamamlandığında)
+   gösterilen tx hash'in yanına **"TXN:"** etiketi eklenmeli ve hash'e
+   tıklanınca o işlemin Etherscan sayfası (`https://etherscan.io/tx/{hash}`)
+   varsayılan tarayıcıda açılmalı.
+
+Teknik: Tauri'de dış link açmak için `@tauri-apps/plugin-shell`'in `open()`'ı
+(veya proje zaten başka bir yerde kullanıyorsa aynı pattern) kullanılır —
+`window.open` çalışmaz/güvenli değildir masaüstü uygulamasında.
+
+**Ajan:** ✅ `orion` teyit etti (10.08.2026, bkz. `DECISIONS-PENDING.md` D2) —
+ürün kararı gerekmiyor, network belirsizliği yok (mainnet'e kilitli). Tek incelik:
+mevcut `<a target="_blank">` (WalletDetailClient.tsx:1823) paketlenmiş uygulamada
+gerçekten OS tarayıcısını açıyor mu, önce ölçülsün; açmıyorsa `plugin-shell`'e
+geçilsin. → `forge` (mekanik UI değişikliği) → `vera`
+**Bitti sayılır:** her iki link de gerçek Etherscan sayfasını varsayılan
+tarayıcıda açıyor (localhost'a değil), doğru adres/hash'e gidiyor.
 
 ---
 
