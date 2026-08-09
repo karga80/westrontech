@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Rust build output — not JS/TS source, was being parsed as such.
+    "src-tauri/target/**",
+    // Parked/shelved code, excluded from typecheck in tsconfig.json too.
+    "_deferred/**",
   ]),
 ]);
 
