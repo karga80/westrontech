@@ -1,0 +1,84 @@
+{
+  "modified": [
+    "src/app/monitor/wallet/page.tsx"
+  ],
+  "replaced_fakes": [
+    {
+      "was": "TOKEN_PNL — hardcoded 3-row 'Token P&L Breakdown' table (ETH/USDT/MATIC with invented USD avg buy/sell, realized, unrealized, total)",
+      "now": "Rows grouped from get_trade_history (TradeRecord[]); avg buy/sell = mean of real buy_price_eth / sell_price_eth, realized = sum of pnl_eth. Per-token Unrealized comes from get_nft_pnl items (stored cost basis vs current floor) matched by collection/contract. All values in ETH. Any field with no real source renders '—'."
+    },
+    {
+      "was": "P&L KPI row — hardcoded '+$4,821.30 / +11.4%', '+$2,340.00 from 20 trades', '+$2,481.30 across 11 positions', '72.2% 15/21 trades'",
+      "now": "get_pnl_summary: Total = realized_pnl_eth + unrealized_pnl_eth, Realized = realized_pnl_eth with real trade_count, Unrealized = unrealized_pnl_eth (floor-based), Win Rate = win_count/(win_count+loss_count) with the real counts in the sub-label. Each card shows 'Loading…' while fetching, '—' + a reason when the engine returns nothing."
+    },
+    {
+      "was": "DualPnLChart — two hand-written 23-point synthetic series (green up / red down)",
+      "now": "PnlAreaChart(points) plotting the cumulative realized P&L curve built from closed trades in get_trade_history, ordered by real sell_timestamp and filtered by the selected time range. Under 2 usable points it renders 'Not enough closed trades with timestamps to chart P&L' instead of a curve."
+    },
+    {
+      "was": "RECENT_TRADES — 4 invented rows (ETH, BAYC#451, USDC>ETH, Azuki#331 with fake USD, PnL, % and durations)",
+      "now": "get_trade_history mapped to rows: token = asset + token id, Cost = buy_price_eth, PnL = pnl_eth, % = pnl/cost, Duration = real buy→sell timestamp delta ('Open' for unsold, '—' when the transfer carried no ISO timestamp). Sorted most-recent-first, capped at 25, filtered by the P&L time range. 'ETH' column header renamed 'Cost' because the value is the ETH cost basis."
+    },
+    {
+      "was": "Related-wallets bubble map — BUBBLE_NODES / BUBBLE_EDGES / NODE_TAGS / RELATED_WALLETS: 7 invented nodes ('Exchange / CEX Hub', 'DeFi Pool'), invented $ flow edge labels ($16.9K, $8K, …), invented tags ('NFT Trace', 'Discounted') and an invented side panel (Inflow $5,000 / Outflow $16,954 / Balance 46,732 ETH)",
+      "now": "find_sister_wallets → SisterReport. Nodes are the real clustered candidate addresses (radius scaled by the report's score, laid out radially), edges are real direct_out / direct_in TRANSFER COUNTS labelled 'N tx' (candidates linked only by a shared funder get a neutral dashed edge with no label). Side panel shows the real reasons (common_funder / funded_target / target_funded / round_trip), tx in/out, score, first/last interaction dates, plus links to Etherscan and to that wallet in Monitor. Legend text changed from 'Outflow/Inflow' to 'Sent to (tx)/Received from (tx)' so the edges are not read as dollar flows."
+    },
+    {
+      "was": "Header stat cards — hardcoded '4.32 ETH / $11,232' and '18.7 ETH / $48,620' (always-visible invented portfolio numbers)",
+      "now": "get_portfolio_snapshot: eth_balance and eth_balance × eth_price_usd for the first card, portfolio_value_usd for the second with a truthful 'ETH only · N tokens · N NFTs' sub-label (the Rust command values ETH only). Shows 'Loading…' while fetching and the error message on failure."
+    },
+    {
+      "was": "Info tab 'Full Address' row — hardcoded 0x7034a122e5a4b0f7f6b4a3e9d8c21045b7f3a122e (also the default for the ?raw= param, so every fetch would have hit a placeholder address)",
+      "now": "The resolved wallet address: ?raw= / ?address= when it is a valid 40-hex address, else the first wallet from walletStore, else '' → 'No wallet selected'. The copy button and Etherscan link use the same real address."
+    },
+    {
+      "was": "Feed tab had no loading/empty/error state — a failed or empty get_asset_transfers rendered a silent blank box (errors were swallowed with .catch(() => []))",
+      "now": "Same real get_asset_transfers data, now with 'Loading transfers…', 'No transfers found for this wallet.' and the surfaced error message; the fetch is also deferred until the Feed tab is actually shown."
+    }
+  ],
+  "still_unavailable": [
+    {
+      "sub_feature": "Per-token 'Unrealized' column when the wallet has no stored NFT cost basis (or get_nft_pnl fails)",
+      "shows": "'—' per row, plus a footnote: \"Unrealized comes from stored cost basis vs current floor; '—' means no cost basis recorded yet\" — or the surfaced error when the call failed. backfill_nft_cost_basis is NOT auto-invoked from this screen (it is a write + extra Alchemy traffic); it stays a deliberate action elsewhere."
+    },
+    {
+      "sub_feature": "Related-wallet ETH/USD flow amounts and balances (the old bubble map's headline numbers)",
+      "shows": "Nothing invented. SisterReport carries transfer COUNTS only, so edges/panel show 'N tx' and the panel's Balance row reads 'Not fetched — open the wallet to load it.'"
+    },
+    {
+      "sub_feature": "Related wallets without an Etherscan API key",
+      "shows": "The command's own message, surfaced verbatim: 'Etherscan API key not set — add it in Settings first.'"
+    },
+    {
+      "sub_feature": "Any P&L / feed / balance data outside the desktop app or without an Alchemy key",
+      "shows": "'Live data needs the Westron desktop app.' / 'Add an Alchemy API key in Settings to load this data.' / 'No wallet selected — open this page from Monitor or add a wallet first.'"
+    },
+    {
+      "sub_feature": "Time-range buttons on the P&L tab vs the KPI row",
+      "shows": "The range now really filters the chart and the Recent Trades list (both have real timestamps). The KPI row comes from get_pnl_summary, which is all-time by construction, so its sub-labels say 'all-time' rather than pretending to honour the range. Default range changed 7d → ALL so nothing is hidden on first view. Connections range default changed 30d → All for the same reason."
+    },
+    {
+      "sub_feature": "Gas cost anywhere on this screen",
+      "shows": "Not displayed at all — PnlSummary.gas_spent_eth is documented as always 0.0, so no gas figure is rendered."
+    }
+  ],
+  "verify": {
+    "esbuild": "npx --yes esbuild src/app/monitor/wallet/page.tsx --loader:.tsx=tsx --outfile=/dev/null → clean (the documented `--loader=tsx` form is rejected by esbuild when reading from a file rather than stdin, so the equivalent --loader:.tsx=tsx was used). Additionally: node_modules was installable here, so a real tsc pass was run against a single-file tsconfig (strict, jsx react-jsx, @/* paths, plus --noUnusedLocals --noUnusedParameters). Result: only 3 errors, all TS2307 'Cannot find module' for @/components/Tag, @/lib/walletStore, @/components/EthIcon — files absent from this partial tree. Zero type errors in the code itself and zero unused locals, which also confirms no deleted constant is still referenced."
+  },
+  "unverified": [
+    "The app has NOT been run. No screen was rendered, no Tauri command was actually invoked, and no live Alchemy/Etherscan response was observed.",
+    "Types are only as verified as the note above: the 3 unstaged modules (Tag, EthIcon, loadWallets) resolve to `any`, so their call sites are not type-checked. Those call sites are unchanged from the original file except loadWallets(), which is still called as loadWallets()[0]?.address.",
+    "The shapes of PnlSummary / TradeRecord / NftPnlSummary / SisterReport were read from the Rust sources and from src/lib/tauri.ts; serde field naming was trusted, not observed on the wire.",
+    "Layout of the new bubble-map node placement (radial, up to 8 nodes in a 960x510 viewBox) was computed to stay in bounds arithmetically but never rendered.",
+    "Rate-limit behaviour is reasoned, not measured: the P&L tab issues 3 commands strictly sequentially and each tab fetches once, but no 429 test was possible."
+  ],
+  "notes": [
+    "No new Rust was written and src-tauri/ was not touched. src/lib/tauri.ts was read only — every call goes through wrappers that already existed there (getPortfolioSnapshot, getPnlSummary, getTradeHistory, getNftPnl, findSisterWallets, getAssetTransfers, loadAlchemyKey); no direct invoke() was added.",
+    "Request budget: on mount exactly ONE command runs (get_portfolio_snapshot, for the always-visible header). Feed / P&L / Connections each fetch only when their tab is opened and only once per mount. The P&L tab awaits get_pnl_summary → get_trade_history → get_nft_pnl one at a time rather than Promise.all, because each of the first two performs transfer-heavy Alchemy calls. Nothing fans out per row.",
+    "get_nft_pnl is treated as an optional enrichment inside the P&L fetch: its failure sets a separate message under the breakdown table and does not blank the KPI row, chart or trade list.",
+    "Errors are never swallowed: every catch surfaces the Rust error string (errText keeps the original message) into the same red #ff8a96 treatment the collection screen uses.",
+    "Visual structure, grid templates, colours, spacing and section order are unchanged. Two label changes were necessary for truthfulness: Recent Trades column 'ETH' → 'Cost', and the connections legend 'Outflow/Inflow' → 'Sent to (tx)/Received from (tx)'. Two dead side-panel buttons ('Track Wallet', 'Create Alert') were replaced with working links ('Open in Monitor', 'View on Etherscan') because that panel was rebuilt entirely.",
+    "STILL FABRICATED ON THIS SCREEN, OUT OF THIS TASK'S SCOPE (untouched, flagged for the next pass): (1) Info tab — ENS 'dexidda.eth', labels 'Smart Money/Whale/NFT Trader', 'First Seen Mar 12, 2021', 'Last Active 2 hours ago', Activity Overview counts (1,842 / 23 / 8 / 47), Risk Score 28/100, 'Associated With Blur/OpenSea/Uniswap v3', '342 unique contracts'. (2) Portfolio tab — the whole 6-row token table and 4-row NFT collection table are hardcoded. (3) Stats tab — KPI cards, gauges and both bar-chart distributions are hardcoded. Note the Info tab's NFTs-held / tokens-held counts and the Portfolio tab's token table have real sources already wired elsewhere (get_portfolio_snapshot, getWalletTokens in WalletDetailClient), so they are cheap follow-ups.",
+    "Side effect of verification: node_modules/ was installed in the working directory (381 packages, from the existing package.json; --no-save, so package.json is byte-identical and no package-lock.json was created). It was left in place rather than deleted in case a concurrent agent is using it. No other file in the tree was created or modified besides this manifest and the owned page."
+  ]
+}

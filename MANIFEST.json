@@ -1,0 +1,63 @@
+{
+  "modified": [
+    "src-tauri/Cargo.toml",
+    "src-tauri/Cargo.lock",
+    "src-tauri/src/lib.rs",
+    "src-tauri/src/envelope/mod.rs",
+    "src-tauri/src/sniping/types.rs",
+    "src-tauri/src/sniping/db.rs",
+    "src-tauri/src/sniping/engine.rs"
+  ],
+  "created": [
+    "src-tauri/src/control/mod.rs",
+    "src-tauri/src/control/routes.rs",
+    "src-tauri/src/control/scheduler.rs",
+    "src-tauri/src/control/token.rs",
+    "src-tauri/icons/32x32.png",
+    "src-tauri/icons/128x128.png",
+    "src-tauri/icons/128x128@2x.png",
+    "tools/westron-mcp/package.json",
+    "tools/westron-mcp/package-lock.json",
+    "tools/westron-mcp/index.js",
+    "tools/westron-mcp/smoke.mjs",
+    "tools/westron-mcp/README.md",
+    "tools/westron-mcp/.gitignore",
+    "FAZ1-DEMO.md",
+    "MANIFEST.json"
+  ],
+  "do_not_merge": [
+    "src-tauri/icons/32x32.png",
+    "src-tauri/icons/128x128.png",
+    "src-tauri/icons/128x128@2x.png"
+  ],
+  "verify": {
+    "cargo_check": "passed: `cargo check` finished clean, 0 errors, 23 warnings — all 23 pre-existing (unused imports/dead code in data/, marketplace/, stream/, pnl/, plus the pre-existing unused `use tauri::Emitter;` in lib.rs). No warning originates in control/, sniping/ or envelope/. IMPORTANT CAVEAT: the first run failed with `proc macro panicked … failed to open icon src-tauri/icons/32x32.png` because this copied tree has no icons/ directory. I generated three placeholder PNGs to get past `tauri::generate_context!()`. Everything below was verified with those placeholders present.",
+    "cargo_test": "passed: `test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out`. That is the pre-existing suite (23) plus 15 new tests: 5 in sniping::db (legacy migration, TTL default/cap, deactivation-reason separation, spend accumulation), 3 in sniping::engine (expiry + spend cap), 3 in control::token (including the unix-only 0600-at-creation assertion), 3 in control::scheduler (disabled default + hint, deactivation counting, cycle recording), 1 in control (port env override). No pre-existing test was changed.",
+    "node_check": "passed: `npm install` exited 0 (@modelcontextprotocol/sdk 1.30.0); `node --check index.js` passed; `node --check smoke.mjs` passed.",
+    "smoke": "passed: `node smoke.mjs` → `28 passed, 0 failed` (was 24 before the review changes; 4 new assertions cover the disabled-loop hint on /status, the not-armed warning on POST /rules, the spend_cap_reached deactivation in a snipe check, and the applied-24h-TTL report from POST /envelope). Also still covers all 15 tools end-to-end, contract_address→collection_slug mapping, the ?wallet= filter, a missing-contract-address rejection, a 401 on a wrong token, the exact 'Westron is not running — start the app on the Mac first.' message on ECONNREFUSED, and the cross-check that every path the shim requests exists in the .route() table of src-tauri/src/control/mod.rs and that every declared route is exercised."
+  },
+  "open_questions": [
+    "Token file path: the brief says `~/Library/Application Support/westron/control-token` (lowercase) but every other Westron data file lives under `Westron/`. I used `Westron/` for consistency — on a default case-insensitive macOS volume these are the same file, and the MCP shim tries both spellings plus the Linux dev path. Confirm this is the intended behaviour.",
+    "axum 0.8 declares path params as `/portfolio/{address}`, not `/portfolio/:address`. The URLs a caller hits are identical to the brief; only the route-declaration syntax differs. Flagging in case you expected the literal `:param` form (that would mean pinning axum 0.7).",
+    "GET /alerts/:wallet and DELETE /alerts/:id had to collapse into one axum path pattern (`/alerts/{wallet_or_id}`) — axum refuses two different param names at the same position. Externally the two routes behave exactly as the brief describes. No behaviour change, but worth knowing if you add more /alerts/* routes.",
+    "POST /snipe-check accepts and ignores its body. Should it support a wallet_address filter, or is 'check every active rule' the right semantic?",
+    "The scheduler is now disabled at every launch, not just at first launch — the state is in-memory and there is no persistence. If Emir arms it and restarts the app, it is off again. Persisting the enabled flag was out of scope here (envelope persistence is explicitly Faz 2), but the same question applies to both."
+  ],
+  "notes": [
+    "PM REVIEW ROUND 1 — DECISION: scheduler now ships DISABLED. Rationale recorded in code (control::start) and in SchedulerStatus::hint: free Alchemy tier with an already-diagnosed 429/blank-wallet incident, plus the standing 'monitoring first, transactions next, automation last' sequencing. An always-on 15s floor poll would spend that quota from first launch for output that is currently a simulated tx hash. 15s remains the default cadence once armed. Discoverability is defended in three places so a rule is never silently unarmed: /status returns `scheduler_hint` (names both westron_scheduler and westron_snipe_check_now), POST /rules returns `scheduler_enabled` plus the same hint, and the westron_scheduler / westron_status / westron_create_rule tool descriptions all state it. A unit test asserts the disabled default and that the hint names the tool.",
+    "PM REVIEW ROUND 1 — DECISION: a rule that exhausts max_total_spend_eth now auto-deactivates, like an expired one. New nullable `deactivated_reason` column on snipe_rules (migrated in place for existing DBs), surfaced on SnipeRule and on SnipeResult. Values: 'expired', 'spend_cap_reached', or NULL. NULL for a user pause, so the three cases stay distinguishable — and set_rule_active clears the reason, because once the user toggles a rule its state is a user decision, not an engine verdict. CycleSummary counts them separately as expired_deactivated and spend_capped_deactivated. Covered by a DB test that produces all three states and asserts they differ.",
+    "PM REVIEW ROUND 1 — DECISION: envelope TTL default stays 24h (tighter than the 168h cap). POST /envelope now always reports what was applied: ttl_hours_applied, ttl_hours_defaulted, expires_at_rfc3339, and a hint that says either 'the 24 hour default was applied' or 'the requested TTL exceeded the 168 hour cap and was clamped'. The westron_create_envelope tool description tells the caller to relay the actual expiry.",
+    "PM REVIEW ROUND 1 — DEFECT FIXED: the token file had a permissions race. `std::fs::write` created it under the process umask (typically 0644) and the chmod to 0600 happened afterwards, leaving a window where the secret that authorises every control endpoint was world-readable. Creation now goes through OpenOptions::new().write(true).create_new(true).mode(0o600) on unix, with a create-then-harden fallback on non-unix. `create_new` also means two racing instances cannot clobber each other's token — an AlreadyExists error is handled by reading the winner's token back. The re-assert-0600 path on read is kept for files written by older builds. A unix-only test asserts mode 0600 immediately after creation, with no intervening chmod, and that a second create refuses rather than overwriting.",
+    "WORK ITEM 3 WAS NOT COMPLETE AND THE TREE DID NOT COMPILE when I received it. sniping/types.rs and sniping/db.rs were finished and correct (migration via PRAGMA table_info + ALTER TABLE with backfill of legacy rows, TTL default 48h clamped to 1..=168). But sniping/engine.rs called `rule_is_expired(rule)`, which did not exist anywhere — a hard compile error. It also never enforced max_total_spend_eth and never accumulated spent_eth, so the guardrail was inert. I added rule_is_expired (empty/malformed timestamp = not expired, so a corrupt row cannot silently kill a rule), a spend-cap check ahead of the envelope check, and a db::add_spent call on every successful (simulated) trigger. The migration path is now covered by a test that builds a pre-guardrail schema, migrates it, and asserts legacy rows survive with a backfilled expiry.",
+    "PLACEHOLDER ICONS — DO NOT MERGE: src-tauri/icons/{32x32,128x128,128x128@2x}.png are flat-colour stubs I generated only so tauri::generate_context! would expand in this sandbox. They would overwrite the real repo's icons. Listed under `do_not_merge` above and flagged in a boxed warning at the very top of FAZ1-DEMO.md, which is what Emir will actually read.",
+    "The control server and scheduler are started from the Tauri `setup` hook rather than directly in `run()`'s body. The engine and its clone are still created in `run()` and passed in, but `setup` is the first point where an AppHandle exists — and the scheduler needs one for `snipe-triggered` event emission, as does POST /snipe-check. Starting earlier would have meant an Arc<Mutex<Option<AppHandle>>> filled in later, which is strictly worse.",
+    "No existing Tauri command name or parameter name changed. The only edit to an existing command body is create_envelope, which now calls the new shared envelope::build_envelope helper — identical inputs, identical output JSON, identical 168h TTL cap. The control server's POST /envelope calls the same helper so the two cannot drift. SnipeRule and SnipeResult each gained one optional field (`deactivated_reason`), which is additive for the webview's TypeScript types.",
+    "Kill switch semantics were strengthened to satisfy acceptance criterion 5: the scheduler checks the envelope's kill-switch state before each cycle and records skipped_reason='kill switch active' instead of attempting anything. The envelope would have rejected the transaction anyway; this makes it visible in /status and avoids pointless floor lookups on a metered API.",
+    "The scheduler never panics: a missing DB, an unreadable rule count, a missing/empty Alchemy key, and a failed check all become a skipped_reason string on /status. Interval is clamped to 5..=3600s so a bad POST /scheduler cannot spin the loop.",
+    "Auth is applied as a router-wide layer above with_state, so it covers the fallback route too — an unauthenticated request to an unknown path gets 401, not 404, and cannot be used to probe which endpoints exist.",
+    "API keys: fetch_alchemy_key() is called inside each handler that needs it, never taken as a parameter, never put in a response, never logged. /status reports only the boolean `alchemy_key_configured`.",
+    "WHAT IS NOT RUNTIME-VERIFIED: the Rust control server has only been compile- and unit-tested. It has never actually bound a socket or served a request, because building ControlState needs a real tauri::AppHandle, which cannot be constructed in a unit test and the app cannot launch headless here. The route table, handler bodies, auth layer, and the real ensure_token() path (the 0600 test exercises create_token_file directly, not the app's data-dir resolution) are unexercised at runtime. smoke.mjs proves the MCP surface and the shim's HTTP behaviour against a hand-written fake of those routes; the route-table cross-check ties the two together at the path level, but not at the request/response-shape level — the fake server's JSON shapes are my transcription of the handlers, so a field-name typo in a Rust handler would still pass. First real run on the Mac is the real test.",
+    "Sniping remains simulated end to end — the 0xSIMULATED_ path is untouched. No Seaport fulfillment, no real transaction execution anywhere in this change.",
+    "tools/westron-mcp/node_modules/ exists locally from `npm install` and is gitignored; it is not listed in `created`."
+  ]
+}

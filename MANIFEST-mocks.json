@@ -1,0 +1,176 @@
+{
+  "modified": [
+    "src/app/bulk/distribute/page.tsx",
+    "src/app/monitor/collection/page.tsx"
+  ],
+  "replaced_fakes": [
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "Wallet balances initialised to `eth: 0, weth: 0` for every saved wallet, so before (and after a failed) fetch the From-summary and every recipient card rendered '0.0000 ETH / 0.0000 WETH' as if that were the real on-chain balance.",
+      "now": "DistWallet.eth / .weth are `number | null`. Null renders '—' through a `bal()` helper; a number is only ever written from a real get_wallet_tokens response. 'Loading balances…' shows while the sweep runs, and a failure prints the backend's own message ('Could not load N balance(s) — <wallet>: <error>')."
+    },
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "Balance fetch used `Promise.all(stored.map(...))` firing get_portfolio_snapshot AND get_wallet_tokens for every wallet at once (2N parallel Alchemy calls on mount), with both errors swallowed by bare `catch {}`.",
+      "now": "One `get_wallet_tokens` per wallet, awaited strictly in sequence (1N, serial). That single Portfolio API response carries the native ETH row (isNative) and every ERC-20, so ETH and WETH both come from it and get_portfolio_snapshot is no longer called at all. Each wallet's row updates as its response lands; failures are collected and surfaced."
+    },
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "Step 2 'Gas estimate: ~0.004 ETH' — a hardcoded fee.",
+      "now": "One real `estimate_gas` (eth_estimateGas) call when step 2 opens, for the first recipient at the entered amount. Shows 'Estimating…', then the real gas-unit count ('25,200 gas / transfer'), or '—' plus the surfaced error. The caption states plainly that these are gas UNITS and that the ETH cost needs a gas price this build does not fetch — the Rust command returns u64 gas, not a fee, so no ETH figure is invented."
+    },
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "Step 3 claimed 'Processing' / 'Transactions are being submitted to the network', and the right-hand Transaction Monitor labelled the first recipient 'Processing' and the rest 'Pending' — an invented transaction lifecycle for a screen that sends nothing.",
+      "now": "Step 3 reads 'Not sent' and states that no transaction was signed or broadcast and that sending funds from this screen is not enabled in this build. The monitor panel carries the same notice, lists both wallet and address-book recipients (address-book rows were missing entirely), and marks every row 'Not sent'. The step-2 CTA is relabelled 'Continue (nothing is sent)'. No send was wired."
+    },
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "The 'New Distribution' reset called `setSelected(new Set(['main','defi','emir1','burner']))` — leftover ids from the deleted MOCK_WALLETS fixture, which would re-select four wallets that do not exist.",
+      "now": "`setSelected(new Set())`."
+    },
+    {
+      "file": "src/app/bulk/distribute/page.tsx",
+      "was": "The From <select> had no empty option, so it always painted the first wallet as chosen while `source` was still '' — the balance line stayed hidden and Review stayed disabled with no explanation. With no saved wallets the recipient grid rendered as an empty box.",
+      "now": "A disabled placeholder option ('Select wallet…', or 'No saved wallets' when the store is empty), and an explicit empty state above the recipient grid: 'No wallets yet. Add a wallet in Wallets, or pick a destination from the Address Book.'"
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "`const ALERTS: AlertRule[]` — four invented rules rendered as the user's configured alerts ('Floor drops below 12 ETH' enabled via macOS + Discord, 'Floor rises above 20 ETH', 'Volume spike > 500 ETH in 1hr', 'Whale buy ≥ 5 items in 10 min'), toggled and deleted purely in local component state so nothing was ever stored or evaluated. Two of the four described conditions the backend cannot evaluate at all.",
+      "now": "Real rows from the local alerts DB: `list_alerts(walletAddress)` for the user's first saved wallet, filtered to `alert_type === 'floor_price' && collection_slug === activeSlug`. The toggle calls `set_alert_active`, Delete calls `delete_alert`, and the editor calls `create_alert` with { alert_type: 'floor_price', wallet_address, collection_slug, threshold_eth, condition, discord_webhook }. Labels are derived from the stored fields ('Floor drops below 12 ETH'), and each row shows its real delivery ('macOS notification only (no Discord webhook set)') and real last_triggered_at ('never fired' when null). Loading / empty / error states added; the tab reads the DB only when it is opened (local SQLite, no HTTP)."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "The alert editor took a free-text condition ('e.g. Floor drops below 10 ETH') and a Channel picker from `ALERT_CHANNELS = ['macOS','Discord','macOS + Discord']` — neither could ever be honoured, because the backend rule is (condition 'above'|'below', threshold_eth) and Discord delivery is per-rule webhook URL, not a channel setting.",
+      "now": "Condition is a two-button choice (Drops below / Rises above), threshold is a numeric ETH field showing the current real floor for reference, and Discord is an optional per-rule webhook URL with 'Leave empty for a macOS notification only.' Save shows 'Saving…' and surfaces the backend error. Edit is create-then-delete in that order (no update command exists), so a failure cannot lose the original rule."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Footer claim: 'Alerts fire when conditions are met for this collection. Notifications go to macOS system notifications and/or a Discord webhook configured in Settings.' — the webhook is not a Settings value, and floor rules are only evaluated while the OpenSea stream is connected (alerts::engine::check_floor_price_alerts is called only from stream/client.rs; the 30s background poller checks portfolio_value alerts only).",
+      "now": "'Floor-price rules are stored locally against your wallet and evaluated while the OpenSea live stream is connected — they are not checked when the stream is off. A triggered rule raises a macOS notification, and also posts to a Discord webhook if you set one on the rule.'"
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Header KPI card labelled '1D Floor Chg' was rendering `liveStats.vol_1d_change` — a real number under a false label (that field is the 1-day VOLUME change; CollectionStats has no floor-change field).",
+      "now": "Label reads '1D Vol Chg' and the local variable is renamed volChange, with a comment stating no floor-change field exists."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Header subtitle asserted '{symbol} · ERC-721 · Ethereum Mainnet' for every collection; the token standard is never fetched (get_collection_metadata.tokenType was not called), so ERC-1155 collections were mislabelled.",
+      "now": "'{symbol} · Ethereum Mainnet' (chain is genuinely Ethereum-only per the project's fixed decisions). No extra request was added to learn the standard."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Activity table QTY column was the literal '1' for every row. CollectionEvent carries no quantity field, so that digit was invented.",
+      "now": "'—' in the codebase's muted colour, with a comment recording why."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Activity tab showed a green pulse dot labelled 'Live', implying a stream; the tab actually performs one fetch_collection_events(slug,'',50) when opened and never updates.",
+      "now": "Neutral dot with 'Loading…' / 'Not loaded' / 'Snapshot · N latest events' driven by real state."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Every trait card in the Items/Bid trait panel rendered a 2x2 grid of NFT images taken from the Items tab by cycling `liveNfts[(vi + si) % length]` — pictures of NFTs that do not have that trait, presented as examples of it — plus a '+N' overflow badge computed as `v.count - 4`, implying the 4 images were a sample of N.",
+      "now": "Four neutral placeholder tiles and a 'No previews' badge. The OpenSea traits endpoint returns counts only (no example token ids), and fetching samples per trait value would be one request per row against the free tier. The real count and supply_percent, which are genuine, are unchanged."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Buy modal: 'Confirm & Buy' ran `setTimeout(() => setBuyStep('done'), 2200)` and then displayed 'Purchase Complete' and '✓ {symbol} #id purchased for {price}'. Nothing was signed, broadcast or fulfilled. It also showed a hardcoded 'Est. Gas ~0.003 ETH'.",
+      "now": "The fake step machine is deleted (buyStep state removed entirely). The modal shows the real wallet picker and real price, an amber notice ('Buying is not enabled in this build — no transaction is signed or broadcast, so no purchase can be confirmed here'), a disabled 'Buy — unavailable' control and a Close button. Est. Gas reads '—'. No send path was wired."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Offer modal: `submitOffers()` seeded a per-wallet 'signing' → 'broadcasting' → 'confirmed' progress track from staggered setTimeouts and then showed 'Offers Submitted' with a green ✓ and 'Offer submitted' per wallet — a fabricated multi-wallet transaction result.",
+      "now": "submitOffers, txnProgress, the TxnStatus type, offerTimersRef, offerStep and both the processing and done panes are deleted. The form (real wallets, real balances, real expiry) remains with an amber notice ('Submitting offers is not enabled in this build — nothing is signed and no order reaches OpenSea') and a disabled 'Submit — unavailable' control."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Make Collection Bid tab: 'Confirm & Submit' ran `setTimeout(() => setColBidStep('done'), 2400)` behind 'Signing & broadcasting…' and then reported '✓ Collection offer submitted — {total} WETH · {expiry}' plus 'Place Another'.",
+      "now": "colBidStep narrowed to 'form' | 'review' (the processing and done panes are deleted). The review row carries the amber notice and a disabled 'Submit — unavailable' control. The form's own figures (floor, top offer, totals, wallet balances) were already real and are untouched."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "`MiniBarChart` — a leftover 'stats bar' sparkline helper that scaled arbitrary `values` to a max; unreferenced but sitting in the file ready to be wired to invented series.",
+      "now": "Deleted."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Wallet-balance effect re-ran on EVERY tab switch and fired get_eth_balance + get_token_balances for every saved wallet in parallel (a 2N Alchemy burst per switch) with both errors swallowed; wallets whose WETH call returned nothing silently kept an undefined balance.",
+      "now": "Runs at most once per mount (useRef guard), only on the tab that has a wallet picker (Make Collection Bid), awaiting each call in turn. A missing Alchemy key prints 'Add an Alchemy API key in Settings to load wallet balances.' and failures print \"N balance request(s) failed — those wallets show '—'.\" Unfetched balances stay undefined and the existing walletBalance() helper already renders them as '—'."
+    },
+    {
+      "file": "src/app/monitor/collection/page.tsx",
+      "was": "Header stats/offers, Activity, Offers, Holders and Traits fetches all swallowed failures (`.catch(() => {})`, `.catch(() => setLiveX([]))`), so a 429 or a missing OpenSea key was indistinguishable from a genuinely empty collection.",
+      "now": "statsError / eventsError / offersError / holdersError / traitsError states, each rendering the backend's own message in the screen's red (#ff8a96). The mount fetch now awaits stats then the 5 best offers sequentially instead of firing both at once. Empty states stay distinct from errors, and the traits/analytics empty states add the honest hint 'these come from OpenSea — add an OpenSea API key in Settings if you have not.'"
+    }
+  ],
+  "still_unavailable": [
+    {
+      "sub_feature": "Gas cost in ETH on bulk/distribute",
+      "shows": "Real gas UNITS from eth_estimateGas, with the caption 'Gas units only — the ETH cost depends on the gas price at send time, which this build does not fetch.' No command exposes eth_gasPrice, and writing new Rust was out of scope."
+    },
+    {
+      "sub_feature": "bulk/distribute balances outside the desktop app, or with no Alchemy key / no saved wallets",
+      "shows": "'—' for every balance plus one line: 'Live balances need the Westron desktop app.' / 'Add an Alchemy API key in Settings to load balances.' / 'No wallets yet. Add a wallet in Wallets, or pick a destination from the Address Book.'"
+    },
+    {
+      "sub_feature": "Actually sending the distribution",
+      "shows": "'Not sent' + 'No transaction was signed or broadcast — sending funds from this screen is not enabled in this build.' Deliberately not wired: see open_questions."
+    },
+    {
+      "sub_feature": "Buying an NFT, making an item offer, placing a collection offer",
+      "shows": "Amber notice + a disabled control on each of the three flows. marketplace_list_nft / marketplace_place_bid / marketplace_cancel_order exist in Rust but were NOT wired — enabling a fund-moving action was out of scope. See open_questions."
+    },
+    {
+      "sub_feature": "Example images per trait value",
+      "shows": "Four neutral placeholder tiles + a 'No previews' badge. The traits endpoint returns counts only, and per-trait sampling would be one OpenSea request per rendered row."
+    },
+    {
+      "sub_feature": "Alert kinds other than floor above/below (volume spikes, whale buys — the two invented rules that were on screen)",
+      "shows": "Not offered at all. The editor exposes only what alerts::engine can evaluate. There is no 'coming soon' claim."
+    },
+    {
+      "sub_feature": "Alerts with no saved wallet, no slug, or outside the desktop app",
+      "shows": "'No wallet saved yet — add one in Wallets to attach alerts to it.' / 'This collection has no OpenSea slug, so floor alerts cannot be attached to it.' / 'Alerts need the Westron desktop app.'"
+    },
+    {
+      "sub_feature": "Header KPI '2H Volume' and Holders' 'Creator Royalty'",
+      "shows": "'—' (unchanged — CollectionStats has neither field). Left as honest empties rather than removed, to keep the layout."
+    },
+    {
+      "sub_feature": "Token standard (ERC-721 vs ERC-1155) in the collection header",
+      "shows": "Not displayed. get_collection_metadata could supply tokenType but that is an extra Alchemy call per page view on a free tier, so the unverified claim was dropped instead."
+    }
+  ],
+  "verify": {
+    "esbuild": "npx --yes esbuild src/app/bulk/distribute/page.tsx --loader:.tsx=tsx --outfile=/dev/null → clean (36.1kb, Done in 8ms). npx --yes esbuild src/app/monitor/collection/page.tsx --loader:.tsx=tsx --outfile=/dev/null → clean (153.5kb, Done in 14ms). Note: the documented `--loader=tsx` form is rejected by esbuild when reading from a file rather than stdin, so the equivalent `--loader:.tsx=tsx` was used.",
+    "tsc": "Real single-file tsc --noEmit per file against node_modules present in the tree: target ES2017, strict, jsx react-jsx, moduleResolution bundler, paths @/* -> ./src/*, plus --noUnusedLocals and --noUnusedParameters. VERBATIM OUTPUT — bulk/distribute (3 errors, all TS2307 for files absent from this partial tree): \"src/app/bulk/distribute/page.tsx(5,21): error TS2307: Cannot find module '@/components/ProGate' or its corresponding type declarations.\" / \"(6,52): error TS2307: Cannot find module '@/lib/addressBook'...\" / \"(7,29): error TS2307: Cannot find module '@/lib/walletStore'...\". monitor/collection (13 errors): 5x TS2307 for '@/lib/trackedNftStore' (x2), '@/components/TrackedNftNotificationModal', '@/lib/opensea-api', '@/lib/walletStore'; and 8 cascade errors caused directly by those same missing modules — TS7006 implicit-any at lines 222, 284, 285, 495, 1587, 1733, 1816 and TS7022 at line 311, every one of them a callback parameter on a value typed by the absent trackedNftStore / opensea-api modules (loadTrackedNfts(), openSeaApi.fetchNFTsByCollection(), SORT_OPTIONS, OpenSeaNftItem.traits), and every one on a pre-existing line this task did not author. ZERO type errors in the code written here and ZERO unused locals/parameters in either file — which also proves no deleted constant (MOCK_WALLETS, MOCK_TRAITS, ALERTS, ALERT_CHANNELS, MiniBarChart, submitOffers, txnProgress, offerStep, buyStep, offerValid) is still referenced. Three genuinely-dead pre-existing declarations surfaced by --noUnusedLocals were removed as part of this: the whole `import { Tag, NFT_ACTIVITY_VARIANT } from '@/components/Tag'` line and `fetchCollectionNfts` (both unreferenced) and `colBidTraitCat/setColBidTraitCat` in monitor/collection, and an unused `AddressEntry` import in bulk/distribute was put to use as the explicit type of loadAddressBook()'s result. Also confirmed against the ES2017 target: no BigInt literals (`0n`) were introduced — ethToWei() uses the BigInt() function, which compiles clean at ES2017."
+  },
+  "unverified": [
+    "NEITHER SCREEN HAS BEEN RUN. The app was never started, no page was rendered, no Tauri command was actually invoked, and no live Alchemy or OpenSea response was observed. Everything below is static reasoning.",
+    "Command and argument names were re-checked by hand against src-tauri/src/lib.rs AFTER the concurrent Rust changes (keychain move, persisted envelope/scheduler, new get_keychain_status and preview_transaction): create_alert(rule) / list_alerts(wallet_address) / delete_alert(id) / set_alert_active(id, active) / get_wallet_tokens(wallet, api_key) / get_eth_balance(address, api_key) / get_token_balances(address, api_key) / signing::estimate_gas(to, value_wei, data, api_key) are all still registered in invoke_handler with those exact signatures, and every call goes through the pre-existing wrapper in src/lib/tauri.ts, which follows the snake_case→camelCase convention. No direct invoke() was added in either file. check_transaction is NOT called anywhere in these two files (it is not read-only — it consumes the spend cap); preview_transaction is not called either, because neither file performs a guard check.",
+    "@/lib/walletStore, @/lib/addressBook, @/lib/opensea-api, @/lib/trackedNftStore, @/components/ProGate, @/components/TrackedNftNotificationModal are absent from this partial tree, so their call sites type-check as `any`. In particular: loadWallets() is annotated locally as `{ id, name, address }[]` in both files (matching how monitor/wallet and WalletDetailClient use it — loadWallets()[0]?.address, w.id, w.name), and loadAddressBook() is annotated `AddressEntry[]` in bulk/distribute using the type that file already imported. If the real store types differ, those two annotations are where a mismatch would appear.",
+    "The serde shape of AlertRule (id, alert_type, wallet_address, collection_slug, threshold_eth, condition, discord_webhook, active, created_at, last_triggered_at) was read from src-tauri/src/alerts/types.rs and src/lib/tauri.ts, not observed on the wire. last_triggered_at is rendered as the raw stored string; its exact format was not verified.",
+    "The claim in the alerts footer — that floor rules are evaluated only while the OpenSea stream is connected — was derived by reading the call graph (check_floor_price_alerts is called only from src-tauri/src/stream/client.rs; start_background_polling and check_alerts_now handle portfolio_value only). It was not observed firing.",
+    "Rate-limit behaviour is reasoned, not measured: no 429 test was possible. The reasoning is that mount now costs 2 sequential OpenSea calls, each tab fetches once on open, the wallet-balance sweep runs once per mount instead of per tab switch, and nothing fans out per rendered row.",
+    "get_wallet_tokens is assumed to include the native ETH row (include_native_tokens: true in src-tauri/src/data/alchemy/portfolio.rs, is_native set when token_address is None). bulk/distribute now depends on that for its ETH figure; if the row were ever absent the cell shows '—', not 0.",
+    "The gas estimate on bulk/distribute uses the FIRST recipient as a proxy for all of them. That is correct for plain EOA transfers but would understate a recipient that is a contract; the caption says the value is per transfer, not a total."
+  ],
+  "notes": [
+    "Both owned files are complete. No file outside the two owned pages was created or modified except this manifest. src/lib/tauri.ts was read only; nothing under src-tauri/ was touched.",
+    "Starting state: an earlier pass in this tree had already removed the literal MOCK_WALLETS array from bulk/distribute (walletStore was already wired) and MOCK_TRAITS plus the sample NFT list from monitor/collection (fetchCollectionTraits and openSeaApi were already wired). What remained, and what this pass fixed, was the second layer: zeroed placeholder balances that read as real, the hardcoded ALERTS fixture, hardcoded gas figures, mislabelled real values, invented per-row values, borrowed images presented as trait samples, timer-driven fake transaction results, and swallowed errors.",
+    "Request budget for monitor/collection after this change: mount = 2 OpenSea calls (stats, then top-5 offers), awaited one after the other. Items tab = 1 items call + up to 3 sequential listings pages + 1 traits call, each once per tab activation. Offers = 1. Holders = 1. Activity = 1. Analytics and Alerts = 0 HTTP (Analytics reuses the mount stats; Alerts reads local SQLite). Make Collection Bid = 2 sequential Alchemy calls per saved wallet, at most once per mount. No Promise.all anywhere, no per-row fetching.",
+    "Request budget for bulk/distribute: 1 get_wallet_tokens per saved wallet, sequential, once per mount; plus exactly 1 estimate_gas when the review step is opened.",
+    "Layout, grid templates, colours, spacing, fonts and section order are unchanged. Copy changed only where it was untrue ('1D Floor Chg'→'1D Vol Chg', 'ERC-721 ·' dropped, 'Live'→snapshot state, 'Confirm & Send'→'Continue (nothing is sent)', 'Cancel'→'Close' on the two now-read-only modals, success screens→disabled controls with a stated reason). The alert editor's two inputs changed shape (free text + channel buttons → condition buttons + threshold + webhook) because the old inputs could not be stored or honoured.",
+    "Not changed, deliberately, and worth a look in a later pass: COLLECTION_DATA in monitor/collection is a four-entry cosmetic lookup mapping a ?name= param to a display name, symbol, brand colour and OpenSea slug. It carries no stats, but one entry names the pudgypenguins slug 'Fidgy Penguins' with symbol 'FP', so that display name and symbol are invented branding rather than fetched metadata.",
+    "Also not changed: the Items sidebar 'Marketplaces' filter (OpenSea / Blur checkboxes) is not wired to anything — the checkboxes have no state and no effect on the query. That is a dead control rather than fabricated data, so it was left alone, but it does imply a filter the screen does not apply."
+  ],
+  "open_questions": [
+    "bulk/distribute has never had a send path. The 'Confirm & Send' button only advanced a local step counter and step 3 asserted that transactions were being submitted. Per the standing rule this was NOT wired to send_eth; the claim was removed and the flow now ends in an explicit 'Not sent' state. OWNER DECISION NEEDED: either wire it to send_eth behind the envelope guard (note: use preview_transaction, never check_transaction, which consumes the spend cap), or remove/redesign the screen — it currently walks a user through configuring a distribution that can never execute.",
+    "monitor/collection had three fabricated transaction results: a buy ('purchased for X'), a multi-wallet item offer ('signing → broadcasting → confirmed', 'Offers Submitted') and a collection offer ('Collection offer submitted'). None was wired to anything; all three now show a disabled control with a stated reason. OWNER DECISION NEEDED: marketplace_place_bid and marketplace_list_nft ARE implemented and registered in Rust, so the two offer flows could be wired — but that is a fund-moving action and was explicitly out of scope here. Buying additionally needs Seaport fulfilment, which the project has deferred to a later phase.",
+    "The Alerts tab now attaches every rule to wallets[0] because list_alerts is keyed by wallet and this screen has no wallet picker. If a user has several wallets, rules created here are invisible from any other wallet's perspective. Should the tab gain a wallet selector, or should collection alerts be wallet-independent in the DB?",
+    "Alert rules created here only fire while the OpenSea stream is running, and nothing on this screen starts or shows the state of that stream. The footer says so plainly, but a user can create a rule that will silently never be evaluated. Should this tab surface get_stream_status, or offer to start the stream?",
+    "The 'Edit' action on an alert is implemented as create-then-delete because no update command exists. It is safe (the original survives a failed create) but it changes the rule's id and created_at. Confirm that is acceptable, or add an update_alert command."
+  ]
+}

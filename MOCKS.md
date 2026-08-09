@@ -51,3 +51,21 @@ plus cosmetic renames in `gallery/page.tsx` and `wallets/page.tsx`. All fake fal
 
 Not audited this session beyond the above — do not assume "not listed = real." Cross-check
 `README.md` and `STATUS.md` before relying on any specific feature being live.
+
+## 2026-08-09: kalan mock'lar kapatıldı
+
+Önceki turda "ayrı kapsam" diye bırakılan iki madde de kapandı.
+
+- **`monitor/wallet`** P&L / Recent Trades / Related-Wallets: artık gerçek —
+  `get_trade_history`, `get_pnl_summary`, `get_nft_pnl`, `find_sister_wallets`.
+  Bubble map kenarları gerçek transfer SAYISI ("N tx"), uydurma para akışı değil.
+- **`wallet/[id]` TransferModal**: sahte `Math.random()` hash'i **kaldırıldı**. Emir'in
+  açık onayıyla gerçek `send_eth`'e bağlandı. Zorunlu guard'lar: aktif envelope,
+  kill switch kapalı, süresi dolmamış, scope içinde, `preview_transaction` ön kontrolü
+  (sıfır yan etkili), tam adres onayı, "SEND" yazma, çift tıklama kilidi.
+  Sadece backend'in döndürdüğü GERÇEK hash gösterilir; nihai durum "Broadcast — pending
+  on-chain", asla "confirmed" değil. **Çoklu hedef bilerek kapalı** (ayrı onay gerektirir).
+- **`bulk/distribute`**: gönderim yolu YOK ve bağlanmadı. Adım 3 artık "Not sent" diyor.
+- **`monitor/collection`**: sahte alım/teklif sonuçları silindi, kontroller gerekçeli kapalı.
+
+Hâlâ simüle: sniping (tasarım gereği), marketplace list/bid UI'da bağlanmadı.

@@ -1,0 +1,109 @@
+{
+  "modified": [
+    "src/app/wallet/[id]/WalletDetailClient.tsx"
+  ],
+  "transfer": {
+    "summary": "TransferModal.confirmTransfer() no longer exists. The modal signs and broadcasts a real Ethereum mainnet transaction through send_eth. No Math.random hash, no optimistic 'confirmed'. Flow: compose -> review -> deliberate authorisation -> broadcast monitor. The envelope pre-flight uses the read-only preview_transaction command with the REAL amount; check_transaction (which consumes budget) is not referenced anywhere in this file.",
+    "commands_used": {
+      "send_eth": "via sendEth(walletAddress, to, valueWei, apiKey) in src/lib/tauri.ts -> invoke('send_eth', { walletAddress, to, valueWei, apiKey }); Rust: signing::send_eth(wallet_address, to, value_wei, api_key, envelope_engine: State)",
+      "estimate_gas": "via estimateGas(to, valueWei, undefined, apiKey) -> invoke('estimate_gas', { to, valueWei, data: null, apiKey }); Rust: signing::estimate_gas(to, value_wei, data: Option<String>, api_key)",
+      "get_envelope_status": "via getEnvelopeStatus() -> invoke('get_envelope_status'); Rust: get_envelope_status(engine: State) -> Option<EnvelopeStatus>. Now also carries per_tx_ceiling_wei, which the banner displays; the shared tauri.ts interface has not caught up, so it is read through a narrowed local cast.",
+      "get_eth_balance": "via getEthBalance(address, apiKey) -> invoke('get_eth_balance', { address, apiKey }); Rust: get_eth_balance(address, api_key)",
+      "preview_transaction": "invoked directly with invoke('preview_transaction', { to, valueWei, calldata }) because src/lib/tauri.ts has no wrapper and is not this file's to edit; Rust: preview_transaction(to: String, value_wei: String, calldata: Option<String>, engine: State) -> Result<TransactionPreview, String>. value_wei crosses as a decimal STRING produced by BigInt.toString(); it never passes through Number()/parseFloat()."
+    },
+    "guards": [
+      "Desktop-only: refuses when window.__TAURI_INTERNALS__ is absent (browser preview has no signer and no Keychain).",
+      "Alchemy API key must be loaded; without it the signer cannot read the nonce or broadcast.",
+      "Signing wallet address must exist in the wallet store and match /^0x[0-9a-fA-F]{40}$/. There is no placeholder wallet to fall back to any more.",
+      "Asset guard: if the user pressed Transfer on a non-ETH holding, the send is refused — send_eth moves native ETH only, so proceeding would move ETH instead of the selected ERC-20.",
+      "Exactly one destination per send, by design (see notes) — batch sending is a capability the owner has not asked for.",
+      "Destination address must be valid 0x+40 hex; the zero address is refused outright; sending to the same wallet raises a warning.",
+      "Amount is parsed with viem parseUnits at 18 decimals (BigInt, no floats). Rejects non-decimal input, >18 decimal places, zero and negative.",
+      "SINGLE ENVELOPE AUTHORITY: preview_transaction is called with the real amount as a decimal wei string, and its verdict alone decides whether the envelope permits the transfer. It runs every guard check_and_authorize runs — no envelope, kill switch, expiry, no scope, out of scope, per-transaction ceiling, hard-cap headroom — while mutating and persisting nothing. No limit is re-derived in TypeScript; the previous manual BigInt hard-cap comparison has been deleted.",
+      "The per-transaction ceiling is now enforced before sending rather than discovered by attempting one: an over-ceiling amount blocks the confirm action with reject_code 'per_tx_ceiling', and the ceiling is shown next to every destination and in the envelope banner.",
+      "Refusals are driven by the stable reject_code (no_envelope|kill_switch|expired|no_scope|out_of_scope|per_tx_ceiling|hard_cap) mapped to a specific next step, not by parsing prose. The backend's reject_reason sentence, reject_detail and the relevant wei figures are shown alongside.",
+      "Contradiction guard: an authorized verdict that also reports in_scope=false is refused rather than resolved by guessing.",
+      "Verdict freshness: the verdicts are tagged with the exact destination/amount signature they were fetched for. If that signature changes, the verdicts, the per-destination confirmation checkboxes and the typed SEND are all cleared, so a verdict for one amount can never authorise another.",
+      "Balance guard: blocking when getEthBalance is known and lower than the amount; a warning (not a block) when the balance cannot be read, since the node would reject an underfunded transaction anyway.",
+      "Deliberate confirmation: a separate authorisation step re-showing the destination in FULL (never truncated, plus the exact wei value), a per-destination 'I have read the full address and amount' checkbox, and typing the word SEND. All three plus a clean guard set are required before the button enables.",
+      "Re-entrancy latch (useRef) so a double-click cannot broadcast twice; never reset within a modal instance.",
+      "Sequential execution with stop-on-first-failure; remaining rows are marked 'Not sent (stopped after failure)' rather than attempted."
+    ],
+    "failure_modes": [
+      "Any precondition unmet -> the confirm button is disabled and every blocking reason is listed verbatim in a 'Cannot send' panel with what to do about it (create/adjust a spend envelope, release the kill switch, lower the amount, etc.). There is no path back to the old simulated behaviour.",
+      "preview_transaction returns authorized:false -> the confirm action stays disabled and the blocker shows the backend's own reject_reason plus the next step selected from reject_code, with the code, per-transaction ceiling, remaining headroom and reject_detail displayed. Nothing is sent, and the check consumed none of the cap.",
+      "preview_transaction itself errors (e.g. an unparseable wei string) -> the error is shown verbatim and the send is refused; a missing verdict is never treated as approval.",
+      "send_eth rejects (envelope, keychain, signing or RPC) -> row state 'failed' with the raw backend error string, never a hash, plus the same hint mapping.",
+      "Network/timeout failure -> the failure panel explicitly warns that the transaction may still have reached the network and to check Etherscan before retrying, to avoid a double spend.",
+      "Envelope accounting after a failure -> the panel states that check_and_authorize adds the amount to spent_wei before signing, so a post-authorisation failure may still have consumed part of the cap, and the envelope figure is re-read from the backend after every attempt.",
+      "Success -> row state 'broadcast' with the exact hash returned by eth_sendRawTransaction, shown in full and linked to https://etherscan.io/tx/<hash>. The terminal label is 'Broadcast — pending on-chain'; the UI never says 'confirmed' because nothing here reads a receipt.",
+      "While sending, the modal cannot be closed by backdrop click or the × button, so the result is not lost."
+    ]
+  },
+  "replaced_fakes": [
+    "confirmTransfer(): removed the Math.random() hash generator and the setTimeout chain that marked transfers 'confirmed' without signing anything. Replaced with the real send_eth path above.",
+    "Zero-value check_transaction pre-flight workaround: replaced with the read-only preview_transaction called with the real amount. The manual BigInt hard-cap re-check and the prose-parsing of envelope errors on the pre-flight path are gone; envelopeHint() now only annotates errors returned by send_eth itself.",
+    "WALLET_CONFIGS: deleted. Three hardcoded wallets with invented addresses (one only 36 hex chars), '$84,201.40' style totals, BNB/MATIC badges on an ETH-only app, and a full analytics fixture block. Wallet identity now resolves from the wallet store only; an unknown id renders 'Wallet not found'.",
+    "syntheticConfig(): deleted along with its WALLET_CONFIGS template.",
+    "CHART_POINTS + AreaChart: deleted. The portfolio chart was three hardcoded arrays keyed by wallet id. Replaced with an honest 'No portfolio history' panel stating that Westron stores no historical snapshots.",
+    "TIME_FILTERS + timeFilter state: deleted; the range buttons drove the fabricated chart and nothing else.",
+    "Holdings stat cards: Total Value / Total NFTs / Total Tokens now come from get_wallet_portfolio and get_nfts_for_owner; Unrealized PnL from get_nft_pnl. Each card carries a sub-line naming the source or saying what is missing.",
+    "Token holdings table: rows from get_wallet_portfolio (balance, symbol, price, USD value are real).",
+    "Analytics KPIs: 'Total Action / Best Performer / Worst Performer' fixtures replaced with Traded Volume from get_pnl_summary and Best/Worst held NFT from get_nft_pnl unrealized vs stored cost basis.",
+    "Analytics 'Trading Performance': Total Trades / Win Rate / Avg Price fixtures replaced with Closed Trades, computed Win Rate and Realized P&L from get_pnl_summary, with a caveat line that it covers only locally matched NFT trades.",
+    "Analytics 'Top Collections by Value': was an empty array with no source; now summed per collection from get_nft_pnl item floors.",
+    "NftAcceptOfferModal: removed the invented offer price (opensea_floor_price * 0.94) and the derived 'Total Proceeds'. No command returns offers, so it shows '—'.",
+    "Simulated success states in all four NFT modals (setTimeout -> '✓ Listings Updated' / '✓ Listings Cancelled' / '✓ Offer Accepted' / '✓ NFTs Sent'): removed. Those actions are not wired to a signer, so the buttons are disabled and each modal states plainly that nothing was submitted.",
+    "Hardcoded gas figures '~0.0012 ETH', '~0.002 ETH', '~0.003 ETH': removed. The transfer modal shows the real estimate_gas result in gas units and says the fee in ETH is not knowable in advance (no command exposes a gas price); the NFT modals show '—'.",
+    "groupNftsByCollection(): deleted — it built per-collection rows whose floor/change/volume/supply fields were placeholder strings, and nothing rendered it.",
+    "persistTask import: removed (unused)."
+  ],
+  "still_unavailable": [
+    "Avg Hold Time — no command returns per-holding acquisition/disposal timestamps. Renders '—' with that explanation.",
+    "Portfolio value over time — no historical snapshot store and no command; the chart panel says so instead of plotting anything.",
+    "Portfolio change % — same reason (needs a prior value).",
+    "Token FDV, 1D change, 7D change, 1D volume — not in the Alchemy Portfolio response; '—' with a footnote under the table.",
+    "NFT per-row Listing Price, Rarity, Top Offer, Cost, Received — no command returns them; the columns render '–' as before.",
+    "NFT offers — no command returns offers for a token, so the Accept Offer modal shows '—' and is disabled.",
+    "Marketplace list / cancel / accept-offer and NFT send — real commands exist (marketplace_list_nft etc.) but wiring them moves real assets and needs the owner's sign-off, which covers only the ETH transfer. Left explicitly unavailable rather than simulated.",
+    "Gas fee in ETH — no gas-price command; only gas units are shown.",
+    "Transaction receipt / confirmation — no receipt command, so 'broadcast' is the terminal state.",
+    "Per-transfer gas fee column in the Transactions tab — the Alchemy transfers API does not return it; stays '—'.",
+    "NFT table sort buttons still only toggle their own indicator; sorting was already unimplemented and is out of scope for a data-truth change.",
+    "Batch/multi-destination transfers — deliberately blocked. Not a defect: the backend nonce bug is fixed and sends are serialised, so lifting this is a small, separate change once the owner asks for it."
+  ],
+  "verify": {
+    "esbuild": "PASS — `npx --yes esbuild src/app/wallet/[id]/WalletDetailClient.tsx --loader:.tsx=tsx --outfile=/dev/null` -> '../../../../dev/null 142.7kb / Done in 18ms'. No errors.",
+    "tsc": "PASS for this file's own code. tsc --noEmit with strict, jsx: react-jsx, target ES2017, moduleResolution bundler, @/* -> ./src/*, noUnusedLocals, skipLibCheck, files: [WalletDetailClient.tsx] emits exactly three errors, all TS2307 for modules absent from this partial tree: (13,29) '@/lib/walletStore', (15,110) '@/lib/addressBook', (17,43) '@/components/Tag'. ZERO type errors in this file's own code and ZERO unused locals.",
+    "command_arg_check": "Re-checked against the updated src-tauri/src/lib.rs. preview_transaction(to: String, value_wei: String, calldata: Option<String>, engine: State) -> Result<TransactionPreview, String>, registered in invoke_handler at line 747; called as invoke('preview_transaction', { to, valueWei, calldata }) per the camelCase convention. TransactionPreview has no rename_all, so its fields are snake_case and the local TS interface matches field for field (authorized, reject_code, reject_reason, reject_detail, envelope_active, kill_switch, expires_at, in_scope, value_wei, per_tx_ceiling_wei, hard_cap_wei, spent_wei, remaining_wei); every wei quantity is read as a string into BigInt. EnvelopeStatus now includes per_tx_ceiling_wei (u128_as_string -> string). Also re-verified: send_eth(wallet_address,to,value_wei,api_key)+State; estimate_gas(to,value_wei,data:Option,api_key); get_eth_balance(address,api_key); get_wallet_portfolio(wallet,api_key); get_nfts_for_owner(owner_address,api_key,page_key:Option); get_asset_transfers(address,api_key,from_block); get_pnl_summary(wallet_address,api_key); get_nft_pnl(wallet,api_key); load_alchemy_key(). check_transaction appears nowhere in this file except in a comment explaining why it is not used."
+  },
+  "unverified": [
+    "The screen has NOT been run. No dev server, no Tauri build, no browser. Only a parse check and a type check were performed.",
+    "NO REAL TRANSFER HAS BEEN EXECUTED. send_eth has never been invoked; no transaction was signed or broadcast; no funds moved.",
+    "preview_transaction has never been executed either — its read-only behaviour, field names and reject_code values were read from src-tauri/src/envelope/engine.rs and src-tauri/src/lib.rs, and its Rust unit tests (preview_does_not_consume_budget_while_check_and_authorize_does, preview_never_trips_the_auto_kill_switch) were read but not run by me.",
+    "Runtime shapes of get_wallet_portfolio, get_nft_pnl and get_pnl_summary responses were verified against the Rust structs, not against live Alchemy responses.",
+    "Rate-limit behaviour under a real free-tier key is untested; the reduction in call count is by construction, not measured.",
+    "src-tauri was not compiled or tested by me."
+  ],
+  "notes": [
+    "Envelope pre-flight now uses preview_transaction, the read-only sibling of check_transaction: same guards, no spent_wei mutation, no kill switch, no audit entry, no persist. It is therefore called with the real amount on every edit, which is what makes the per-transaction ceiling visible before a send rather than only on rejection. check_transaction is not referenced in this file at all — it consumes budget and send_eth already performs that authorisation exactly once, immediately before signing. The earlier zero-value probe workaround and the TypeScript hard-cap arithmetic it required have both been removed.",
+    "Multi-destination transfers remain blocked, deliberately. The nonce-reuse defect that originally forced this has been fixed in the backend and sends from one address are now serialised, so this is no longer a correctness workaround — it is scope: batch sending is a new money-moving capability and the owner's approval covered wiring the existing single transfer to real signing. The user-facing message now says exactly that rather than implying breakage. Lifting it is a small, separate change once the owner asks. If it is lifted: N transfers cost N round-trips, so show per-transfer progress rather than a spinner, and a mid-batch failure needs an explicit user decision because each send separately consumes envelope budget.",
+    "Every wei value crossing the boundary is a decimal string produced by BigInt.toString(), and every wei value read back is parsed with BigInt. There is no Number()/parseFloat() anywhere on the value path — verified by grep; the only occurrences of those identifiers in the file are inside comments saying so.",
+    "Sends are also sequential in code with stop-on-first-failure, so a failure never leaves later transfers half-attempted.",
+    "Holdings now costs two Alchemy commands on mount (get_wallet_portfolio + get_nfts_for_owner) instead of the previous four-way Promise.allSettled that included get_portfolio_snapshot — and get_portfolio_snapshot itself fans out to four Alchemy calls internally (balance, price, token balances, NFTs), so the old screen cost roughly six calls per open. Transactions and Analytics each fetch once, lazily, on first open. No per-row fan-out anywhere.",
+    "get_asset_transfers returns Err(\"Failed to fetch asset transfers\") when the merged result is empty, i.e. a wallet with no history produces an error rather than an empty list. The Transactions tab surfaces the real error text and adds a line saying it can also mean 'nothing to show', rather than silently rendering an empty table.",
+    "The shared src/lib/tauri.ts declares AssetTransfer.metadata as { block_timestamp?: string }, but the Rust AssetTransferMetadata carries #[serde(rename_all=\"camelCase\")] and serialises blockTimestamp. Reading only the snake_case name leaves the Age column permanently '—'. This file now accepts both spellings locally; the shared type is not mine to edit and should be corrected there.",
+    "The project tsconfig targets ES2017, where BigInt LITERALS (0n) are a compile error. All BigInt zeros in this file are written BigInt(0). The runtime (macOS WebView) supports BigInt fine; only the literal syntax is blocked.",
+    "The four NFT action modals no longer claim success. They were the last remaining 'action that reports done without doing anything' on this screen after the transfer.",
+    "Layout, grid definitions, colours and typography are unchanged; every edit is a data-truth or guard change, plus honest empty/loading/error blocks in the same visual language the codebase already uses ('—', 'No data yet', 'Fetching…', 'Unavailable — <error>').",
+    "Only src/app/wallet/[id]/WalletDetailClient.tsx was modified. src/lib/tauri.ts and everything under src-tauri/ were read only."
+  ],
+  "open_questions": [
+    "Should src/lib/tauri.ts gain a shared previewTransaction wrapper and a per_tx_ceiling_wei field on EnvelopeStatus? Both are currently handled locally in this file because that file is owned elsewhere; other screens will want them.",
+    "Does the owner want batch transfers? The block is now scope, not a defect, and lifting it is small.",
+    "Westron cannot tell the user a transfer was mined. Is a get_transaction_receipt command wanted, or is the Etherscan link enough?",
+    "The Unrealized PnL card on Holdings is NFT-only and only populates after the Analytics tab has been opened (to avoid an extra Alchemy call on every wallet open). Should it fetch eagerly, or should the label say 'NFT unrealized PnL' outright?",
+    "Should the Transfer button on a selected ERC-20 row be hidden rather than opening a modal that then refuses? It currently opens and explains, which is more discoverable but costs a click.",
+    "Confirmed there is no owner sign-off for wiring the NFT/marketplace actions — should those modals be removed from the UI entirely rather than shown disabled?"
+  ]
+}

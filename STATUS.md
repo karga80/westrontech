@@ -76,6 +76,34 @@ Fix: queries incoming + outgoing in parallel with `"order": "desc"`, merges, ded
 **Not verified in the running app yet.** Emir should open a wallet with real history →
 Transactions tab → confirm recent activity appears, including sent txs, not just received.
 
+## Update (2026-08-03, later): dashboard "2nd/3rd wallet doesn't appear" bug — fixed
+
+Emir: "dashboarda yeni cuzdan ekleyince 2 veya 3. sira icin, ilk basta dashboardda gozukmuyor."
+Root cause was **not** the earlier `onAdded` refresh bug (that one was already fixed and correct
+for its own symptom) — it was Alchemy rate-limiting (HTTP 429) with zero retry anywhere in the
+app. Adding a wallet fires a burst of concurrent requests (balance + tokens + NFTs + price ×
+however many wallets are on the dashboard); on the free tier this easily trips the rate limit.
+
+Two real defects found and fixed:
+1. **`src-tauri/src/rpc/client.rs` (`AlchemyClient`)** — the client actually used for
+   `get_eth_balance`, `get_token_balances`, `get_nfts_for_owner` inside `get_portfolio_snapshot`
+   (the bulk of a wallet's data) had **zero** 429/rate-limit handling — a single 429 on any one
+   of those three failed the wallet's *entire* snapshot instantly via `tokio::try_join!`, no
+   retry. Added a `with_429_retry` helper: retries up to 3 times with 200ms/600ms backoff.
+   (A separate, less-traveled client — `src-tauri/src/data/alchemy/client.rs`, used for ETH
+   price — already had this same protection from an earlier fix this session; it did not fully
+   cover the bug since it's not the client that touches balance/tokens/NFTs.)
+2. **`src/app/page.tsx`** — the snapshot-fetch effect *replaced* the whole snapshots map every
+   cycle instead of merging. So even if a wallet succeeded on the previous cycle, one 429'd
+   request in the current cycle wiped its last-known-good data back to blank/zero. Now merges:
+   `setSnapshots(prev => ({ ...prev, ...newSnaps }))`.
+
+Both fixes verified with `cargo check` (Rust, clean) and `npx tsc --noEmit` (TypeScript, clean).
+**Not committed yet** — review then ask to commit. **Not verified in the running app** (no
+running Tauri session available this turn) — Emir should add a 2nd/3rd wallet and confirm its
+balance/NFTs load without needing a reload. If several wallets are added in a fast burst, a brief
+extra delay (up to ~0.8s per retried call) is expected and fine — that's the retry working.
+
 ## NEXT SESSION STARTS HERE — price poller is broken
 
 The Tauri log shows this failing continuously, every run, for both providers' symbols:
@@ -105,3 +133,50 @@ first** (real key, real response, saved to `probes/`), confirm the correct URL s
 - `subscription-worker/schema.sql` and `package-lock.json` are untracked in git — should be
   committed (schema.sql is required to reproduce the D1 tables; package-lock.json pins deps).
   Not committed automatically per workflow rules — do this in the next commit.
+
+## Update (2026-08-09): "son nokta" turu — Claude/MCP kontrolü, Keychain, gerçek transfer
+
+Cowork oturumu, build→feedback döngüsüyle 4 paralel ajan. `cargo test` **86/86**,
+`cargo check` 0 hata (23 uyarı, hepsi önceden var olan, byte-identical baseline).
+
+### GÜVENLİK — en kritik bulgu
+`wallet/keychain.rs` adı "keychain" olmasına rağmen Keychain KULLANMIYORDU: private
+key'ler `~/Library/Application Support/Westron/keys/wallet_<addr>.key` dosyasında,
+`fs::write` ile, yani umask (tipik 0644) izinleriyle DÜZ METİN duruyordu. CLAUDE.md'nin
+değiştirilemez kuralına ve ürünün ana pazarlama iddiasına aykırı.
+→ macOS Keychain'e taşındı (`security-framework`, generic password, service "Westron").
+→ Migrasyon güvenli: oku → Keychain'e yaz → **geri oku ve karşılaştır** → ancak o zaman
+   düz metin dosyayı sil. Herhangi bir hata dosyayı bırakır, `pending` sayar.
+→ macOS dışı fallback: dosya, ama `create_new + mode(0o600)` ile atomik.
+→ `get_keychain_status` komutu + kontrol sunucusu `/status` üzerinde görünür.
+
+### İki gerçek para hatası bulundu ve düzeltildi
+1. **`check_transaction` read-only DEĞİLDİ** — `check_and_authorize` çağırıyor, yani
+   `spent_wei`'yi artırıyor ve (artık kalıcı olduğu için) diske yazıyor. Pre-flight
+   olarak kullanılırsa limiti iki kez düşürür; kalan limitin yarısından büyük her tutarda
+   tek bir wei hareket etmeden auto kill switch'i tetikler.
+   → `preview_transaction` eklendi: aynı guard'lar, sıfır yan etki. Ortak `evaluate()`
+     saf fonksiyonu ikisini de besliyor, ayrışma yapısal olarak imkânsız.
+   → `get_envelope_status` artık `per_tx_ceiling_wei` de döndürüyor (hiç yoktu).
+   → `check_transaction` davranışı AYNEN korundu, doc comment'i artık tüketimi söylüyor.
+2. **Nonce tekrar kullanımı** — `sign_and_send` nonce'u `"latest"` ile okuyordu; ilk işlem
+   madenlenmeden ikinci gönderim aynı nonce'u alıp birincinin YERİNE geçiyordu. Kullanıcı
+   iki transfer gitti sanıyor, biri sessizce hiç olmuyor.
+   → `"pending"` + from-adres başına mutex + süreç içi son-nonce kaydı. `nonce too low` /
+     `replacement underpriced` / `already known` ayrı sınıflandırılıyor.
+
+### Kalıcılık
+Envelope (spent_wei ve kill switch dahil) ve scheduler durumu artık restart'ı atlatıyor.
+Süresi dolmuş envelope aktif olarak geri yüklenmez. Kill switch açıksa açık kalır (fail closed).
+
+### Frontend — mock temizliği tamamlandı
+- `monitor/wallet`: P&L / Recent Trades / Related-Wallets tamamen uyduruktu → `get_trade_history`,
+  `get_pnl_summary`, `get_nft_pnl`, `find_sister_wallets`.
+- `wallet/[id]`: **sahte tx hash kaldırıldı**, gerçek `send_eth`'e bağlandı (Emir onayıyla).
+- `bulk/distribute` + `monitor/collection`: MOCK_WALLETS, ALERTS, sahte işlem sonuçları temizlendi.
+
+### DOĞRULANMAYAN (dürüst boşluk)
+Hiçbir ekran ÇALIŞTIRILMADI. Kontrol sunucusu hiç soket açmadı. macOS Keychain yolu
+Linux'ta derlenebilir ama çalıştırılamaz (cross-compile ile doğrulandı, runtime değil).
+Nonce düzeltmesinin ağ yarısı test edilmedi. **Hiç gerçek transfer yapılmadı.**
+Mac'teki ilk çalıştırma gerçek testtir.
