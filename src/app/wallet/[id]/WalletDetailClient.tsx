@@ -1,104 +1,73 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { invoke } from '@tauri-apps/api/core';
 import {
-  getPortfolioSnapshot, getNftsForOwner, getAssetTransfers, getWalletTokens, loadAlchemyKey,
-  type PortfolioSnapshot, type OwnedNft, type AssetTransfer, type WalletToken,
+  getNftsForOwner, getWalletPortfolio, getAssetTransfers, loadAlchemyKey,
+  getEnvelopeStatus, sendEth, estimateGas, getEthBalance,
+  getNftPnl, getPnlSummary,
+  type OwnedNft, type AssetTransfer, type WalletToken, type WalletPortfolio,
+  type EnvelopeStatus, type NftPnlSummary, type PnlSummary,
 } from '@/lib/tauri';
 import { loadWallets } from '@/lib/walletStore';
-import { persistTask } from '@/lib/taskStore';
-import { parseUnits } from 'viem';
+import { parseUnits, formatEther } from 'viem';
 import { loadAddressBook, saveAddressEntry, deleteAddressEntry, updateAddressEntry, type AddressEntry } from '@/lib/addressBook';
-import { EMPTY_NFTS_RESPONSE, EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
+import { EMPTY_NFTS_RESPONSE, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 
 // ─── Wallet Detail Client ─────────────────────────────────────────────────────
+//
+// Data rule for this screen: every number shown is either something a Tauri
+// command returned for THIS wallet, or '—'. There are no fixtures, no
+// placeholder wallets and no derived-looking values with no source. Where a
+// panel has no backing command yet it says so in words instead of drawing
+// something plausible.
+//
+// Quota rule: Alchemy is on the free tier and this app has a live history of
+// HTTP 429s blanking the screen. So: the Holdings tab costs two commands on
+// mount, Transactions and Analytics fetch once, lazily, the first time they are
+// opened, and nothing fans out per row.
 
 type Tab = 'Holdings' | 'Transactions' | 'Analytics' | 'Address Book';
-const TIME_FILTERS = ['24h', '1W', '1M', 'ALL'] as const;
 
-// ── Per-wallet configs ────────────────────────────────────────────────────────
+/** Westron is Ethereum-mainnet only, so the chain badge is a constant fact
+ *  rather than a per-wallet field someone can get wrong. */
+const CHAIN_BADGE = 'ETH';
 
-const WALLET_CONFIGS = [
-  {
-    id: '0',
-    name: 'Main Wallet',
-    address: '0x3f4a6c2dB1eF8a92dC3Ab41e90F7cD8e2A91c',
-    badge: 'ETH',
-    totalValue: '$84,201.40',
-    totalNfts: 12,
-    totalTokens: 4,
-    unrealizedPnl: '+$1,280.00',
-    pnlPos: true,
-    analytics: {
-      totalAction: '$12,847.32',
-      actionPct: '+28.4%',
-      bestPerformer: 'Bored Ape YC',
-      bestPct: '+42.1%',
-      worstPerformer: 'Moonbirds',
-      worstPct: '-33.5%',
-      avgHoldTime: '47 days',
-      totalTrades: '1,434',
-      winRate: '49.45%',
-      avgPrice: '$9.1k',
-      portfolioValue: '$84,201.40',
-      portfolioChange: '+12.4%',
-    },
-  },
-  {
-    id: '1',
-    name: 'DeFi Wallet',
-    address: '0x1234C2dB1eF8a92dC3Ab41e90F7cD8e25678',
-    badge: 'BNB',
-    totalValue: '$38,490.87',
-    totalNfts: 5,
-    totalTokens: 3,
-    unrealizedPnl: '-$340.00',
-    pnlPos: false,
-    analytics: {
-      totalAction: '$4,210.50',
-      actionPct: '-3.2%',
-      bestPerformer: 'Uniswap V3',
-      bestPct: '+18.4%',
-      worstPerformer: 'Curve LP',
-      worstPct: '-12.1%',
-      avgHoldTime: '23 days',
-      totalTrades: '847',
-      winRate: '44.20%',
-      avgPrice: '$4.8k',
-      portfolioValue: '$38,490.87',
-      portfolioChange: '-0.69%',
-    },
-  },
-  {
-    id: '2',
-    name: 'Polygon Cold',
-    address: '0xabcdF8a92dC3Ab41e90F7cD8e2ef12',
-    badge: 'MATIC',
-    totalValue: '$20,141.65',
-    totalNfts: 8,
-    totalTokens: 6,
-    unrealizedPnl: '+$2,490.00',
-    pnlPos: true,
-    analytics: {
-      totalAction: '$6,320.10',
-      actionPct: '+15.8%',
-      bestPerformer: 'Azuki',
-      bestPct: '+55.2%',
-      worstPerformer: 'Clonex',
-      worstPct: '-8.9%',
-      avgHoldTime: '62 days',
-      totalTrades: '312',
-      winRate: '58.97%',
-      avgPrice: '$2.3k',
-      portfolioValue: '$20,141.65',
-      portfolioChange: '+2.01%',
-    },
-  },
-];
+interface ResolvedWallet {
+  id: string;
+  name: string;
+  address: string;
+}
 
-// ── Transactions per wallet ───────────────────────────────────────────────────
+/** Tauri rejects with a plain string; everything else may be an Error. Never
+ *  swallow — this text is rendered. */
+function errText(e: unknown): string {
+  if (typeof e === 'string') return e;
+  if (e instanceof Error) return e.message;
+  try { return JSON.stringify(e); } catch { return String(e); }
+}
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: string };
+
+async function settle<T>(run: () => Promise<T>): Promise<Settled<T>> {
+  try { return { ok: true, value: await run() }; } catch (e) { return { ok: false, error: errText(e) }; }
+}
+
+const EM_DASH = '—';
+
+function fmtUsd(n: number | null | undefined): string {
+  return n != null && Number.isFinite(n)
+    ? `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : EM_DASH;
+}
+
+function fmtEth(n: number | null | undefined, dp = 4): string {
+  return n != null && Number.isFinite(n) ? `${n.toFixed(dp)} ETH` : EM_DASH;
+}
+
+// ── Transaction row styling ───────────────────────────────────────────────────
 
 const TX_STYLE = {
   Receive: { bg: '#06251b', border: '#06251b', text: '#4fe9b4' },
@@ -109,31 +78,22 @@ const TX_STYLE = {
 
 type TxType = keyof typeof TX_STYLE;
 
-// ── Chart ─────────────────────────────────────────────────────────────────────
+// ── Shared honest-state blocks ────────────────────────────────────────────────
 
-const CHART_POINTS: Record<string, number[]> = {
-  '0': [0.55, 0.50, 0.45, 0.48, 0.52, 0.42, 0.38, 0.41, 0.36, 0.30, 0.35, 0.28, 0.32, 0.25, 0.30, 0.38, 0.34, 0.40, 0.48, 0.55, 0.62, 0.58, 0.65, 0.72, 0.68, 0.75, 0.70, 0.80, 0.85, 0.78, 0.88, 0.82, 0.90, 0.95, 0.88, 0.92, 0.85, 0.90, 0.95, 1.00],
-  '1': [0.80, 0.75, 0.78, 0.72, 0.70, 0.65, 0.60, 0.58, 0.55, 0.52, 0.48, 0.50, 0.45, 0.42, 0.40, 0.43, 0.46, 0.44, 0.41, 0.38, 0.36, 0.34, 0.30, 0.28, 0.32, 0.35, 0.38, 0.42, 0.44, 0.46, 0.48, 0.50, 0.52, 0.54, 0.56, 0.58, 0.60, 0.62, 0.65, 0.63],
-  '2': [0.30, 0.32, 0.35, 0.38, 0.42, 0.45, 0.48, 0.52, 0.55, 0.58, 0.60, 0.62, 0.64, 0.66, 0.68, 0.70, 0.72, 0.74, 0.75, 0.76, 0.78, 0.80, 0.82, 0.84, 0.85, 0.87, 0.88, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1.00, 0.99, 1.00],
-};
-
-function AreaChart({ walletId }: { walletId: string }) {
-  const pts = CHART_POINTS[walletId] ?? CHART_POINTS['0'];
-  const W = 560, H = 120, n = pts.length;
-  const coords = pts.map((y, i) => ({ x: (i / (n - 1)) * W, y: H - y * H * 0.92 - 4 }));
-  const linePath = coords.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-  const areaPath = `${linePath} L${W},${H} L0,${H} Z`;
+/** One place for "nothing to show, and here is why". `detail` says what would
+ *  have to be true for a number to appear here. */
+function StateNote({ title, detail, tone = 'muted' }: { title: string; detail?: string; tone?: 'muted' | 'error' }) {
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: '120px' }} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={`cg-${walletId}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#7c5cff" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill={`url(#cg-${walletId})`} />
-      <path d={linePath} fill="none" stroke="#7c5cff" strokeWidth="1.5" />
-    </svg>
+    <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: tone === 'error' ? '#ff8a96' : 'var(--wr-text-3)' }}>
+        {title}
+      </div>
+      {detail && (
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.6, maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto', wordBreak: 'break-word' }}>
+          {detail}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -146,7 +106,35 @@ function ExternalLinkIcon() {
   );
 }
 
-// ── Transfer Modal ────────────────────────────────────────────────────────────
+// ── Transfer Modal — real ETH sends ───────────────────────────────────────────
+//
+// This modal signs and broadcasts REAL Ethereum mainnet transactions via the
+// `send_eth` Tauri command (Keychain key → EIP-1559 → eth_sendRawTransaction).
+//
+// It previously fabricated a Math.random() hash and marked the transfer
+// "confirmed" while nothing was signed and no funds moved. Everything below
+// exists so that can never be true again:
+//   * nothing is sent unless an active spend envelope authorises it;
+//   * the destination is shown in full (never truncated) where it is approved;
+//   * the only hash ever rendered is the one the backend returned;
+//   * "Broadcast" is the terminal success state — this screen never claims a
+//     transaction was confirmed, because nothing here reads a receipt.
+//
+// Envelope pre-flight: `preview_transaction`.
+// It runs exactly the guards `check_and_authorize` runs — active envelope, kill
+// switch, expiry, scope, per-transaction ceiling, hard-cap headroom — and
+// mutates nothing: no `spent_wei`, no kill switch, no audit entry, no persist.
+// So it is called with the REAL amount, on every change, and its verdict is the
+// single source of truth for whether the confirm action may enable.
+//
+// `value_wei` crosses as a decimal STRING. Wei does not survive a JS number, and
+// a pre-flight that silently re-rounds the amount it is checking is not a check.
+// Nothing on this path goes through Number()/parseFloat().
+//
+// `check_transaction` is deliberately NOT used anywhere in this file: it is the
+// consuming call, and using it as a pre-flight charges the hard cap twice for
+// one transfer. `send_eth` performs that authorisation itself, exactly once,
+// immediately before signing.
 
 function EthIcon() {
   return (
@@ -159,18 +147,401 @@ function EthIcon() {
   );
 }
 
-type TxStatus = { label: string; address: string; amount: string; status: 'pending' | 'broadcasting' | 'confirmed' | 'failed'; hash?: string };
+const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+const ZERO_ADDR_RE = /^0x0{40}$/;
 
-function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string; address: string }; onClose: () => void }) {
-  const [step, setStep] = useState<1 | 2>(1);
-  const managedWallets = loadWallets().filter(w => w.id !== wallet.id);
+type SendState = 'queued' | 'submitting' | 'broadcast' | 'failed' | 'skipped';
+
+interface Destination {
+  key: string;
+  label: string;
+  address: string;
+  amountRaw: string;
+}
+
+interface SendRow extends Destination {
+  valueWei: bigint;
+  state: SendState;
+  hash?: string;
+  error?: string;
+}
+
+/** Exact decimal-ETH → wei. No floats anywhere on this path. */
+function parseAmountWei(raw: string): { wei: bigint } | { error: string } {
+  const s = raw.trim();
+  if (!s) return { error: 'no amount entered' };
+  if (!/^\d*\.?\d*$/.test(s) || s === '.') return { error: `"${s}" is not a plain decimal number` };
+  const frac = s.split('.')[1] ?? '';
+  if (frac.length > 18) return { error: 'more than 18 decimal places — ETH cannot represent that' };
+  let wei: bigint;
+  try { wei = parseUnits(s, 18); } catch { return { error: `"${s}" could not be converted to wei` }; }
+  if (wei <= BigInt(0)) return { error: 'must be greater than zero' };
+  return { wei };
+}
+
+/** Read-only envelope verdict. Mirrors `envelope::engine::TransactionPreview`
+ *  (plain snake_case; every wei quantity is a decimal string because these do
+ *  not fit in a JS number). `src/lib/tauri.ts` has no wrapper for this command
+ *  and is not this file's to edit, so it is invoked directly here. */
+interface TransactionPreview {
+  authorized: boolean;
+  reject_code?: string | null;
+  reject_reason?: string | null;
+  reject_detail?: string | null;
+  envelope_active: boolean;
+  kill_switch: boolean;
+  expires_at?: number | null;
+  in_scope: boolean;
+  value_wei: string;
+  per_tx_ceiling_wei?: string | null;
+  hard_cap_wei?: string | null;
+  spent_wei?: string | null;
+  remaining_wei?: string | null;
+}
+
+/** Rust: preview_transaction(to: String, value_wei: String, calldata: Option<String>) */
+async function previewTransaction(params: { to: string; valueWei: string; calldata?: string | null }): Promise<TransactionPreview> {
+  return invoke<TransactionPreview>('preview_transaction', {
+    to: params.to,
+    valueWei: params.valueWei,
+    calldata: params.calldata ?? null,
+  });
+}
+
+/** What the user should do about each stable reject_code. The backend's own
+ *  `reject_reason` sentence is always shown next to this — it explains what
+ *  happened, this says what to do next. Branching on the code rather than
+ *  parsing prose. */
+function rejectAction(code: string | null | undefined): string | null {
+  switch (code) {
+    case 'no_envelope': return 'Create a spend envelope whose scope lists this destination address, then try again.';
+    case 'kill_switch': return 'Release the kill switch before anything can be sent.';
+    case 'expired': return 'Create a new spend envelope — this one has run out of time.';
+    case 'no_scope': return 'The envelope has no scope. Recreate it with the destination address included.';
+    case 'out_of_scope': return 'Create an envelope that includes this exact address, or send to an address already in scope.';
+    case 'per_tx_ceiling': return 'Lower the amount, or create an envelope with a higher per-transaction ceiling.';
+    case 'hard_cap': return 'Lower the amount, or create a new envelope — this one has little headroom left.';
+    default: return null;
+  }
+}
+
+/** Adds an actionable hint to an error string returned by `send_eth` itself,
+ *  which formats the `EnvelopeError` with `Debug`. Only used on the send-failure
+ *  path; the pre-flight branches on `reject_code` instead. */
+function envelopeHint(raw: string): string | null {
+  if (raw.includes('KillSwitchActive')) return 'The kill switch is engaged. Release it before sending.';
+  if (raw.includes('EnvelopeExpired')) return 'The spend envelope has expired. Create a new one.';
+  if (raw.includes('NoScopeDefined')) return 'There is no active spend envelope, or it has no scope. Create one that lists this destination.';
+  if (raw.includes('AddressOutOfScope')) return 'This destination is not in the envelope scope. Create an envelope that includes this exact address.';
+  if (raw.includes('PerTxCeilingExceeded')) return 'The amount is above the envelope per-transaction ceiling. Lower the amount, or create an envelope with a higher ceiling.';
+  if (raw.includes('HardCapExceeded')) return 'This would breach the envelope hard cap, and the kill switch has now been engaged. Review the envelope before retrying.';
+  return null;
+}
+
+function ethFromWei(wei: bigint): string {
+  return `${formatEther(wei)} ETH`;
+}
+
+function TransferModal({
+  walletName, fromAddress, alchemyKey, isTauri, tokenSymbol, onClose,
+}: {
+  walletName: string;
+  /** The real address held in the wallet store — never a display placeholder. */
+  fromAddress: string;
+  alchemyKey: string;
+  isTauri: boolean;
+  /** Symbol of the holding the user pressed Transfer on, if any. */
+  tokenSymbol: string | null;
+  onClose: () => void;
+}) {
+  type Phase = 'compose' | 'review' | 'authorise' | 'sending' | 'done';
+  const [phase, setPhase] = useState<Phase>('compose');
+
+  const managedWallets: Array<{ id: string; name: string; address: string }> =
+    loadWallets().filter((w: { address: string }) => w.address?.toLowerCase() !== fromAddress.toLowerCase());
   const addressBookEntries = loadAddressBook();
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [abSelected, setAbSelected] = useState<Set<string>>(new Set());
   const [abAmounts, setAbAmounts] = useState<Record<string, string>>({});
   const [externals, setExternals] = useState([{ address: '', amount: '' }]);
-  const [txStatuses, setTxStatuses] = useState<TxStatus[]>([]);
+
+  // Envelope + balance, both real, both refreshed rather than cached forever.
+  const [envelope, setEnvelope] = useState<EnvelopeStatus | null>(null);
+  const [envelopeLoading, setEnvelopeLoading] = useState(true);
+  const [envelopeError, setEnvelopeError] = useState<string | null>(null);
+  const [balanceWei, setBalanceWei] = useState<bigint | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+
+  // Gas estimate (units only — no command exposes a gas price, so a fee in ETH
+  // would be invented).
+  const [gasUnits, setGasUnits] = useState<Record<string, number>>({});
+  const [gasErrors, setGasErrors] = useState<Record<string, string>>({});
+  const [gasLoading, setGasLoading] = useState(false);
+
+  // Read-only backend verdict, per destination, for the REAL amount.
+  const [preview, setPreview] = useState<Record<string, TransactionPreview>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  /** Which destination/amount set the verdicts in `preview` were fetched for.
+   *  A verdict for a different amount must never gate a send. */
+  const [previewFor, setPreviewFor] = useState<string | null>(null);
+
+  // Deliberate-confirmation gate.
+  const [verified, setVerified] = useState<Set<string>>(new Set());
+  const [typedConfirm, setTypedConfirm] = useState('');
+
+  const [sendRows, setSendRows] = useState<SendRow[]>([]);
+  const [batchStopped, setBatchStopped] = useState<string | null>(null);
+  /** Latched the moment a send starts. Never reset: one modal, one attempt. */
+  const sendStartedRef = useRef(false);
+
+  const refreshEnvelope = useCallback(async () => {
+    if (!isTauri) { setEnvelopeLoading(false); return; }
+    setEnvelopeLoading(true);
+    const res = await settle(() => getEnvelopeStatus());
+    if (res.ok) { setEnvelope(res.value); setEnvelopeError(null); }
+    else { setEnvelope(null); setEnvelopeError(res.error); }
+    setEnvelopeLoading(false);
+  }, [isTauri]);
+
+  useEffect(() => { void refreshEnvelope(); }, [refreshEnvelope]);
+
+  useEffect(() => {
+    if (!isTauri || !alchemyKey || !ADDR_RE.test(fromAddress)) return;
+    let cancelled = false;
+    (async () => {
+      const res = await settle(() => getEthBalance(fromAddress, alchemyKey));
+      if (cancelled) return;
+      if (res.ok) {
+        try { setBalanceWei(BigInt(res.value.wei)); setBalanceError(null); }
+        catch { setBalanceError(`Balance came back unreadable: ${res.value.wei}`); }
+      } else setBalanceError(res.error);
+    })();
+    return () => { cancelled = true; };
+  }, [isTauri, alchemyKey, fromAddress]);
+
+
+  // ── Destinations ────────────────────────────────────────────────────────────
+
+  const destinations: Destination[] = [
+    ...Array.from(selected).map(wid => {
+      const mw = managedWallets.find(w => w.id === wid);
+      return { key: `w:${wid}`, label: mw?.name ?? wid, address: (mw?.address ?? '').trim(), amountRaw: amounts[wid] ?? '' };
+    }),
+    ...Array.from(abSelected).map(id => {
+      const ab = addressBookEntries.find((e: AddressEntry) => e.id === id);
+      return { key: `b:${id}`, label: ab?.name ?? id, address: (ab?.address ?? '').trim(), amountRaw: abAmounts[id] ?? '' };
+    }),
+    ...externals.map((e, i) => ({ key: `x:${i}`, label: 'External address', address: e.address.trim(), amountRaw: e.amount }))
+      .filter(d => d.address.length > 0),
+  ];
+
+  const parsed = destinations.map(d => ({ d, amount: parseAmountWei(d.amountRaw) }));
+  const totalWei = parsed.reduce<bigint>((s, p) => ('wei' in p.amount ? s + p.amount.wei : s), BigInt(0));
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Live envelope verdict for the real amount. `preview_transaction` is
+  // read-only and local (no network, no Alchemy quota, no spend consumed), so
+  // it is safe to re-run on every edit — which is the point: the user finds out
+  // an amount is over the per-transaction ceiling while typing, not by
+  // attempting a send.
+  const previewSignature = parsed
+    .map(p => `${p.d.key}|${p.d.address.toLowerCase()}|${'wei' in p.amount ? p.amount.wei.toString() : '-'}`)
+    .join(';');
+
+  useEffect(() => {
+    // Any change to the destinations or amounts invalidates both the previous
+    // verdicts and any confirmation the user had already given for them.
+    setPreview({});
+    setPreviewFor(null);
+    setVerified(new Set());
+    setTypedConfirm('');
+
+    if (!isTauri) { setPreviewLoading(false); return; }
+    const rows = parsed
+      .filter((x): x is { d: Destination; amount: { wei: bigint } } => ADDR_RE.test(x.d.address) && 'wei' in x.amount);
+    if (rows.length === 0) { setPreviewLoading(false); setPreviewError(null); return; }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    (async () => {
+      const out: Record<string, TransactionPreview> = {};
+      for (const r of rows) {
+        // Decimal string all the way down — never Number()/parseFloat().
+        const res = await settle(() => previewTransaction({ to: r.d.address, valueWei: r.amount.wei.toString() }));
+        if (cancelled) return;
+        if (!res.ok) { setPreviewError(res.error); setPreviewLoading(false); return; }
+        out[r.d.key] = res.value;
+      }
+      if (cancelled) return;
+      setPreview(out);
+      setPreviewFor(previewSignature);
+      setPreviewError(null);
+      setPreviewLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // `previewSignature` collapses the destination/amount set into one value;
+    // `parsed` is rebuilt every render and would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTauri, previewSignature]);
+
+  // ── Guards ──────────────────────────────────────────────────────────────────
+  // Blockers stop the send. Warnings are shown but do not stop it. Anything
+  // that could put funds somewhere unintended is a blocker.
+
+  /** Destinations complete enough for the backend to have an opinion on. */
+  const previewableRows = parsed
+    .filter(p => ADDR_RE.test(p.d.address) && 'wei' in p.amount)
+    .map(p => p.d);
+
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
+  if (!isTauri) blockers.push('Sending requires the Westron desktop app — the browser preview has no signer and no Keychain access.');
+  if (isTauri && !alchemyKey) blockers.push('No Alchemy API key is stored. Add one in Settings; the signer needs it to read the nonce and broadcast.');
+  if (!ADDR_RE.test(fromAddress)) blockers.push('This wallet has no usable address in local storage, so there is nothing to sign with.');
+
+  if (tokenSymbol && tokenSymbol.toUpperCase() !== 'ETH') {
+    blockers.push(`Only native ETH transfers are wired to the signer. "${tokenSymbol}" is an ERC-20 — send_eth cannot move it, and sending from here would move ETH instead. Refusing.`);
+  }
+
+  if (destinations.length === 0) blockers.push('No destination selected.');
+  if (destinations.length > 1) {
+    blockers.push(
+      'One destination at a time, by design. The underlying nonce-reuse defect that originally forced this has been fixed in the backend, and sends from one address are now serialised — but batch sending is a new capability, not part of what was approved for this screen, so it stays off until the owner asks for it. Remove a destination and send them one after another.',
+    );
+  }
+
+  for (const { d, amount } of parsed) {
+    if (!ADDR_RE.test(d.address)) blockers.push(`${d.label}: "${d.address}" is not a valid Ethereum address (expected 0x + 40 hex characters).`);
+    else if (ZERO_ADDR_RE.test(d.address)) blockers.push(`${d.label}: that is the zero address — funds sent there are destroyed.`);
+    else if (d.address.toLowerCase() === fromAddress.toLowerCase()) warnings.push(`${d.label}: destination is this same wallet. The transfer would only cost gas.`);
+    if ('error' in amount) blockers.push(`${d.label}: amount ${amount.error}.`);
+  }
+
+  const dupes = destinations.filter((d, i) => destinations.findIndex(o => o.address.toLowerCase() === d.address.toLowerCase()) !== i);
+  if (dupes.length > 0) warnings.push('The same destination address appears more than once.');
+
+  // Envelope guards, entirely from `preview_transaction`. The verdict already
+  // carries every limit — active, kill switch, expiry, scope, per-transaction
+  // ceiling and hard-cap headroom — so none of them is re-derived here. The old
+  // manual BigInt hard-cap comparison is gone with it, and the per-transaction
+  // ceiling is now visible BEFORE a send instead of only on rejection.
+  if (isTauri) {
+    if (previewError) {
+      blockers.push(`The spend envelope could not be checked (${previewError}). Refusing to send without a verdict.`);
+    } else if (previewLoading || (previewableRows.length > 0 && previewFor !== previewSignature)) {
+      blockers.push('Checking the spend envelope…');
+    } else {
+      for (const d of previewableRows) {
+        const v = preview[d.key];
+        if (!v) { blockers.push(`${d.label}: no envelope verdict yet.`); continue; }
+        if (!v.authorized) {
+          const action = rejectAction(v.reject_code);
+          blockers.push(`${d.label}: ${v.reject_reason ?? 'the spend envelope refused this transfer.'}${action ? ` ${action}` : ''}`);
+        } else if (!v.in_scope) {
+          // Belt and braces: authorized implies in scope, so this would be a
+          // backend contradiction. Refuse rather than guess which is right.
+          blockers.push(`${d.label}: the envelope authorised this transfer but reports the destination as out of scope. Refusing on the contradiction.`);
+        }
+      }
+    }
+  }
+
+  // Balance guard: blocking only when the balance is known and too low.
+  if (balanceWei !== null && totalWei > balanceWei) {
+    blockers.push(`Balance is ${ethFromWei(balanceWei)}, which is less than ${ethFromWei(totalWei)}. Gas is charged on top of the amount.`);
+  } else if (balanceWei === null && isTauri) {
+    warnings.push(balanceError
+      ? `Balance could not be read (${balanceError}), so sufficient funds have not been verified.`
+      : 'Reading the wallet balance…');
+  } else if (balanceWei !== null) {
+    warnings.push('Gas is charged on top of the amount, so the balance must cover both.');
+  }
+
+  const previewFailures = previewableRows
+    .map(d => ({ d, v: preview[d.key] }))
+    .filter(x => x.v && !x.v.authorized);
+
+  const composeReady = destinations.length > 0;
+
+  // ── Steps ───────────────────────────────────────────────────────────────────
+
+  async function enterReview() {
+    setPhase('review');
+    await refreshEnvelope();
+    // Gas estimate: sequential, one per destination (at most a couple of calls).
+    if (!isTauri || !alchemyKey) return;
+    setGasLoading(true);
+    const units: Record<string, number> = {};
+    const errs: Record<string, string> = {};
+    for (const { d, amount } of parsed) {
+      if (!ADDR_RE.test(d.address) || !('wei' in amount)) continue;
+      const res = await settle(() => estimateGas(d.address, amount.wei.toString(), undefined, alchemyKey));
+      if (res.ok) units[d.key] = res.value; else errs[d.key] = res.error;
+    }
+    setGasUnits(units);
+    setGasErrors(errs);
+    setGasLoading(false);
+  }
+
+  async function enterAuthorise() {
+    setPhase('authorise');
+    await refreshEnvelope();
+  }
+
+  const allVerified = destinations.length > 0 && destinations.every(d => verified.has(d.key));
+  const canSend =
+    phase === 'authorise' &&
+    blockers.length === 0 &&
+    !previewLoading &&
+    !previewError &&
+    previewFor === previewSignature &&
+    previewableRows.length > 0 &&
+    previewableRows.every(d => preview[d.key]?.authorized === true) &&
+    allVerified &&
+    typedConfirm.trim().toUpperCase() === 'SEND';
+
+  async function runSends() {
+    // React state updates are async, so `phase` alone cannot stop a second
+    // click landing in the same tick. A ref flips synchronously — without it a
+    // double-click could broadcast the same transfer twice.
+    if (!canSend || sendStartedRef.current) return;
+    sendStartedRef.current = true;
+    const rows: SendRow[] = parsed
+      .filter((p): p is { d: Destination; amount: { wei: bigint } } => 'wei' in p.amount)
+      .map(p => ({ ...p.d, valueWei: p.amount.wei, state: 'queued' as SendState }));
+    if (rows.length === 0) return;
+    setSendRows(rows);
+    setPhase('sending');
+
+    for (let i = 0; i < rows.length; i++) {
+      setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'submitting' } : r)));
+      const res = await settle(() => sendEth(fromAddress, rows[i].address, rows[i].valueWei.toString(), alchemyKey));
+      if (res.ok) {
+        const hash = res.value;
+        setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'broadcast', hash } : r)));
+      } else {
+        setSendRows(prev => prev.map((r, j) =>
+          j === i ? { ...r, state: 'failed', error: res.error } : j > i ? { ...r, state: 'skipped' } : r));
+        setBatchStopped(res.error);
+        break;
+      }
+    }
+    setPhase('done');
+    await refreshEnvelope();
+  }
+
+  // ── Styles (unchanged) ──────────────────────────────────────────────────────
+
+  const btnPrimary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
+  const btnSecondary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
+  const inputStyle: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 10px', width: '100%', outline: 'none', boxSizing: 'border-box' };
+  const labelSm: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' };
+  const fullAddr: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', wordBreak: 'break-all', lineHeight: 1.5 };
+  const noteBox: React.CSSProperties = { border: '1px solid rgba(248,113,113,0.35)', backgroundColor: 'rgba(248,113,113,0.06)', padding: '10px 12px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6, wordBreak: 'break-word' };
+  const warnBox: React.CSSProperties = { border: '1px solid rgba(251,191,36,0.3)', backgroundColor: 'rgba(251,191,36,0.06)', padding: '10px 12px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-warn)', lineHeight: 1.6, wordBreak: 'break-word' };
 
   const toggleWallet = (wid: string) => {
     setSelected(prev => {
@@ -191,320 +562,506 @@ function TransferModal({ wallet, onClose }: { wallet: { id: string; name: string
   };
 
   const updateExternal = (i: number, field: 'address' | 'amount', val: string) =>
-    setExternals(prev => prev.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
+    setExternals(prev => prev.map((e, idx) => (idx === i ? { ...e, [field]: val } : e)));
 
   const addExternal = () => setExternals(prev => [...prev, { address: '', amount: '' }]);
 
-  const hasExternal = externals.some(e => e.address.trim().length > 0);
-  const canProceed = selected.size > 0 || abSelected.size > 0 || hasExternal;
+  const hasMonitor = sendRows.length > 0;
 
-  const confirmTransfer = () => {
-    const entries: TxStatus[] = [
-      ...Array.from(selected).map(wid => {
-        const mw = managedWallets.find(w => w.id === wid);
-        return { label: mw?.name ?? wid, address: mw?.address ?? wid, amount: amounts[wid] ?? '—', status: 'pending' as const };
-      }),
-      ...Array.from(abSelected).map(id => {
-        const ab = addressBookEntries.find(e => e.id === id);
-        return { label: ab?.name ?? id, address: ab?.address ?? id, amount: abAmounts[id] ?? '—', status: 'pending' as const };
-      }),
-      ...externals.filter(e => e.address.trim()).map(e => ({
-        label: `${e.address.slice(0, 6)}…${e.address.slice(-4)}`, address: e.address, amount: e.amount || '—', status: 'pending' as const,
-      })),
-    ];
-    setTxStatuses(entries);
-    entries.forEach((_, i) => {
-      setTimeout(() => setTxStatuses(prev => prev.map((t, j) => j === i ? { ...t, status: 'broadcasting' } : t)), 600 + i * 800);
-      setTimeout(() => {
-        const hash = `0x${Math.random().toString(16).slice(2, 10)}…${Math.random().toString(16).slice(2, 6)}`;
-        setTxStatuses(prev => prev.map((t, j) => j === i ? { ...t, status: 'confirmed', hash } : t));
-      }, 2200 + i * 800);
-    });
-  };
+  // ── Envelope banner ─────────────────────────────────────────────────────────
 
-  const btnPrimary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
-  const btnSecondary: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 500, color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.5px', textTransform: 'uppercase' };
-  const inputStyle: React.CSSProperties = { fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 10px', width: '100%', outline: 'none', boxSizing: 'border-box' };
+  function EnvelopeBanner() {
+    if (!isTauri) {
+      return <div style={warnBox}>Browser preview — no signer, no Keychain, no envelope. Nothing can be sent from here.</div>;
+    }
+    if (envelopeLoading) {
+      return <div style={{ ...warnBox, color: 'var(--wr-text-3)', borderColor: 'var(--wr-border)', backgroundColor: 'transparent' }}>Reading spend envelope…</div>;
+    }
+    if (envelopeError) {
+      return <div style={noteBox}>Spend envelope unreadable: {envelopeError}</div>;
+    }
+    if (!envelope) {
+      return <div style={noteBox}>No active spend envelope. Westron will not sign a transfer without one. Create an envelope whose scope contains the destination address.</div>;
+    }
+    let remaining = EM_DASH;
+    try { remaining = ethFromWei(BigInt(envelope.hard_cap_wei) - BigInt(envelope.spent_wei)); } catch { remaining = EM_DASH; }
+    // `per_tx_ceiling_wei` was added to EnvelopeStatus in the backend; the
+    // shared `tauri.ts` interface has not caught up and is not this file's to
+    // edit, so it is read through a narrowed local view.
+    const ceilingWei = (envelope as EnvelopeStatus & { per_tx_ceiling_wei?: string }).per_tx_ceiling_wei;
+    let ceiling = EM_DASH;
+    try { if (ceilingWei) ceiling = ethFromWei(BigInt(ceilingWei)); } catch { ceiling = EM_DASH; }
+    const expired = envelope.expires_at <= nowSec;
+    const bad = envelope.kill_switch || expired || !envelope.active;
+    return (
+      <div style={bad ? noteBox : { ...warnBox, color: 'var(--wr-text-3)', borderColor: 'var(--wr-border)', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+        Spend envelope · {envelope.kill_switch ? 'KILL SWITCH ENGAGED' : expired ? 'EXPIRED' : 'active'}
+        {' · '}remaining {remaining} of {(() => { try { return ethFromWei(BigInt(envelope.hard_cap_wei)); } catch { return EM_DASH; } })()}
+        {' · '}expires {new Date(envelope.expires_at * 1000).toLocaleString()}
+        <div style={{ marginTop: '4px' }}>
+          Per-transaction ceiling {ceiling}. Every transfer is checked against all of these before the confirm button enables.
+        </div>
+      </div>
+    );
+  }
 
-  const hasMonitor = txStatuses.length > 0;
+  function BlockerList() {
+    if (blockers.length === 0) return null;
+    return (
+      <div style={{ ...noteBox, marginBottom: '10px' }}>
+        <div style={{ fontWeight: 700, marginBottom: '4px' }}>Cannot send:</div>
+        {blockers.map((b, i) => <div key={i} style={{ marginTop: '3px' }}>· {b}</div>)}
+      </div>
+    );
+  }
+
+  function WarningList() {
+    if (warnings.length === 0) return null;
+    return (
+      <div style={{ ...warnBox, marginBottom: '10px' }}>
+        {warnings.map((w, i) => <div key={i} style={{ marginTop: i ? '3px' : 0 }}>· {w}</div>)}
+      </div>
+    );
+  }
+
+  /** Full destination + exact amount. Used at review and at authorisation —
+   *  the address is never truncated in either, because truncation is how
+   *  people lose funds to look-alike addresses. */
+  function DestinationCard({ d, amount, showCheckbox }: { d: Destination; amount: ReturnType<typeof parseAmountWei>; showCheckbox: boolean }) {
+    const v = preview[d.key];
+    return (
+      <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', marginBottom: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+          To · {d.label}
+        </div>
+        <div style={fullAddr}>{d.address || EM_DASH}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '10px', gap: '10px', flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px' }}>Amount</span>
+          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '15px', fontWeight: 700, color: 'var(--wr-text)' }}>
+            {'wei' in amount ? ethFromWei(amount.wei) : EM_DASH}
+          </span>
+        </div>
+        {'wei' in amount && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '2px', wordBreak: 'break-all' }}>
+            {amount.wei.toString()} wei
+          </div>
+        )}
+        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
+          Gas: {gasLoading
+            ? 'estimating…'
+            : gasErrors[d.key]
+              ? `estimate failed — ${gasErrors[d.key]}`
+              : gasUnits[d.key] != null
+                ? `${gasUnits[d.key].toLocaleString('en-US')} units (fee = units × base fee at broadcast; the fee in ETH is not known in advance)`
+                : EM_DASH}
+        </div>
+        {previewLoading && !v && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', marginTop: '6px', color: 'var(--wr-text-3)' }}>
+            Checking against the spend envelope…
+          </div>
+        )}
+        {v && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', marginTop: '6px', color: v.authorized ? '#4fe9b4' : '#ff8a96', lineHeight: 1.6 }}>
+            {v.authorized ? (
+              <>
+                Envelope allows this transfer — checked read-only, for this exact amount, consuming nothing.
+                <div style={{ color: 'var(--wr-text-3)', marginTop: '3px' }}>
+                  Per-transaction ceiling {v.per_tx_ceiling_wei ? ethFromWei(BigInt(v.per_tx_ceiling_wei)) : EM_DASH}
+                  {' · '}remaining after this transfer{' '}
+                  {v.remaining_wei ? ethFromWei(BigInt(v.remaining_wei) - BigInt(v.value_wei)) : EM_DASH}
+                </div>
+              </>
+            ) : (
+              <>
+                Envelope refuses this transfer: {v.reject_reason ?? 'no reason given'}
+                {rejectAction(v.reject_code) && <div style={{ marginTop: '3px' }}>{rejectAction(v.reject_code)}</div>}
+                <div style={{ color: 'var(--wr-text-3)', marginTop: '3px' }}>
+                  Code: {v.reject_code ?? EM_DASH}
+                  {v.per_tx_ceiling_wei && <> · ceiling {ethFromWei(BigInt(v.per_tx_ceiling_wei))}</>}
+                  {v.remaining_wei && <> · remaining {ethFromWei(BigInt(v.remaining_wei))}</>}
+                </div>
+                {v.reject_detail && (
+                  <div style={{ color: 'var(--wr-text-3)', marginTop: '3px', wordBreak: 'break-word' }}>{v.reject_detail}</div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {showCheckbox && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={verified.has(d.key)}
+              onChange={e => setVerified(prev => {
+                const next = new Set(prev);
+                if (e.target.checked) next.add(d.key); else next.delete(d.key);
+                return next;
+              })}
+              style={{ width: '14px', height: '14px', accentColor: '#7c5cff', cursor: 'pointer', marginTop: '2px', flexShrink: 0 }}
+            />
+            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', lineHeight: 1.6 }}>
+              I have read the full address above and the amount, and they are what I intend.
+            </span>
+          </label>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
       style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget && phase !== 'sending') onClose(); }}
     >
       <div style={{ backgroundColor: 'var(--wr-modal)', border: '1px solid var(--wr-border-hover)', width: hasMonitor ? '860px' : '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'row', overflow: 'hidden', transition: 'width 0.2s ease' }}>
         {/* Left column */}
         <div style={{ width: '560px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: hasMonitor ? '1px solid var(--wr-border)' : 'none', maxHeight: '80vh', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--wr-border)' }}>
-          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text)' }}>Transfer Funds</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: 'pointer', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
-        </div>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--wr-border)' }}>
+            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text)' }}>
+              Send ETH · Ethereum mainnet
+            </span>
+            <button
+              onClick={() => { if (phase !== 'sending') onClose(); }}
+              disabled={phase === 'sending'}
+              style={{ background: 'none', border: 'none', color: 'var(--wr-text-3)', cursor: phase === 'sending' ? 'default' : 'pointer', fontSize: '20px', lineHeight: 1, padding: 0, opacity: phase === 'sending' ? 0.4 : 1 }}
+            >×</button>
+          </div>
 
-        {/* Step 1 — Select destinations */}
-        {step === 1 && (
-          <>
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-              {/* FROM */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>From</div>
-                <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)' }}>
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{wallet.name}</div>
-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '380px' }}>{wallet.address}</div>
+          {/* Step 1 — compose */}
+          {phase === 'compose' && (
+            <>
+              <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+                <div style={{ marginBottom: '14px' }}><EnvelopeBanner /></div>
+
+                {/* FROM */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={labelSm}>From</div>
+                  <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontFamily: 'var(--font-inter)', fontSize: '14px', fontWeight: 600, color: 'var(--wr-text)' }}>{walletName}</div>
+                    <div style={{ ...fullAddr, fontSize: '11px', color: ADDR_RE.test(fromAddress) ? 'var(--wr-text-3)' : '#ff8a96', marginTop: '2px' }}>
+                      {fromAddress || 'No address on file for this wallet'}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: '#7c5cff', letterSpacing: '1px', textTransform: 'uppercase', border: '1px solid #7c5cff', padding: '2px 8px', flexShrink: 0 }}>Active</div>
                 </div>
-              </div>
 
-              {/* TO — managed wallets */}
-              <div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>To</div>
-                {managedWallets.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-                    {managedWallets.map(w => {
-                      const isSel = selected.has(w.id);
-                      return (
-                        <div
-                          key={w.id}
-                          onClick={() => toggleWallet(w.id)}
-                          style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
-                        >
-                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.address}</div>
-                          </div>
+                {/* TO — managed wallets */}
+                <div>
+                  <div style={labelSm}>To</div>
+                  {managedWallets.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                      {managedWallets.map(w => {
+                        const isSel = selected.has(w.id);
+                        return (
                           <div
-                            onClick={e => { e.stopPropagation(); if (!isSel) toggleWallet(w.id); }}
-                            style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', backgroundColor: '#111', width: '90px', flexShrink: 0, cursor: 'text' }}
+                            key={w.id}
+                            onClick={() => toggleWallet(w.id)}
+                            style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
                           >
-                            <span style={{ padding: '4px 5px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', flexShrink: 0 }}>
-                              <EthIcon />
-                            </span>
-                            <input
-                              type="text"
-                              placeholder="0.00"
-                              value={amounts[w.id] ?? ''}
-                              onFocus={() => { if (!isSel) toggleWallet(w.id); }}
-                              onChange={e => setAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '4px 5px', width: '100%', outline: 'none', minWidth: 0, cursor: 'text' }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Address Book entries */}
-                {addressBookEntries.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '4px' }}>Address Book</div>
-                    {addressBookEntries.map(ab => {
-                      const isSel = abSelected.has(ab.id);
-                      return (
-                        <div
-                          key={ab.id}
-                          onClick={() => toggleAb(ab.id)}
-                          style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
-                        >
-                          <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{ab.name}</span>
-                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                            <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</div>
+                              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.address}</div>
+                            </div>
+                            <div
+                              onClick={e => { e.stopPropagation(); if (!isSel) toggleWallet(w.id); }}
+                              style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', backgroundColor: '#111', width: '90px', flexShrink: 0, cursor: 'text' }}
+                            >
+                              <span style={{ padding: '4px 5px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', flexShrink: 0 }}>
+                                <EthIcon />
+                              </span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={amounts[w.id] ?? ''}
+                                onFocus={() => { if (!isSel) toggleWallet(w.id); }}
+                                onChange={e => setAmounts(a => ({ ...a, [w.id]: e.target.value }))}
+                                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '4px 5px', width: '100%', outline: 'none', minWidth: 0, cursor: 'text' }}
+                              />
+                            </div>
                           </div>
-                          <div
-                            onClick={e => { e.stopPropagation(); if (!isSel) toggleAb(ab.id); }}
-                            style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', backgroundColor: '#111', width: '90px', flexShrink: 0, cursor: 'text' }}
-                          >
-                            <span style={{ padding: '4px 5px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', flexShrink: 0 }}>
-                              <EthIcon />
-                            </span>
-                            <input
-                              type="text"
-                              placeholder="0.00"
-                              value={abAmounts[ab.id] ?? ''}
-                              onFocus={() => { if (!isSel) toggleAb(ab.id); }}
-                              onChange={e => setAbAmounts(a => ({ ...a, [ab.id]: e.target.value }))}
-                              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '4px 5px', width: '100%', outline: 'none', minWidth: 0, cursor: 'text' }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
 
-                {/* External wallets */}
-                <div style={{ border: '1px solid var(--wr-border)', padding: '14px' }}>
-                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '8px' }}>External Wallet</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {externals.map((ext, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-                        <input
-                          type="text"
-                          placeholder="0x… wallet address"
-                          value={ext.address}
-                          onChange={e => updateExternal(i, 'address', e.target.value)}
-                          style={{ ...inputStyle, flex: 1 }}
-                        />
-                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', flexShrink: 0, width: '110px' }}>
-                          <span style={{ padding: '0 7px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', alignSelf: 'stretch', justifyContent: 'center' }}>
-                            <EthIcon />
-                          </span>
+                  {/* Address Book entries */}
+                  {addressBookEntries.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                      <div style={{ ...labelSm, marginBottom: '4px', letterSpacing: '1px' }}>Address Book</div>
+                      {addressBookEntries.map((ab: AddressEntry) => {
+                        const isSel = abSelected.has(ab.id);
+                        return (
+                          <div
+                            key={ab.id}
+                            onClick={() => toggleAb(ab.id)}
+                            style={{ border: `1px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isSel ? 'rgba(190,255,0,0.04)' : 'transparent' }}
+                          >
+                            <div style={{ width: '16px', height: '16px', border: `2px solid ${isSel ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: isSel ? '#7c5cff' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {isSel && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{ab.name}</span>
+                                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
+                              </div>
+                              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
+                            </div>
+                            <div
+                              onClick={e => { e.stopPropagation(); if (!isSel) toggleAb(ab.id); }}
+                              style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', backgroundColor: '#111', width: '90px', flexShrink: 0, cursor: 'text' }}
+                            >
+                              <span style={{ padding: '4px 5px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', flexShrink: 0 }}>
+                                <EthIcon />
+                              </span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={abAmounts[ab.id] ?? ''}
+                                onFocus={() => { if (!isSel) toggleAb(ab.id); }}
+                                onChange={e => setAbAmounts(a => ({ ...a, [ab.id]: e.target.value }))}
+                                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '4px 5px', width: '100%', outline: 'none', minWidth: 0, cursor: 'text' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* External wallets */}
+                  <div style={{ border: '1px solid var(--wr-border)', padding: '14px' }}>
+                    <div style={{ ...labelSm, letterSpacing: '1px' }}>External Wallet</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {externals.map((ext, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                           <input
                             type="text"
-                            placeholder="0.00"
-                            value={ext.amount}
-                            onChange={e => updateExternal(i, 'amount', e.target.value)}
-                            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '8px 6px', width: '100%', outline: 'none', minWidth: 0 }}
+                            placeholder="0x… wallet address"
+                            value={ext.address}
+                            onChange={e => updateExternal(i, 'address', e.target.value)}
+                            style={{ ...inputStyle, flex: 1, borderColor: ext.address && !ADDR_RE.test(ext.address.trim()) ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)' }}
                           />
+                          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--wr-border)', flexShrink: 0, width: '110px' }}>
+                            <span style={{ padding: '0 7px', display: 'flex', alignItems: 'center', borderRight: '1px solid var(--wr-border)', alignSelf: 'stretch', justifyContent: 'center' }}>
+                              <EthIcon />
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={ext.amount}
+                              onChange={e => updateExternal(i, 'amount', e.target.value)}
+                              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'transparent', border: 'none', padding: '8px 6px', width: '100%', outline: 'none', minWidth: 0 }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <button
+                      onClick={addExternal}
+                      style={{ marginTop: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#7c5cff', letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                    >
+                      + Add another wallet
+                    </button>
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '8px', lineHeight: 1.6 }}>
+                      One destination per transfer, by design — batch sending has not been approved for this screen. Each destination must also be inside the spend envelope&apos;s scope, and within its per-transaction ceiling.
+                    </div>
                   </div>
-                  <button
-                    onClick={addExternal}
-                    style={{ marginTop: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#7c5cff', letterSpacing: '0.5px', textTransform: 'uppercase' }}
-                  >
-                    + Add another wallet
-                  </button>
                 </div>
               </div>
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
-              <button onClick={onClose} style={btnSecondary}>Cancel</button>
-              <button
-                disabled={!canProceed}
-                onClick={() => setStep(2)}
-                style={{ ...btnPrimary, opacity: canProceed ? 1 : 0.4, cursor: canProceed ? 'pointer' : 'default' }}
-              >
-                Review →
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* Step 2 — Confirm */}
-        {step === 2 && (
-          <>
-            <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', marginBottom: '12px' }}>Confirm Transfer</div>
-              <div style={{ border: '1px solid var(--wr-border)', padding: '14px', marginBottom: '10px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>From</div>
-                <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{wallet.name}</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{wallet.address}</div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
+                <button onClick={onClose} style={btnSecondary}>Cancel</button>
+                <button
+                  disabled={!composeReady}
+                  onClick={() => { void enterReview(); }}
+                  style={{ ...btnPrimary, opacity: composeReady ? 1 : 0.4, cursor: composeReady ? 'pointer' : 'default' }}
+                >
+                  Review →
+                </button>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
-                {Array.from(selected).map(wid => {
-                  const mw = managedWallets.find(w => w.id === wid);
-                  if (!mw) return null;
-                  return (
-                    <div key={wid} style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{mw.name}</div>
-                        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mw.address}</div>
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)', flexShrink: 0, marginLeft: '12px' }}>{amounts[wid] ? `${amounts[wid]} ETH` : '—'}</div>
-                    </div>
-                  );
-                })}
-                {Array.from(abSelected).map(id => {
-                  const ab = addressBookEntries.find(e => e.id === id);
-                  if (!ab) return null;
-                  return (
-                    <div key={id} style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{ab.name}</div>
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
-                        </div>
-                        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.address}</div>
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)', flexShrink: 0, marginLeft: '12px' }}>{abAmounts[id] ? `${abAmounts[id]} ETH` : '—'}</div>
-                    </div>
-                  );
-                })}
-                {externals.filter(e => e.address.trim()).map((ext, i) => (
-                  <div key={`ext-${i}`} style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>External</div>
-                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '340px' }}>{ext.address}</div>
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text)', flexShrink: 0, marginLeft: '12px' }}>{ext.amount ? `${ext.amount} ETH` : '—'}</div>
+            </>
+          )}
+
+          {/* Step 2 — review */}
+          {phase === 'review' && (
+            <>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+                <div style={labelSm}>Review</div>
+                <BlockerList />
+                <WarningList />
+                <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', marginBottom: '10px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>From</div>
+                  <div style={{ fontFamily: 'var(--font-inter)', fontSize: '13px', fontWeight: 600, color: 'var(--wr-text)' }}>{walletName}</div>
+                  <div style={{ ...fullAddr, fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '2px' }}>{fromAddress || EM_DASH}</div>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px' }}>
+                    Balance: {balanceWei !== null ? ethFromWei(balanceWei) : balanceError ? `unavailable — ${balanceError}` : 'reading…'}
                   </div>
-                ))}
+                </div>
+                {parsed.map(({ d, amount }) => <DestinationCard key={d.key} d={d} amount={amount} showCheckbox={false} />)}
+                <div style={{ marginTop: '10px' }}><EnvelopeBanner /></div>
               </div>
-              <div style={{ border: '1px solid var(--wr-border)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(190,255,0,0.03)' }}>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px' }}>Est. Gas Fee</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>~0.0012 ETH</span>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
+                <button onClick={() => setPhase('compose')} style={btnSecondary}>← Back</button>
+                <button
+                  disabled={blockers.length > 0 || gasLoading || previewLoading}
+                  onClick={() => { void enterAuthorise(); }}
+                  style={{ ...btnPrimary, opacity: blockers.length > 0 || gasLoading || previewLoading ? 0.4 : 1, cursor: blockers.length > 0 || gasLoading || previewLoading ? 'default' : 'pointer' }}
+                >
+                  Continue to authorisation →
+                </button>
               </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
-              <button onClick={() => setStep(1)} style={btnSecondary}>← Back</button>
-              <button
-                onClick={() => { if (!hasMonitor) confirmTransfer(); }}
-                style={{ ...btnPrimary, opacity: hasMonitor ? 0.35 : 1, cursor: hasMonitor ? 'default' : 'pointer' }}
-              >Confirm Transfer</button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+
+          {/* Step 3 — deliberate authorisation */}
+          {phase === 'authorise' && (
+            <>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+                <div style={labelSm}>Authorise a real transfer</div>
+                <div style={{ ...warnBox, marginBottom: '10px' }}>
+                  This signs and broadcasts a real transaction on Ethereum mainnet. Once it is broadcast it cannot be recalled. Check the full destination address character by character.
+                </div>
+                <BlockerList />
+                {previewLoading && (
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginBottom: '10px' }}>
+                    Checking this transfer against the spend envelope (read-only — consumes none of the cap)…
+                  </div>
+                )}
+                {previewError && (
+                  <div style={{ ...noteBox, marginBottom: '10px' }}>
+                    The spend envelope could not be checked: {previewError}. Nothing has been sent.
+                  </div>
+                )}
+                {!previewLoading && !previewError && previewFailures.length > 0 && (
+                  <div style={{ ...noteBox, marginBottom: '10px' }}>
+                    The spend envelope refuses this transfer. Nothing has been sent.
+                  </div>
+                )}
+                {parsed.map(({ d, amount }) => <DestinationCard key={d.key} d={d} amount={amount} showCheckbox={true} />)}
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ ...labelSm, marginBottom: '6px' }}>Type SEND to authorise</div>
+                  <input
+                    type="text"
+                    value={typedConfirm}
+                    onChange={e => setTypedConfirm(e.target.value)}
+                    placeholder="SEND"
+                    style={{ ...inputStyle, letterSpacing: '2px' }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
+                <button onClick={() => { setPhase('review'); setTypedConfirm(''); setVerified(new Set()); }} style={btnSecondary}>← Back</button>
+                <button
+                  disabled={!canSend || sendStartedRef.current}
+                  onClick={() => { void runSends(); }}
+                  style={{ ...btnPrimary, backgroundColor: canSend ? '#ff8a96' : '#7c5cff', color: canSend ? '#000' : '#000', opacity: canSend ? 1 : 0.35, cursor: canSend ? 'pointer' : 'default' }}
+                >
+                  Sign &amp; broadcast
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Steps 4/5 — sending + result summary */}
+          {(phase === 'sending' || phase === 'done') && (
+            <>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+                <div style={labelSm}>{phase === 'sending' ? 'Broadcasting' : 'Result'}</div>
+                {phase === 'sending' && (
+                  <div style={{ ...warnBox, marginBottom: '10px' }}>
+                    Signing and broadcasting. Do not close this window — if the app loses the response you will not know whether the transaction reached the network.
+                  </div>
+                )}
+                {batchStopped && (
+                  <div style={{ ...noteBox, marginBottom: '10px' }}>
+                    <div style={{ fontWeight: 700, marginBottom: '4px' }}>The send failed.</div>
+                    <div style={{ wordBreak: 'break-word' }}>{batchStopped}</div>
+                    {envelopeHint(batchStopped) && <div style={{ marginTop: '6px' }}>{envelopeHint(batchStopped)}</div>}
+                    <div style={{ marginTop: '6px' }}>
+                      If this was a network or timeout error rather than a rejection, the transaction may still have reached the network. Check this address on Etherscan before retrying, or you may send twice.
+                    </div>
+                    <div style={{ marginTop: '6px' }}>
+                      The envelope counts an amount when it authorises it, which happens before signing — so a failure after authorisation may still have consumed part of the cap. The envelope figure below is re-read from the backend.
+                    </div>
+                  </div>
+                )}
+                {phase === 'done' && !batchStopped && (
+                  <div style={{ ...warnBox, marginBottom: '10px', color: 'var(--wr-text-3)' }}>
+                    Broadcast to the network. Westron does not read transaction receipts, so it cannot tell you the transaction was mined — follow the Etherscan link for that.
+                  </div>
+                )}
+                <div style={{ marginTop: '10px' }}><EnvelopeBanner /></div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--wr-border)' }}>
+                <button onClick={onClose} disabled={phase === 'sending'} style={{ ...btnSecondary, opacity: phase === 'sending' ? 0.4 : 1 }}>Close</button>
+              </div>
+            </>
+          )}
         </div>{/* end left column */}
 
         {/* Right column — Monitor */}
         {hasMonitor && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#0b0c14', maxHeight: '80vh' }}>
-            {/* Monitor header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>Monitor</span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
-                {txStatuses.filter(t => t.status === 'confirmed').length}/{txStatuses.length} confirmed
+                {sendRows.filter(t => t.state === 'broadcast').length}/{sendRows.length} broadcast
               </span>
             </div>
-            {/* Tx list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {txStatuses.map((tx, i) => {
-                const statusColor = tx.status === 'confirmed' ? '#4fe9b4' : tx.status === 'failed' ? '#ff8a96' : tx.status === 'broadcasting' ? '#7c5cff' : '#9298b8';
-                const statusLabel = tx.status === 'confirmed' ? 'Confirmed' : tx.status === 'failed' ? 'Failed' : tx.status === 'broadcasting' ? 'Broadcasting…' : 'Pending';
+              {sendRows.map(tx => {
+                const statusColor =
+                  tx.state === 'broadcast' ? '#4fe9b4'
+                  : tx.state === 'failed' ? '#ff8a96'
+                  : tx.state === 'submitting' ? '#7c5cff'
+                  : '#9298b8';
+                const statusLabel =
+                  tx.state === 'broadcast' ? 'Broadcast — pending on-chain'
+                  : tx.state === 'failed' ? 'Failed'
+                  : tx.state === 'submitting' ? 'Signing & broadcasting…'
+                  : tx.state === 'skipped' ? 'Not sent (stopped after failure)'
+                  : 'Queued';
                 return (
-                  <div key={i} style={{ border: '1px solid var(--wr-border)', padding: '10px 12px', backgroundColor: 'var(--wr-surface)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div key={tx.key} style={{ border: '1px solid var(--wr-border)', padding: '10px 12px', backgroundColor: 'var(--wr-surface)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', gap: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0, boxShadow: tx.status === 'broadcasting' ? `0 0 6px ${statusColor}` : 'none' }} />
+                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0, boxShadow: tx.state === 'submitting' ? `0 0 6px ${statusColor}` : 'none' }} />
                         <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.label}</span>
                       </div>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: 'var(--wr-text)', flexShrink: 0, marginLeft: '8px' }}>{tx.amount !== '—' ? `${tx.amount} ETH` : '—'}</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: 'var(--wr-text)', flexShrink: 0 }}>{ethFromWei(tx.valueWei)}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '15px' }}>
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', wordBreak: 'break-all', paddingLeft: '15px', marginBottom: '4px' }}>{tx.address}</div>
+                    <div style={{ paddingLeft: '15px' }}>
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: statusColor, letterSpacing: '0.5px' }}>{statusLabel}</span>
                       {tx.hash && (
-                        <a
-                          href={`https://etherscan.io/tx/${tx.hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#5b7cfa', display: 'flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
-                        >
-                          {tx.hash.slice(0, 10)}… <ExternalLinkIcon />
-                        </a>
+                        <div style={{ marginTop: '4px' }}>
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', wordBreak: 'break-all' }}>{tx.hash}</div>
+                          <a
+                            href={`https://etherscan.io/tx/${tx.hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#5b7cfa', display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'none', marginTop: '2px' }}
+                          >
+                            View on Etherscan <ExternalLinkIcon />
+                          </a>
+                        </div>
+                      )}
+                      {tx.error && (
+                        <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px', wordBreak: 'break-word', lineHeight: 1.6 }}>{tx.error}</div>
                       )}
                     </div>
                   </div>
                 );
               })}
             </div>
-            {/* Monitor footer */}
             <div style={{ padding: '12px 16px', borderTop: '1px solid var(--wr-border)' }}>
-              <button onClick={onClose} style={btnSecondary}>Close</button>
+              <button onClick={onClose} disabled={phase === 'sending'} style={{ ...btnSecondary, opacity: phase === 'sending' ? 0.4 : 1 }}>Close</button>
             </div>
           </div>
         )}
@@ -739,6 +1296,26 @@ const BTN_GHOST: React.CSSProperties = {
   backgroundColor: 'transparent', color: 'var(--wr-text)',
 };
 
+const UNWIRED_NOTE: React.CSSProperties = {
+  padding: '10px 14px', backgroundColor: 'rgba(251,191,36,0.06)',
+  border: '1px solid rgba(251,191,36,0.25)', fontFamily: 'var(--font-jetbrains)',
+  fontSize: '10px', color: 'var(--wr-warn)', lineHeight: 1.6,
+};
+
+/** Shown wherever a button used to fake a successful on-chain action with a
+ *  setTimeout. These flows are not wired to a signer, and the screen now says
+ *  so instead of reporting a success that never happened. Wiring any of them
+ *  moves real assets and needs the owner's sign-off, exactly as the ETH
+ *  transfer did. */
+function UnwiredNotice({ what }: { what: string }) {
+  return (
+    <div style={UNWIRED_NOTE}>
+      {what} is not wired to a signer yet, so Westron will not pretend to have done it.
+      Nothing has been submitted and no order or transfer exists.
+    </div>
+  );
+}
+
 function NftThumb({ nft }: { nft: OwnedNft }) {
   const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
   return (
@@ -754,15 +1331,7 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
   const [prices, setPrices] = React.useState<Record<string, string>>({});
   const [marketplace, setMarketplace] = React.useState<'opensea' | 'blur'>('opensea');
   const [expiry, setExpiry] = React.useState('7');
-  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
-
   const nftKey = (n: OwnedNft) => n.contract.address + n.token_id;
-  const canSubmit = nfts.every(n => parseFloat(prices[nftKey(n)] ?? '') > 0) && stage === 'idle';
-
-  function handleSubmit() {
-    setStage('submitting');
-    setTimeout(() => setStage('done'), 1800);
-  }
 
   return (
     <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -794,6 +1363,9 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
             );
           })}
         </div>
+        <div style={{ padding: '0 20px 12px' }}>
+          <UnwiredNotice what="Creating or updating a listing" />
+        </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', gap: '10px' }}>
           <div style={{ flex: 1 }}>
             <div style={{ ...LABEL_SM, marginBottom: '6px' }}>Marketplace</div>
@@ -815,16 +1387,10 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
           </div>
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Updated</button>
-            : <>
-                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
-                <button onClick={handleSubmit} disabled={!canSubmit}
-                  style={{ ...BTN_LIME, opacity: canSubmit ? 1 : 0.4, cursor: canSubmit ? 'pointer' : 'default' }}>
-                  {stage === 'submitting' ? 'Submitting…' : `Update ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
-                </button>
-              </>
-          }
+          <button onClick={onClose} style={BTN_GHOST}>Close</button>
+          <button disabled style={{ ...BTN_LIME, opacity: 0.35, cursor: 'default' }}>
+            Listing unavailable
+          </button>
         </div>
       </div>
     </div>
@@ -832,12 +1398,6 @@ function NftEditListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
 }
 
 function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
-  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
-
-  function handleCancel() {
-    setStage('submitting');
-    setTimeout(() => setStage('done'), 1500);
-  }
 
   return (
     <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -864,21 +1424,15 @@ function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: (
               </div>
             );
           })}
-          <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.25)', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-warn)' }}>
-            Cancelling on-chain listings requires a gas transaction. Off-chain cancellations are free.
+          <div style={{ marginTop: '8px' }}>
+            <UnwiredNotice what="Cancelling a listing" />
           </div>
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Listings Cancelled</button>
-            : <>
-                <button onClick={onClose} style={BTN_GHOST}>Back</button>
-                <button onClick={handleCancel} disabled={stage === 'submitting'}
-                  style={{ ...BTN_LIME, backgroundColor: '#ff8a96', color: '#fff', opacity: stage === 'submitting' ? 0.7 : 1 }}>
-                  {stage === 'submitting' ? 'Cancelling…' : `Cancel ${nfts.length} Listing${nfts.length !== 1 ? 's' : ''}`}
-                </button>
-              </>
-          }
+          <button onClick={onClose} style={BTN_GHOST}>Close</button>
+          <button disabled style={{ ...BTN_LIME, backgroundColor: '#ff8a96', color: '#fff', opacity: 0.35, cursor: 'default' }}>
+            Cancelling unavailable
+          </button>
         </div>
       </div>
     </div>
@@ -886,19 +1440,9 @@ function NftCancelListingModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: (
 }
 
 function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () => void }) {
-  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
-
-  const offers = nfts.map(n => {
-    const floor = parseFloat(String(n.contract.opensea_floor_price ?? '0')) || 0;
-    const offer = floor > 0 ? (floor * 0.94).toFixed(4) : '—';
-    return { nft: n, offer };
-  });
-  const totalEth = offers.reduce((s, o) => s + (parseFloat(o.offer) || 0), 0);
-
-  function handleAccept() {
-    setStage('submitting');
-    setTimeout(() => setStage('done'), 1800);
-  }
+  // There is no command that returns offers for a token, so there is no offer
+  // to show. This used to display floor × 0.94 as if it were a real bid.
+  const offers = nfts.map(n => ({ nft: n, offer: EM_DASH }));
 
   return (
     <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -925,27 +1469,16 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
               </div>
             );
           })}
-          {totalEth > 0 && (
-            <div style={{ marginTop: '4px', padding: '10px 14px', backgroundColor: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Total Proceeds</span>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', fontWeight: 700, color: '#4fe9b4' }}>{totalEth.toFixed(4)} ETH</span>
-            </div>
-          )}
           <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>
-            <span>Estimated gas</span><span>~0.003 ETH</span>
+            <span>Estimated gas</span><span>{EM_DASH}</span>
           </div>
+          <UnwiredNotice what="Accepting an offer" />
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ Offer Accepted</button>
-            : <>
-                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
-                <button onClick={handleAccept} disabled={stage === 'submitting'}
-                  style={{ ...BTN_LIME, opacity: stage === 'submitting' ? 0.7 : 1 }}>
-                  {stage === 'submitting' ? 'Signing…' : `Accept ${nfts.length > 1 ? `${nfts.length} Offers` : 'Offer'}`}
-                </button>
-              </>
-          }
+          <button onClick={onClose} style={BTN_GHOST}>Close</button>
+          <button disabled style={{ ...BTN_LIME, opacity: 0.35, cursor: 'default' }}>
+            No offers available
+          </button>
         </div>
       </div>
     </div>
@@ -954,14 +1487,7 @@ function NftAcceptOfferModal({ nfts, onClose }: { nfts: OwnedNft[]; onClose: () 
 
 function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; walletAddress: string; onClose: () => void }) {
   const [toAddress, setToAddress] = React.useState('');
-  const [stage, setStage] = React.useState<'idle' | 'submitting' | 'done'>('idle');
-  const isValid = /^0x[0-9a-fA-F]{40}$/.test(toAddress.trim());
-  const canSend = isValid && stage === 'idle';
-
-  function handleSend() {
-    setStage('submitting');
-    setTimeout(() => setStage('done'), 2000);
-  }
+  const isValid = ADDR_RE.test(toAddress.trim());
 
   return (
     <div style={MODAL_BACKDROP} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1005,20 +1531,15 @@ function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; wall
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '4px 0' }}>
-            <span>Estimated gas</span><span>~0.002 ETH</span>
+            <span>Estimated gas</span><span>{EM_DASH}</span>
           </div>
+          <UnwiredNotice what="Sending an NFT" />
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          {stage === 'done'
-            ? <button onClick={onClose} style={{ ...BTN_LIME }}>✓ NFT{nfts.length !== 1 ? 's' : ''} Sent</button>
-            : <>
-                <button onClick={onClose} style={BTN_GHOST}>Cancel</button>
-                <button onClick={handleSend} disabled={!canSend}
-                  style={{ ...BTN_LIME, opacity: canSend ? 1 : 0.4, cursor: canSend ? 'pointer' : 'default' }}>
-                  {stage === 'submitting' ? 'Broadcasting…' : `Send ${nfts.length} NFT${nfts.length !== 1 ? 's' : ''}`}
-                </button>
-              </>
-          }
+          <button onClick={onClose} style={BTN_GHOST}>Close</button>
+          <button disabled style={{ ...BTN_LIME, opacity: 0.35, cursor: 'default' }}>
+            Sending unavailable
+          </button>
         </div>
       </div>
     </div>
@@ -1029,28 +1550,19 @@ function NftSendModal({ nfts, walletAddress, onClose }: { nfts: OwnedNft[]; wall
 
 // ── Live data helpers ─────────────────────────────────────────────────────────
 
-function groupNftsByCollection(owned: OwnedNft[]) {
-  const COLORS = ['#ffb020', '#ff8a96', '#90a6ff', '#4fe9b4', '#a78bfa', '#ffb020', '#2fc4d6'];
-  const map = new Map<string, { name: string; color: string; count: number; floor: string; change: string; neg: boolean; topPrice: string; vol24h: string; sales24h: number; supply: number; avgPa: string; }>();
-  let ci = 0;
-  for (const nft of owned) {
-    const key = nft.contract.opensea_collection_name || nft.contract.name || nft.contract.address;
-    if (!map.has(key)) {
-      const floorEth = nft.contract.opensea_floor_price ?? 0;
-      map.set(key, { name: key, color: COLORS[ci++ % COLORS.length], count: 0, floor: floorEth ? `${floorEth} ETH` : '—', change: '—', neg: false, topPrice: '—', vol24h: '—', sales24h: 0, supply: 0, avgPa: '—' });
-    }
-    map.get(key)!.count++;
-  }
-  return Array.from(map.values());
-}
-
 function mapTransfer(t: AssetTransfer, walletAddress: string) {
   const isOut = t.from.toLowerCase() === walletAddress.toLowerCase();
   const typeMap: Record<string, TxType> = { external: isOut ? 'Send' : 'Receive', erc20: 'Swap', erc721: 'NFT', erc1155: 'NFT' };
   const type = typeMap[t.category] ?? 'Receive';
+  // The Rust `AssetTransferMetadata` serialises as `blockTimestamp` (camelCase),
+  // while the shared `tauri.ts` type declares `block_timestamp`. Reading only
+  // the snake_case name leaves this column permanently '—'. Both are accepted
+  // here; the shared type is not this file's to change.
+  const meta = t.metadata as { block_timestamp?: string; blockTimestamp?: string } | undefined;
+  const blockTimestamp = meta?.block_timestamp ?? meta?.blockTimestamp;
   let age = '—';
-  if (t.metadata?.block_timestamp) {
-    const s = Math.floor((Date.now() - new Date(t.metadata.block_timestamp).getTime()) / 1000);
+  if (blockTimestamp) {
+    const s = Math.floor((Date.now() - new Date(blockTimestamp).getTime()) / 1000);
     if (s < 3600) age = `${Math.floor(s / 60)}m ago`;
     else if (s < 86400) age = `${Math.floor(s / 3600)}h ago`;
     else age = `${Math.floor(s / 86400)}d ago`;
@@ -1068,44 +1580,6 @@ function mapTransfer(t: AssetTransfer, walletAddress: string) {
   };
 }
 
-/** Build a wallet config for an arbitrary stored wallet whose id isn't in
- *  WALLET_CONFIGS (anything added via the dashboard "Add wallet" modal gets
- *  a Date.now() id). Keeps the analytics mock layout while making header
- *  fields (name, address, badge) reflect the actual wallet the user clicked. */
-function syntheticConfig(
-  id: string,
-  name: string,
-  address: string,
-): (typeof WALLET_CONFIGS)[number] {
-  const template = WALLET_CONFIGS[0];
-  return {
-    ...template,
-    id,
-    name,
-    address,
-    badge: 'ETH',
-    totalValue: '—',
-    totalNfts: 0,
-    totalTokens: 0,
-    unrealizedPnl: '—',
-    pnlPos: true,
-    analytics: {
-      totalAction: '—',
-      actionPct: '—',
-      bestPerformer: '—',
-      bestPct: '—',
-      worstPerformer: '—',
-      worstPct: '—',
-      avgHoldTime: '—',
-      totalTrades: '—',
-      winRate: '—',
-      avgPrice: '—',
-      portfolioValue: '—',
-      portfolioChange: '—',
-    },
-  };
-}
-
 export default function WalletDetailClient({ id: routeId }: { id: string }) {
   // Static export serves one prerendered /wallet/detail page; the real wallet
   // id arrives as ?id=… and is read on the client after mount. Until then the
@@ -1118,19 +1592,7 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resolve the wallet: prefer WALLET_CONFIGS (has analytics mocks), fall back
-  // to the stored record so user-added wallets show their own name/address
-  // instead of silently loading Main Wallet data.
-  const walletFromConfig = WALLET_CONFIGS.find(w => w.id === id);
-  const storedLookup = typeof window !== 'undefined'
-    ? loadWallets().find(w => w.id === id)
-    : undefined;
-  const wallet: (typeof WALLET_CONFIGS)[number] = walletFromConfig
-    ?? (storedLookup
-      ? syntheticConfig(id, storedLookup.name, storedLookup.address)
-      : WALLET_CONFIGS[0]);
   const [tab, setTab] = useState<Tab>('Holdings');
-  const [timeFilter, setTimeFilter] = useState<string>('24h');
   const [selectedNfts, setSelectedNfts] = useState<Set<string>>(new Set());
   const [nftSort, setNftSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'RECEIVED', dir: 'desc' });
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
@@ -1141,88 +1603,193 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
   const [showNftAcceptModal, setShowNftAcceptModal] = useState(false);
   const [showNftSendModal, setShowNftSendModal] = useState(false);
   const [alchemyKey, setAlchemyKey] = useState('');
-  const [walletAddr, setWalletAddr] = useState('');
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-  // ── Live data ──────────────────────────────────────────────────────────────
+  // ── Wallet identity ─────────────────────────────────────────────────────────
+  // Resolved on the client from the wallet store only. There is no placeholder
+  // wallet to fall back to: an id that matches nothing renders as "not found"
+  // rather than quietly showing some other wallet's data.
+  const [wallet, setWallet] = useState<ResolvedWallet | null>(null);
+  const [walletResolved, setWalletResolved] = useState(false);
+  useEffect(() => {
+    const found = loadWallets().find((w: { id: string }) => w.id === id);
+    setWallet(found ? { id: found.id, name: found.name, address: found.address } : null);
+    setWalletResolved(true);
+  }, [id]);
+  const walletAddr = wallet?.address ?? '';
+
+  // ── Live data ───────────────────────────────────────────────────────────────
   const [isTauri, setIsTauri] = useState(false);
-  const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
+  const [portfolio, setPortfolio] = useState<WalletPortfolio | null>(null);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const [liveNfts, setLiveNfts] = useState<OwnedNft[] | null>(null);
+  const [nftCount, setNftCount] = useState<number | null>(null);
+  const [nftsError, setNftsError] = useState<string | null>(null);
+  const [holdingsLoading, setHoldingsLoading] = useState(true);
+
+  // Transactions tab — fetched once, lazily, the first time the tab is opened.
   const [liveTxs, setLiveTxs] = useState<ReturnType<typeof mapTransfer>[] | null>(null);
-  const [liveTokens, setLiveTokens] = useState<WalletToken[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [txError, setTxError] = useState<string | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txRequested, setTxRequested] = useState(false);
+
+  // Analytics tab — same lazy rule.
+  const [pnl, setPnl] = useState<PnlSummary | null>(null);
+  const [pnlError, setPnlError] = useState<string | null>(null);
+  const [nftPnl, setNftPnl] = useState<NftPnlSummary | null>(null);
+  const [nftPnlError, setNftPnlError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsRequested, setAnalyticsRequested] = useState(false);
 
   useEffect(() => {
-    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    setIsTauri(inTauri);
+    setIsTauri(typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window);
+  }, []);
 
-    if (!inTauri) {
-      setSnapshot(EMPTY_SNAPSHOT);
+  // Holdings: two commands, in series. `get_wallet_portfolio` is one Alchemy
+  // Portfolio call that returns native + ERC-20 balances with USD prices;
+  // `get_nfts_for_owner` is one more. Deliberately not `get_portfolio_snapshot`,
+  // which fans out to four Alchemy calls internally and would double the quota
+  // cost of opening this screen on a free-tier key.
+  useEffect(() => {
+    if (!walletResolved) return;
+    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    const address = wallet?.address ?? '';
+
+    if (!inTauri || !address) {
       setLiveNfts(EMPTY_NFTS_RESPONSE.owned_nfts);
-      const stored = loadWallets();
-      const addr = stored.find(w => w.id === id)?.address ?? wallet.address;
-      setWalletAddr(addr);
-      setLiveTxs(EMPTY_TRANSFERS.map(t => mapTransfer(t, addr)));
-      setLoading(false);
+      setNftCount(null);
+      setLiveTxs(EMPTY_TRANSFERS.map(t => mapTransfer(t, address)));
+      setHoldingsLoading(false);
       return;
     }
 
+    let cancelled = false;
     (async () => {
-      try {
-        const apiKey = await loadAlchemyKey().catch(() => '');
-        setAlchemyKey(apiKey);
-        if (!apiKey) { setLoading(false); return; }
+      setHoldingsLoading(true);
+      const keyRes = await settle(() => loadAlchemyKey());
+      if (cancelled) return;
+      const apiKey = keyRes.ok ? keyRes.value : '';
+      setAlchemyKey(apiKey);
+      if (!apiKey) {
+        setKeyError(keyRes.ok
+          ? 'No Alchemy API key stored. Add one in Settings — every figure on this screen comes from Alchemy.'
+          : `Alchemy API key could not be read: ${keyRes.error}`);
+        setHoldingsLoading(false);
+        return;
+      }
+      setKeyError(null);
 
-        const stored = loadWallets();
-        const walletRecord = stored.find(w => w.id === id);
-        const address = walletRecord?.address ?? wallet.address;
-        setWalletAddr(address);
+      const pf = await settle(() => getWalletPortfolio(address, apiKey));
+      if (cancelled) return;
+      if (pf.ok) { setPortfolio(pf.value); setPortfolioError(null); }
+      else { setPortfolio(null); setPortfolioError(pf.error); }
 
-        const [snap, nftRes, transfers, toks] = await Promise.allSettled([
-          getPortfolioSnapshot(address, apiKey),
-          getNftsForOwner(address, apiKey),
-          getAssetTransfers(address, apiKey),
-          getWalletTokens(address, apiKey),
-        ]);
+      const nf = await settle(() => getNftsForOwner(address, apiKey));
+      if (cancelled) return;
+      if (nf.ok) { setLiveNfts(nf.value.owned_nfts); setNftCount(nf.value.total_count); setNftsError(null); }
+      else { setLiveNfts(null); setNftCount(null); setNftsError(nf.error); }
 
-        if (snap.status === 'fulfilled') setSnapshot(snap.value);
-        if (nftRes.status === 'fulfilled') setLiveNfts(nftRes.value.owned_nfts);
-        if (transfers.status === 'fulfilled') setLiveTxs(transfers.value.map(t => mapTransfer(t, address)));
-        if (toks.status === 'fulfilled') setLiveTokens(toks.value);
-      } catch {}
-      setLoading(false);
+      setHoldingsLoading(false);
     })();
-  }, [id]);
+    return () => { cancelled = true; };
+  }, [walletResolved, wallet?.address]);
 
-  // Merge live data with static fallbacks
-  const snap = snapshot ?? null;
-  const displayTotalValue = snap ? `$${snap.portfolio_value_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : wallet.totalValue;
-  const displayNftCount   = snap?.nft_count   ?? wallet.totalNfts;
-  const displayTokenCount = snap?.token_count  ?? wallet.totalTokens;
-  const displayEthBalance = snap?.eth_balance !== undefined ? `${snap.eth_balance.toFixed(4)} ETH` : null;
+  // Lazy: transactions.
+  const loadTransactions = useCallback(async () => {
+    if (!isTauri || !alchemyKey || !walletAddr) return;
+    setTxLoading(true);
+    const res = await settle(() => getAssetTransfers(walletAddr, alchemyKey));
+    if (res.ok) { setLiveTxs(res.value.map(t => mapTransfer(t, walletAddr))); setTxError(null); }
+    else { setLiveTxs(null); setTxError(res.error); }
+    setTxLoading(false);
+  }, [isTauri, alchemyKey, walletAddr]);
 
-  const liveNftGroups = liveNfts ? groupNftsByCollection(liveNfts) : null;
-  const displayNfts   = liveNftGroups ?? [];
-  const displayTxs    = liveTxs ?? [];
+  useEffect(() => {
+    if (tab !== 'Transactions' || txRequested || !isTauri || !alchemyKey || !walletAddr) return;
+    setTxRequested(true);
+    void loadTransactions();
+  }, [tab, txRequested, isTauri, alchemyKey, walletAddr, loadTransactions]);
 
-  // Real token holdings (Alchemy). Market fields (fdv / 24h-7d change / volume)
-  // aren't provided by the balances API, so they render as "—".
-  const fmtUsd = (n: number | null | undefined) =>
-    n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—';
-  const tokens = (liveTokens ?? []).map(t => ({
-    name: t.name ?? t.symbol ?? 'Unknown',
-    ticker: t.symbol ?? '—',
+  // Lazy: analytics (locally-stored trade history + NFT cost basis vs floors).
+  useEffect(() => {
+    if (tab !== 'Analytics' || analyticsRequested || !isTauri || !alchemyKey || !walletAddr) return;
+    setAnalyticsRequested(true);
+    let cancelled = false;
+    (async () => {
+      setAnalyticsLoading(true);
+      const p = await settle(() => getPnlSummary(walletAddr, alchemyKey));
+      if (cancelled) return;
+      if (p.ok) { setPnl(p.value); setPnlError(null); } else { setPnl(null); setPnlError(p.error); }
+
+      const n = await settle(() => getNftPnl(walletAddr, alchemyKey));
+      if (cancelled) return;
+      if (n.ok) { setNftPnl(n.value); setNftPnlError(null); } else { setNftPnl(null); setNftPnlError(n.error); }
+      setAnalyticsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, analyticsRequested, isTauri, alchemyKey, walletAddr]);
+
+  // ── Derived display values — real or '—', never a stand-in ──────────────────
+
+  const dataBlocked = !isTauri
+    ? 'Live data requires the Westron desktop app.'
+    : !walletAddr
+      ? 'No wallet address to query.'
+      : keyError;
+
+  const displayTotalValue = portfolio ? fmtUsd(portfolio.totalUsd) : EM_DASH;
+  const displayNftCount = nftCount != null ? String(nftCount) : EM_DASH;
+  const heldTokens = (portfolio?.tokens ?? []).filter(t => (t.balance ?? 0) > 0);
+  const displayTokenCount = portfolio ? String(heldTokens.length) : EM_DASH;
+  const displayEthBalance = portfolio ? fmtEth(portfolio.ethBalance) : EM_DASH;
+  const displayUnrealized = nftPnl ? fmtEth(nftPnl.unrealized_eth) : EM_DASH;
+
+  const displayTxs = liveTxs ?? [];
+
+  // Token rows. Balance, symbol, price and USD value are real (Alchemy
+  // Portfolio API). FDV, 1D/7D change and volume are not in that response, so
+  // they stay '—' rather than being derived from something they are not.
+  const tokens = heldTokens.map((t: WalletToken) => ({
+    key: t.tokenAddress ?? t.symbol ?? t.address,
+    name: t.name ?? t.symbol ?? 'Unknown token',
+    ticker: t.symbol ?? EM_DASH,
     color: '#627eea',
     verified: false,
     walletCount: 1,
     heldValue: fmtUsd(t.usdValue),
-    heldQty: t.balance != null ? t.balance.toLocaleString('en-US', { maximumFractionDigits: 6 }) : '—',
+    heldQty: t.balance != null ? t.balance.toLocaleString('en-US', { maximumFractionDigits: 6 }) : EM_DASH,
     price: fmtUsd(t.usdPrice),
-    fdv: '—',
-    change1d: '—',
-    change7d: '—',
-    vol1d: '—',
+    fdv: EM_DASH,
+    change1d: EM_DASH,
+    change7d: EM_DASH,
+    vol1d: EM_DASH,
   }));
-  const topCols: Array<{ name: string; eth: string; pct: number }> = [];
+
+  // Top collections by current floor value, summed from the NFT P&L items
+  // (locally-stored cost basis + live floors). No floor, no row.
+  const topCols = (() => {
+    if (!nftPnl) return [] as Array<{ name: string; eth: string; pct: number }>;
+    const byCollection = new Map<string, number>();
+    for (const item of nftPnl.items) {
+      if (item.floor_eth == null) continue;
+      const name = item.collection || item.contract;
+      byCollection.set(name, (byCollection.get(name) ?? 0) + item.floor_eth);
+    }
+    const total = Array.from(byCollection.values()).reduce((s, v) => s + v, 0);
+    return Array.from(byCollection.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, eth]) => ({ name, eth: `${eth.toFixed(3)} ETH`, pct: total > 0 ? Math.round((eth / total) * 100) : 0 }));
+  })();
+
+  // Best / worst held NFT by unrealized P&L against the stored cost basis.
+  const rankedNftPnl = (nftPnl?.items ?? [])
+    .filter(i => i.unrealized_eth != null)
+    .sort((a, b) => (b.unrealized_eth ?? 0) - (a.unrealized_eth ?? 0));
+  const bestNft = rankedNftPnl[0];
+  const worstNft = rankedNftPnl.length > 1 ? rankedNftPnl[rankedNftPnl.length - 1] : undefined;
+
+  const selectedTokenSymbol = selectedToken;
 
   return (
     <main className="min-h-full bg-[#0b0c14] text-white px-12 py-8">
@@ -1231,7 +1798,7 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <Link href="/" style={{ color: 'var(--wr-accent)', textDecoration: 'none' }}>Dashboard</Link>
         <span>›</span>
-        <span style={{ color: 'var(--wr-text)' }}>{wallet.name}</span>
+        <span style={{ color: 'var(--wr-text)' }}>{wallet?.name ?? (walletResolved ? 'Unknown wallet' : '…')}</span>
       </div>
 
       {/* Header */}
@@ -1239,28 +1806,42 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '22px', fontWeight: 700, color: 'var(--wr-text)' }}>
-              {wallet.name}
+              {wallet?.name ?? (walletResolved ? 'Wallet not found' : 'Loading…')}
             </h1>
-            <Tag variant={WALLET_TOKEN_VARIANT[wallet.badge] ?? 'neutral'}>{wallet.badge}</Tag>
+            <Tag variant={WALLET_TOKEN_VARIANT[CHAIN_BADGE] ?? 'neutral'}>{CHAIN_BADGE}</Tag>
           </div>
-          <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
-            {wallet.address}
+          <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', wordBreak: 'break-all' }}>
+            {wallet?.address ?? (walletResolved ? `No wallet with id "${id}" in local storage.` : EM_DASH)}
           </p>
+          {walletResolved && wallet && (
+            <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginTop: '4px' }}>
+              ETH balance: {holdingsLoading ? 'loading…' : displayEthBalance}
+            </p>
+          )}
         </div>
-        <a
-          href={`https://etherscan.io/address/${wallet.address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
-            border: '1px solid var(--wr-border)', padding: '6px 12px', textDecoration: 'none',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}
-          className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
-        >
-          Etherscan <ExternalLinkIcon />
-        </a>
+        {wallet && (
+          <a
+            href={`https://etherscan.io/address/${wallet.address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)',
+              border: '1px solid var(--wr-border)', padding: '6px 12px', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+            className="hover:text-[#9298b8] hover:border-[var(--wr-border-hover)] transition-colors"
+          >
+            Etherscan <ExternalLinkIcon />
+          </a>
+        )}
       </div>
+
+      {/* Why a panel is empty, stated once, at the top. */}
+      {dataBlocked && (
+        <div style={{ border: '1px solid rgba(251,191,36,0.3)', backgroundColor: 'rgba(251,191,36,0.06)', padding: '10px 14px', marginBottom: '16px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-warn)', lineHeight: 1.6 }}>
+          {dataBlocked}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-0 border-b border-[var(--wr-border)] mb-6">
@@ -1289,13 +1870,39 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
       {/* ── HOLDINGS TAB ── */}
       {tab === 'Holdings' && (
         <>
-          {/* Stat cards */}
+          {/* Stat cards — value or '—', plus a line saying where the number
+              comes from or what is missing. Nothing here is a placeholder. */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {[
-              { label: 'Total Value',    value: displayTotalValue,                           color: 'var(--wr-text)' },
-              { label: 'Total NFTs',     value: String(displayNftCount),                     color: 'var(--wr-text)' },
-              { label: 'Total Tokens',   value: String(displayTokenCount),                   color: 'var(--wr-text)' },
-              { label: 'Unrealized PnL', value: wallet.unrealizedPnl, color: wallet.pnlPos ? '#4fe9b4' : '#ff8a96' },
+              {
+                label: 'Total Value',
+                value: holdingsLoading ? EM_DASH : displayTotalValue,
+                color: 'var(--wr-text)',
+                sub: holdingsLoading ? 'Fetching…'
+                  : portfolioError ? `Unavailable — ${portfolioError}`
+                  : portfolio ? 'ETH + ERC-20 at Alchemy prices; NFT floor value not included'
+                  : 'No data yet',
+              },
+              {
+                label: 'Total NFTs',
+                value: holdingsLoading ? EM_DASH : displayNftCount,
+                color: 'var(--wr-text)',
+                sub: holdingsLoading ? 'Fetching…' : nftsError ? `Unavailable — ${nftsError}` : nftCount != null ? 'owned, from Alchemy NFT API' : 'No data yet',
+              },
+              {
+                label: 'Total Tokens',
+                value: holdingsLoading ? EM_DASH : displayTokenCount,
+                color: 'var(--wr-text)',
+                sub: holdingsLoading ? 'Fetching…' : portfolioError ? `Unavailable — ${portfolioError}` : portfolio ? 'with a non-zero balance' : 'No data yet',
+              },
+              {
+                label: 'Unrealized PnL',
+                value: displayUnrealized,
+                color: nftPnl ? (nftPnl.unrealized_eth >= 0 ? '#4fe9b4' : '#ff8a96') : 'var(--wr-text-3)',
+                sub: nftPnl
+                  ? `NFTs only — ${nftPnl.priced_count}/${nftPnl.held_count} held items have a recorded cost basis`
+                  : nftPnlError ? `Unavailable — ${nftPnlError}` : 'Computed on the Analytics tab (needs stored cost basis)',
+              },
             ].map(card => (
               <div key={card.label} style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
                 <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
@@ -1303,6 +1910,9 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                 </p>
                 <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700, color: card.color }}>
                   {card.value}
+                </p>
+                <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                  {card.sub}
                 </p>
               </div>
             ))}
@@ -1361,8 +1971,18 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                   </button>
                 ))}
               </div>
-              {/* NFT rows */}
-              {(liveNfts ?? []).map(nft => {
+              {/* NFT rows — loading / error / empty are all distinct states */}
+              {holdingsLoading && <StateNote title="Loading NFTs…" />}
+              {!holdingsLoading && nftsError && (
+                <StateNote tone="error" title="NFTs could not be loaded" detail={nftsError} />
+              )}
+              {!holdingsLoading && !nftsError && (liveNfts?.length ?? 0) === 0 && (
+                <StateNote
+                  title="No NFTs held"
+                  detail={isTauri ? 'Alchemy returned no owned NFTs for this address.' : 'Live NFT data needs the Westron desktop app.'}
+                />
+              )}
+              {!holdingsLoading && !nftsError && (liveNfts ?? []).map(nft => {
                 const key = nft.contract.address + nft.token_id;
                 const isSelected = selectedNfts.has(key);
                 const thumb = nft.image?.thumbnail_url || nft.image?.original_url || nft.image?.cached_url;
@@ -1409,10 +2029,10 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                     </div>
                     {/* Wallet */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: wallet.badge === 'ETH' ? '#627eea' : wallet.badge === 'BNB' ? '#f3ba2f' : '#8247e5', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: '#fff' }}>{wallet.name.slice(0, 2).toUpperCase()}</span>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#627eea', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: '#fff' }}>{(wallet?.name ?? '?').slice(0, 2).toUpperCase()}</span>
                       </div>
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52px' }}>{wallet.name.split(' ')[0]}</span>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '52px' }}>{(wallet?.name ?? EM_DASH).split(' ')[0]}</span>
                     </div>
                     {/* Listing Price */}
                     <div style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>–</div>
@@ -1516,14 +2136,24 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                 ))}
               </div>
               {/* Rows */}
-              {tokens.map(tok => {
+              {holdingsLoading && <StateNote title="Loading token balances…" />}
+              {!holdingsLoading && portfolioError && (
+                <StateNote tone="error" title="Token balances could not be loaded" detail={portfolioError} />
+              )}
+              {!holdingsLoading && !portfolioError && tokens.length === 0 && (
+                <StateNote
+                  title="No tokens with a balance"
+                  detail={isTauri ? 'Alchemy returned no ETH or ERC-20 balance for this address.' : 'Live balances need the Westron desktop app.'}
+                />
+              )}
+              {!holdingsLoading && !portfolioError && tokens.map(tok => {
                 const isSelected = selectedToken === tok.ticker;
                 const neutral = (v: string) => v === '0%' || v === '+0.0%' || v === '-0%';
                 const changeColor = (v: string) => neutral(v) ? 'var(--wr-text-3)' : v.startsWith('+') ? '#4fe9b4' : '#ff8a96';
                 const AVATAR_COLORS = ['#627eea', '#ffb020', '#4fe9b4', '#a78bfa', '#ff8a96'];
                 return (
                   <div
-                    key={tok.ticker}
+                    key={tok.key}
                     onClick={() => setSelectedToken(isSelected ? null : tok.ticker)}
                     style={{ display: 'grid', gridTemplateColumns: '2fr 110px 100px 72px 110px 72px 90px 90px 90px', alignItems: 'center', padding: '0 16px', height: '60px', borderBottom: '1px solid var(--wr-border)', columnGap: '8px', backgroundColor: isSelected ? 'rgba(190,255,0,0.06)' : 'transparent', transition: 'background 0.1s', cursor: 'pointer', outline: isSelected ? '1px solid rgba(190,255,0,0.3)' : 'none', outlineOffset: '-1px' }}
                     onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--wr-overlay)'; }}
@@ -1579,6 +2209,9 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
                 );
               })}
             </div>
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '8px', lineHeight: 1.6 }}>
+              FDV, 1D/7D change and 1D volume are &apos;—&apos; because no command on this app returns them. Held value and price come from the Alchemy Portfolio API.
+            </div>
             {/* Token selection action bar */}
             {selectedToken !== null && (() => {
               const selTok = tokens.find(t => t.ticker === selectedToken);
@@ -1623,7 +2256,23 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
             <span>Amount</span>
             <span>Gas Fee</span>
           </div>
-          {displayTxs.map((tx, i) => {
+          {txLoading && <StateNote title="Loading transfers…" />}
+          {!txLoading && txError && (
+            <StateNote
+              tone="error"
+              title="Transfers could not be loaded"
+              detail={`${txError} — note that the backend returns this same error when a wallet has no transfers at all, so it may also mean "nothing to show".`}
+            />
+          )}
+          {!txLoading && !txError && displayTxs.length === 0 && (
+            <StateNote
+              title="No transfers yet"
+              detail={isTauri
+                ? 'Alchemy returned no incoming or outgoing transfers for this address.'
+                : 'Live transfer history needs the Westron desktop app.'}
+            />
+          )}
+          {!txLoading && !txError && displayTxs.map((tx, i) => {
             const ts = TX_STYLE[tx.type];
             return (
               <div key={i}
@@ -1653,55 +2302,71 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
       {/* ── ANALYTICS TAB ── */}
       {tab === 'Analytics' && (
         <>
-          {/* KPI cards */}
+          {/* KPI cards. Only two of these four have a real source today, and
+              the other two say so rather than showing a number. */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Total Action</p>
-              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>{wallet.analytics.totalAction}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginTop: '4px' }}>{wallet.analytics.actionPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Traded Volume</p>
+              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>
+                {analyticsLoading ? EM_DASH : pnl ? fmtEth(pnl.total_buy_volume_eth + pnl.total_sell_volume_eth) : EM_DASH}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.5 }}>
+                {analyticsLoading ? 'Fetching…' : pnlError ? `Unavailable — ${pnlError}` : pnl ? 'buys + sells across trades Westron has recorded' : 'No data yet'}
+              </p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Best Performer</p>
-              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700 }}>{wallet.analytics.bestPerformer}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginTop: '4px' }}>{wallet.analytics.bestPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Best Held NFT</p>
+              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700, wordBreak: 'break-word' }}>
+                {bestNft ? (bestNft.collection || `#${bestNft.token_id}`) : EM_DASH}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginTop: '4px' }}>
+                {bestNft ? fmtEth(bestNft.unrealized_eth) : EM_DASH}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.5 }}>
+                {analyticsLoading ? 'Fetching…' : nftPnlError ? `Unavailable — ${nftPnlError}` : bestNft ? 'unrealized vs stored cost basis' : 'No cost basis recorded yet'}
+              </p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Worst Performer</p>
-              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700 }}>{wallet.analytics.worstPerformer}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginTop: '4px' }}>{wallet.analytics.worstPct}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Worst Held NFT</p>
+              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 700, wordBreak: 'break-word' }}>
+                {worstNft ? (worstNft.collection || `#${worstNft.token_id}`) : EM_DASH}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', marginTop: '4px' }}>
+                {worstNft ? fmtEth(worstNft.unrealized_eth) : EM_DASH}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.5 }}>
+                {analyticsLoading ? 'Fetching…' : nftPnlError ? `Unavailable — ${nftPnlError}` : worstNft ? 'unrealized vs stored cost basis' : 'Needs at least two priced holdings'}
+              </p>
             </div>
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Avg Hold Time</p>
-              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>{wallet.analytics.avgHoldTime}</p>
+              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700, color: 'var(--wr-text-3)' }}>{EM_DASH}</p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '6px', lineHeight: 1.5 }}>
+                No command returns acquisition and disposal timestamps per holding, so this cannot be computed yet.
+              </p>
             </div>
           </div>
 
-          {/* Portfolio Value chart */}
+          {/* Portfolio value over time. Westron stores no historical portfolio
+              snapshots, so there is no series to draw — the old chart was a
+              hardcoded shape. Current value is real. */}
           <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px', marginBottom: '24px' }}>
             <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '16px' }}>
               Portfolio Value
             </p>
-            <div className="flex items-center gap-1 mb-4">
-              {TIME_FILTERS.map((f) => (
-                <button key={f} onClick={() => setTimeFilter(f)}
-                  className={timeFilter === f ? 'btn-cta' : ''}
-                  style={{
-                    fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600,
-                    padding: '4px 10px', cursor: 'pointer',
-                    backgroundColor: timeFilter === f ? '#7c5cff' : 'transparent',
-                    color: timeFilter === f ? '#000' : '#6e7590',
-                    border: 'none',
-                  }}>
-                  {f}
-                </button>
-              ))}
-            </div>
             <div className="mb-2">
-              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 700 }}>{wallet.analytics.portfolioValue}</p>
-              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4' }}>{wallet.analytics.portfolioChange} (USD)</p>
+              <p style={{ fontFamily: 'var(--font-inter)', fontSize: '22px', fontWeight: 700 }}>
+                {holdingsLoading ? EM_DASH : displayTotalValue}
+              </p>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+                {holdingsLoading ? 'Fetching…' : portfolioError ? `Unavailable — ${portfolioError}` : 'current value (USD), ETH + ERC-20'}
+              </p>
             </div>
-            <div className="mt-4">
-              <AreaChart walletId={id} />
+            <div style={{ border: '1px dashed var(--wr-border)', marginTop: '16px' }}>
+              <StateNote
+                title="No portfolio history"
+                detail="Westron does not store historical portfolio snapshots, and no command returns them, so there is no series to plot. A chart here would have to be invented."
+              />
             </div>
           </div>
 
@@ -1713,29 +2378,51 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
               </p>
               <div className="flex items-end gap-8">
                 <div>
-                  <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Total Trades</p>
-                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>{wallet.analytics.totalTrades}</p>
+                  <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Closed Trades</p>
+                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>
+                    {analyticsLoading ? EM_DASH : pnl ? pnl.trade_count.toLocaleString('en-US') : EM_DASH}
+                  </p>
                 </div>
                 <div>
                   <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Win Rate</p>
-                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '28px', fontWeight: 700, color: 'var(--wr-accent)' }}>{wallet.analytics.winRate}</p>
+                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '28px', fontWeight: 700, color: 'var(--wr-accent)' }}>
+                    {analyticsLoading || !pnl || pnl.win_count + pnl.loss_count === 0
+                      ? EM_DASH
+                      : `${((pnl.win_count / (pnl.win_count + pnl.loss_count)) * 100).toFixed(2)}%`}
+                  </p>
                 </div>
                 <div>
-                  <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Avg Price</p>
-                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>{wallet.analytics.avgPrice}</p>
+                  <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Realized P&amp;L</p>
+                  <p style={{ fontFamily: 'var(--font-inter)', fontSize: '20px', fontWeight: 700 }}>
+                    {analyticsLoading ? EM_DASH : pnl ? fmtEth(pnl.realized_pnl_eth) : EM_DASH}
+                  </p>
                 </div>
               </div>
+              <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginTop: '14px', lineHeight: 1.6 }}>
+                {analyticsLoading
+                  ? 'Fetching…'
+                  : pnlError
+                    ? `Unavailable — ${pnlError}`
+                    : pnl
+                      ? 'Covers NFT trades Westron has matched into buy/sell pairs locally, not the wallet’s entire history. Gas is not attributed per trade, so it is excluded.'
+                      : 'No data yet.'}
+              </p>
             </div>
 
             <div style={{ backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '20px' }}>
               <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-text-3)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '16px' }}>
-                Top Collections by Value
+                Top Collections by Floor Value
               </p>
+              {analyticsLoading && <StateNote title="Fetching floors…" />}
+              {!analyticsLoading && nftPnlError && <StateNote tone="error" title="Unavailable" detail={nftPnlError} />}
+              {!analyticsLoading && !nftPnlError && topCols.length === 0 && (
+                <StateNote title="No data yet" detail="Needs held NFTs whose collections have a floor price from the NFT P&amp;L command." />
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {topCols.map((col, i) => (
                   <div key={col.name} className="flex items-center gap-3">
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', width: '16px', flexShrink: 0 }}>{i + 1}</span>
-                    <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)', flex: 1 }}>{col.name}</span>
+                    <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)', flex: 1, wordBreak: 'break-word' }}>{col.name}</span>
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#9298b8' }}>{col.eth}</span>
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', width: '36px', textAlign: 'right' }}>{col.pct}%</span>
                   </div>
@@ -1749,7 +2436,16 @@ export default function WalletDetailClient({ id: routeId }: { id: string }) {
       {/* ── ADDRESS BOOK TAB ── */}
       {tab === 'Address Book' && <AddressBookTab />}
 
-      {showTransferModal && <TransferModal wallet={wallet} onClose={() => setShowTransferModal(false)} />}
+      {showTransferModal && (
+        <TransferModal
+          walletName={wallet?.name ?? 'Unknown wallet'}
+          fromAddress={walletAddr}
+          alchemyKey={alchemyKey}
+          isTauri={isTauri}
+          tokenSymbol={selectedTokenSymbol}
+          onClose={() => setShowTransferModal(false)}
+        />
+      )}
       {(() => {
         const selNfts = (liveNfts ?? []).filter(n => selectedNfts.has(n.contract.address + n.token_id));
         const close = (setter: (v: boolean) => void) => () => { setter(false); setSelectedNfts(new Set()); };
