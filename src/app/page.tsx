@@ -11,6 +11,10 @@ import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
 import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
 import { importWallet } from '@/lib/tauri';
 import { deriveAddress, isValidAddress, normalizeKey } from '@/lib/walletImport';
+import {
+  runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
+  type SendRow, type TransactionPreview,
+} from '@/lib/distribute';
 import { EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import { useTheme } from '@/lib/themeContext';
@@ -600,7 +604,13 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
   const [amountMode, setAmountMode] = useState<'equal' | 'custom'>('equal');
   const [equalAmount, setEqualAmount] = useState('');
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
-  const [txStatuses, setTxStatuses] = useState<string[]>([]);
+  const [sendRows, setSendRows] = useState<SendRow[]>([]);
+  const [sending, setSending] = useState(false);
+  const [previews, setPreviews] = useState<Record<string, TransactionPreview>>({});
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [alchemyKey, setAlchemyKey] = useState('');
+  const sendStartedRef = useRef(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -641,23 +651,62 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
       ? parseFloat(equalAmount) > 0
       : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
 
-  // Simulate tx processing when step 3 is reached
+  // The Alchemy key is required to read the nonce and broadcast.
+  useEffect(() => { loadAlchemyKey().then(k => setAlchemyKey(k ?? '')).catch(() => setAlchemyKey('')); }, []);
+
+  // Envelope verdict for every destination, from `preview_transaction` — which
+  // has no side effects, so re-running it costs nothing and spends nothing.
   useEffect(() => {
-    if (step !== 3) return;
-    const initial = selectedList.map(() => 'Pending');
-    setTxStatuses(initial);
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    selectedList.forEach((_, i) => {
-      timers.push(setTimeout(() => {
-        setTxStatuses(prev => { const n = [...prev]; n[i] = 'Processing'; return n; });
-        timers.push(setTimeout(() => {
-          setTxStatuses(prev => { const n = [...prev]; n[i] = 'Confirmed'; return n; });
-        }, 2000));
-      }, i * 1800));
-    });
-    return () => timers.forEach(clearTimeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (step !== 2) return;
+    let cancelled = false;
+    (async () => {
+      setPreviewBusy(true);
+      setPreviewError(null);
+      try {
+        const out: Record<string, TransactionPreview> = {};
+        for (const w of selectedList) {
+          const wei = parseEthToWei(getAmount(w.id));
+          if (wei == null) continue;
+          out[w.id] = await previewTransaction({ to: w.address, valueWei: wei.toString() });
+        }
+        if (!cancelled) setPreviews(out);
+      } catch (e) {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setPreviewBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  const blockedRows = selectedList.filter(w => previews[w.id] && !previews[w.id].authorized);
+  const canSend =
+    !!source &&
+    !!alchemyKey &&
+    !previewBusy &&
+    !previewError &&
+    selectedList.length > 0 &&
+    selectedList.every(w => previews[w.id]?.authorized === true);
+
+  async function startSend() {
+    // A ref, not `sending`: React state updates are async and a double-click in
+    // the same tick would otherwise broadcast twice.
+    if (!canSend || sendStartedRef.current || !source) return;
+    sendStartedRef.current = true;
+    const rows: SendRow[] = [];
+    for (const w of selectedList) {
+      const wei = parseEthToWei(getAmount(w.id));
+      if (wei == null) continue;
+      rows.push({ id: w.id, name: w.name, address: w.address, valueWei: wei, state: 'queued' });
+    }
+    if (rows.length === 0) { sendStartedRef.current = false; return; }
+    setSendRows(rows);
+    setSending(true);
+    setStep(3);
+    await runDistribution(source.address, rows, alchemyKey, setSendRows);
+    setSending(false);
+  }
 
   const AMOUNT_INPUT: React.CSSProperties = {
     fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)',
@@ -903,17 +952,35 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></span>
             </div>
 
+            {!alchemyKey && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
+                No Alchemy API key is stored. Add one in Settings — the signer needs it to read the nonce and broadcast.
+              </div>
+            )}
+            {previewError && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
+                Could not check the spending envelope: {previewError}
+              </div>
+            )}
+            {blockedRows.map(w => (
+              <div key={w.id} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', border: '1px solid rgba(248,113,113,0.35)', padding: '8px 10px', lineHeight: 1.6 }}>
+                {w.name}: {explainSendError(previews[w.id]?.reject_reason ?? previews[w.id]?.reject_code ?? 'refused by the spending envelope')}
+              </div>
+            ))}
+
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button onClick={() => setStep(1)} style={{
                 flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
                 color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)',
                 padding: '11px 0', cursor: 'pointer',
               }}>Back</button>
-              <button onClick={() => setStep(3)} className="btn-cta" style={{
+              <button onClick={startSend} disabled={!canSend} className="btn-cta" style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-                color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
-                padding: '11px 0', cursor: 'pointer',
-              }}>Confirm & Send</button>
+                color: canSend ? '#0b0c14' : 'var(--wr-text-4)',
+                backgroundColor: canSend ? '#7c5cff' : 'var(--wr-overlay)',
+                border: canSend ? 'none' : '1px solid var(--wr-border)',
+                padding: '11px 0', cursor: canSend ? 'pointer' : 'not-allowed',
+              }}>{previewBusy ? 'Checking…' : 'Confirm & Send'}</button>
             </div>
           </div>
         )}
@@ -922,30 +989,68 @@ function DistributeModal({ onClose }: { onClose: () => void }) {
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
-              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>⚡</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Processing</div>
+              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{sending ? '⚡' : '✓'}</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>
+                {sending ? 'Signing and broadcasting' : 'Done'}
+              </div>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
-                Transactions are being submitted to the network
+                {sending
+                  ? 'One at a time — a second send from the same address would reuse the nonce.'
+                  : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
               </div>
             </div>
-            {selectedList.map((w, i) => {
-              const status = txStatuses[i] ?? 'Pending';
-              const statusColor = status === 'Confirmed' ? 'var(--wr-accent)' : status === 'Processing' ? '#ffb020' : 'var(--wr-text-3)';
+
+            {sendRows.map(r => {
+              const label =
+                r.state === 'broadcast' ? 'Broadcast' :
+                r.state === 'submitting' ? 'Signing…' :
+                r.state === 'failed' ? 'Failed' :
+                r.state === 'skipped' ? 'Not sent' : 'Queued';
+              const color =
+                r.state === 'broadcast' ? 'var(--wr-accent)' :
+                r.state === 'submitting' ? '#ffb020' :
+                r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
               return (
-                <div key={w.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
-                  <div>
-                    <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.address}</div>
-                    <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>{getAmount(w.id)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
+                <div key={r.id} style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                      <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
+                        {formatWeiToEth(r.valueWei)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /> → {r.address.slice(0, 6)}…{r.address.slice(-4)}
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{label}</span>
                   </div>
-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: statusColor }}>{status}</span>
+
+                  {r.hash && (
+                    <a href={`https://etherscan.io/tx/${r.hash}`} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none' }}>
+                      {r.hash}
+                    </a>
+                  )}
+                  {r.error && (
+                    <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                      {explainSendError(r.error)}
+                    </div>
+                  )}
                 </div>
               );
             })}
-            <button onClick={() => { setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); onClose(); }} style={{
-              width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
-              color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
-              padding: '11px 0', cursor: 'pointer', marginTop: '8px',
-            }}>Done</button>
+
+            <button
+              disabled={sending}
+              onClick={() => {
+                sendStartedRef.current = false;
+                setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount('');
+                setCustomAmounts({}); setSendRows([]); setPreviews({});
+                onClose();
+              }}
+              style={{
+                width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
+                color: sending ? 'var(--wr-text-4)' : '#0b0c14',
+                backgroundColor: sending ? 'var(--wr-overlay)' : '#7c5cff',
+                border: 'none', padding: '11px 0', cursor: sending ? 'not-allowed' : 'pointer', marginTop: '8px',
+              }}>{sending ? 'Working…' : 'Done'}</button>
           </div>
         )}
       </div>

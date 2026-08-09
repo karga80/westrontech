@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   getPortfolioSnapshot, loadAlchemyKey, importWallet,
   type PortfolioSnapshot,
@@ -11,6 +11,10 @@ import {
   updateWallet as updateWalletInStore, type StoredWallet,
 } from '@/lib/walletStore';
 import { deriveAddress, normalizeKey } from '@/lib/walletImport';
+import {
+  runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
+  type SendRow, type TransactionPreview,
+} from '@/lib/distribute';
 import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import SisterWalletFinder from '@/components/SisterWalletFinder';
@@ -392,6 +396,60 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
       ? parseFloat(equalAmount) > 0
       : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
 
+  // Real sending. This modal previously ran a setTimeout that printed
+  // "Confirmed" without signing anything.
+  const [sendRows, setSendRows] = useState<SendRow[]>([]);
+  const [sending, setSending] = useState(false);
+  const [previews, setPreviews] = useState<Record<string, TransactionPreview>>({});
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [distKey, setDistKey] = useState('');
+  const sendStartedRef = useRef(false);
+
+  useEffect(() => { loadAlchemyKey().then(k => setDistKey(k ?? '')).catch(() => setDistKey('')); }, []);
+
+  useEffect(() => {
+    if (step !== 2) return;
+    let cancelled = false;
+    (async () => {
+      setPreviewBusy(true); setPreviewError(null);
+      try {
+        const out: Record<string, TransactionPreview> = {};
+        for (const w of selectedList) {
+          const wei = parseEthToWei(getAmount(w.id));
+          if (wei == null) continue;
+          out[w.id] = await previewTransaction({ to: w.address, valueWei: wei.toString() });
+        }
+        if (!cancelled) setPreviews(out);
+      } catch (e) {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setPreviewBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const blockedRows = selectedList.filter(w => previews[w.id] && !previews[w.id].authorized);
+  const canSend = !!source && !!distKey && !previewBusy && !previewError &&
+    selectedList.length > 0 && selectedList.every(w => previews[w.id]?.authorized === true);
+
+  async function startSend() {
+    if (!canSend || sendStartedRef.current || !source) return;
+    sendStartedRef.current = true;
+    const rows: SendRow[] = [];
+    for (const w of selectedList) {
+      const wei = parseEthToWei(getAmount(w.id));
+      if (wei == null) continue;
+      rows.push({ id: w.id, name: w.name, address: w.rawAddress || w.address, valueWei: wei, state: 'queued' });
+    }
+    if (rows.length === 0) { sendStartedRef.current = false; return; }
+    setSendRows(rows); setSending(true); setStep(3);
+    await runDistribution(source.rawAddress || source.address, rows, distKey, setSendRows);
+    setSending(false);
+  }
+
   const AMOUNT_INPUT: React.CSSProperties = {
     fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)',
     backgroundColor: 'var(--wr-surface-alt)', border: 'none', padding: '5px 8px',
@@ -547,30 +605,51 @@ function DistributeModal({ wallets, onClose }: { wallets: Wallet[]; onClose: () 
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button onClick={() => setStep(1)} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>Back</button>
-              <button onClick={() => setStep(3)} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none', padding: '11px 0', cursor: 'pointer' }}>Confirm & Send</button>
+              <button onClick={startSend} disabled={!canSend} style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: canSend ? '#0b0c14' : 'var(--wr-text-4)', backgroundColor: canSend ? '#7c5cff' : 'var(--wr-overlay)', border: canSend ? 'none' : '1px solid var(--wr-border)', padding: '11px 0', cursor: canSend ? 'pointer' : 'not-allowed' }}>{previewBusy ? 'Checking…' : 'Confirm & Send'}</button>
             </div>
           </div>
         )}
 
-        {/* Step 3 */}
+        {/* Step 3 — real broadcast status */}
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
-              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>⚡</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Processing</div>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>Transactions are being submitted to the network</div>
-            </div>
-            {selectedList.map((w, i) => (
-              <div key={w.id} className="flex items-center justify-between" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
-                <div>
-                  <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{w.address}</div>
-                  <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>{getAmount(w.id)} ETH</div>
-                </div>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#ffb020' : '#6e7590' }}>{i === 0 ? 'Processing' : 'Pending'}</span>
+              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{sending ? '⚡' : '✓'}</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{sending ? 'Signing and broadcasting' : 'Done'}</div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
+                {sending
+                  ? 'One at a time — a second send from the same address would reuse the nonce.'
+                  : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
               </div>
-            ))}
-            <button onClick={() => { setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); onClose(); }}
-              style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer', marginTop: '8px' }}>Done</button>
+            </div>
+            {sendRows.map(r => {
+              const label = r.state === 'broadcast' ? 'Broadcast' : r.state === 'submitting' ? 'Signing…' : r.state === 'failed' ? 'Failed' : r.state === 'skipped' ? 'Not sent' : 'Queued';
+              const color = r.state === 'broadcast' ? 'var(--wr-accent)' : r.state === 'submitting' ? '#ffb020' : r.state === 'failed' ? '#ff8a96' : 'var(--wr-text-3)';
+              return (
+                <div key={r.id} style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{r.name}</div>
+                      <div style={{ color: 'var(--wr-text-3)', fontSize: '10px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
+                        {formatWeiToEth(r.valueWei)} ETH → {r.address.slice(0, 6)}…{r.address.slice(-4)}
+                      </div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{label}</span>
+                  </div>
+                  {r.hash && (
+                    <a href={`https://etherscan.io/tx/${r.hash}`} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'block', marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-accent)', wordBreak: 'break-all', textDecoration: 'none' }}>{r.hash}</a>
+                  )}
+                  {r.error && (
+                    <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(r.error)}</div>
+                  )}
+                </div>
+              );
+            })}
+            <button disabled={sending}
+              onClick={() => { sendStartedRef.current = false; setStep(1); setSourceId(''); setSelected(new Set()); setEqualAmount(''); setCustomAmounts({}); setSendRows([]); setPreviews({}); onClose(); }}
+              style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: sending ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
+              {sending ? 'Working…' : 'Done'}</button>
           </div>
         )}
       </div>
