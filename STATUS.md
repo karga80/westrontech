@@ -3,6 +3,39 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-10): T6/T9/T10 batch — wallet-detail Distribute CTA, NFT transfer, bulk/distribute reconnect
+
+Full task list and per-item verification detail: `docs/TASKS.md`. Pushed to `cowork-merge` (`aa03590`).
+
+**Real and code-verified (tsc/eslint/jest/cargo clean, not yet clicked through in a live GUI):**
+- Envelope pre-deduction rollback bug fixed (`f77bb3f`) — failed sends no longer eat spend-cap budget.
+- NFT transfer: real `transfer_nft` Tauri command (ERC-721/1155 `safeTransferFrom`, envelope-gated
+  via `value_wei=0`), wired end-to-end into a real "Send NFT" tab in the UI (`5582cf2`, `d62a4e4`).
+- Shared `DistributeModal` component replaces 2 duplicate copies (`page.tsx`, `wallets/page.tsx`);
+  wallet-detail page (`/wallet/[id]`) got a real "Distribute" CTA opening it (`39ac33c`).
+  Address-based self-send warning applied everywhere the modal is used.
+- `bulk/distribute` page — previously a fully disabled "nothing is sent" screen — is now wired to
+  the same real envelope-gated send path, balance/gas/Address Book UI preserved (`68cd73c`).
+  **This is the first screen where a real send from this build has never been triggered — the code
+  is ready but no one has clicked "Confirm & Send" yet. That first click is Emir's, per CLAUDE.md §5.**
+- Duplicate dead "Send NFT" modal (`NftSendModal`, always said "Sending unavailable") retired,
+  Bulk Actions now opens the real modal (`1aedd2c`).
+- Etherscan links: wallet address button + "TXN:" tx-hash links across all 3 distribute screens,
+  using the existing `open_external_url` Tauri command (`6f9f9fe`).
+- Silent-failure fix on wallet detail's send button — now shows which precondition is missing.
+
+**Blocked — Emir'in yapması gerekenler:**
+1. `bulk/distribute`'tan **ilk gerçek gönderim** — düşük tutarlı bir zarf oluşturup bizzat
+   "Confirm & Send"e tıklaman ve Etherscan'de teyit etmen gerekiyor. Hiçbir ajan bunu tetiklemedi.
+2. Gerçek bir NFT'yi gerçek bir adrese gönderme de aynı şekilde hiç tetiklenmedi — ilk deneme senin.
+3. Claude Desktop'ı ⌘Q ile kapatıp yeniden aç, Tools menüsünde `westron_*` araçlarının göründüğünü
+   kontrol et (T7 — config eklendi ama uygulama yeniden başlatılmadığı için doğrulanamadı).
+4. Bu oturumda hiçbir ekran gerçek tıklamayla gözle doğrulanmadı (Accessibility izni artık açık
+   ama Westron'un pencere handle'ı bulunamadı — muhtemelen basitçe Dock'tan öne getirilmesi
+   yeterli). Uygulamayı aç, Distribute/NFT akışlarını Confirm adımına kadar gez, Etherscan
+   linklerine tıkla, bulk/distribute'un bakiye/gas/Address Book panellerinin doğru göründüğünü
+   kontrol et — Send'e sen basmadan önce.
+
 ## Subscription backend (Cloudflare Worker) — this session, verified
 
 - **Deployed and live:** `https://westron-subscription.ebaltepe.workers.dev`
