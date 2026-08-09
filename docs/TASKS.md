@@ -5,25 +5,43 @@ Ayrıntılı bağlam: `docs/HANDOFF-2026-08-09.md`. Kurallar: `CLAUDE.md`.
 
 ---
 
-## T1 — Birleşik sürüm hiç çalıştırılmadı  ⚠️ ÖNCE BU
-`c8ddc71` merge'ünden sonra uygulama bir kez bile açılmadı. Sentiment sekmesi ve
-yeniden yazılmış dashboard bu oturumda hiç görülmedi. Merge sırasında 15 dosya
-çakıştı; birinde bile hata varsa ekranda görünür.
+## T1 — Birleşik sürüm hiç çalıştırılmadı  ⚠️ KISMEN DOĞRULANDI (10.08.2026)
+`c8ddc71` merge'ünden sonra uygulama `orion` tarafından fiilen çalıştırıldı
+(`npm run dev:tauri`, `cargo build` 604/604 temiz). Doğrulanan ekranlar:
 
-**Ajanlar:** `orion` (her ekranı yürür, kullanıcı gözüyle rapor eder) →
-`vera` (orion'un bulgularını kanıta bağlar) → bulgu varsa `forge` / `vault`
-**Bitti sayılır:** her ekran açıldı, konsol temiz, bulgular maliyet sırasına dizildi.
+- ✅ Dashboard — gerçek cüzdan/bakiye/gas verisi, konsol temiz
+- ✅ Sentiment sekmesi — açılıyor, veri yoksa `—` yazıyor (uydurma yok); token
+  bölümü kaydırılıp görülemedi
+- ✅ Wallet detail — gerçek veri + kaynağı belirten dürüst boş durumlar
+  ("Alchemy returned no owned NFTs..."), NaN koruması gözle görüldü
+- ✅ Monitor (liste) — gerçek floor/hacim verisi, dürüst boş durumlar
+- ⚠️ **Monitor/collection detay — ekranda AÇILAMADI/görülemedi**, ortam kısıtı
+  yüzünden (bkz. not aşağıda). Kod düzeyinde doğrulandı, ekranda değil.
+- Gezilmeyen (kapsam dışı bırakıldı, düşük risk): settings, alerts/rules,
+  gallery, bulk, sniping, login
+
+**Ortam notu:** bu masaüstünde Accessibility izni yok, pencereler kararsız
+öne geliyor. `orion` ekran otomasyonu sırasında bir tıklama yanlışlıkla
+arka plandaki **gerçek** bir Chrome/OpenSea sekmesine gitti (canlı cüzdan
+bağlı, bakiye görünür) ve sayfada navigasyon yaptı — hiçbir buton
+tetiklenmedi, hiçbir işlem yapılmadı, `orion` riski görüp GUI tıklamayı
+kendiliğinden durdurdu. Bir sonraki ekran-yürüme turunda: ya Accessibility
+izni verilsin ya da test öncesi cüzdan bağlı diğer tarayıcı sekmeleri kapatılsın.
+
+**Kalan iş:** monitor/collection ekranını fiilen açıp WETH rakamını gözle
+doğrulamak. **Ajan:** `vera` (daha güvenli/hedefli bir yöntemle, örn. doğrudan
+URL navigasyonu).
 
 ---
 
-## T2 — Merge borcu: taşınmayan iş
-`WalletDetailClient.tsx` ve `monitor/collection/page.tsx` bütünüyle cowork-merge
-sürümünden alındı. main'in `63e08be` commit'indeki `NftAcceptOfferModal` ve bu iki
-dosyadaki NaN korumaları **taşınmadı**.
+## T2 — Merge borcu: taşınmayan iş  ✅ KAPANDI (10.08.2026, kod düzeyinde doğrulandı)
+Bu maddenin iddiası artık geçersiz. `git diff HEAD origin/main -- WalletDetailClient.tsx
+monitor/collection/page.tsx` **boş** — iki dosya da main ile birebir aynı.
+- `NftAcceptOfferModal`: tanım `WalletDetailClient.tsx:1442`, kullanım `:2455` — mevcut.
+- WETH BigInt hassasiyet düzeltmesi: `monitor/collection/page.tsx:595` — mevcut.
 
-**Ajanlar:** `scout` (main'de ne var, bizde ne yok — `git diff c7df718 origin/main --`
-o iki dosya) → `forge` (taşı) → `vera`
-**Bitti sayılır:** modal çalışıyor, NaN korumaları yerinde, `tsc` temiz.
+Ekranda fiilen açılıp gözlenmedi (bkz. T1'deki ortam kısıtı notu) — kod kanıtı var,
+görsel kanıt henüz yok. Kritik değil, T1'in kalan işiyle birlikte kapanacak.
 
 ---
 
