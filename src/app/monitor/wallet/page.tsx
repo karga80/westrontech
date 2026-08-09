@@ -1,9 +1,25 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { getAssetTransfers, loadAlchemyKey, type AssetTransfer } from '@/lib/tauri';
+import {
+  getAssetTransfers,
+  getPortfolioSnapshot,
+  getPnlSummary,
+  getTradeHistory,
+  getNftPnl,
+  findSisterWallets,
+  loadAlchemyKey,
+  type AssetTransfer,
+  type PortfolioSnapshot,
+  type PnlSummary,
+  type TradeRecord,
+  type NftPnlSummary,
+  type SisterReport,
+  type SisterCandidate,
+  type SisterReason,
+} from '@/lib/tauri';
 import { Tag, TX_TYPE_VARIANT } from '@/components/Tag';
 import { loadWallets } from '@/lib/walletStore';
 import EthIcon from '@/components/EthIcon';
@@ -36,128 +52,185 @@ interface FeedItem {
 }
 
 
-// ── P&L tab data ──────────────────────────────────────────────────────────────
-const TOKEN_PNL = [
-  {
-    name: 'ETH',
-    label: 'Ethereum',
-    color: '#627eea',
-    avgBuy: '$2,142.38',
-    avgSell: '$7,021.63',
-    realized: { val: '-$81,891.30', pos: false },
-    unrealized: { val: '-$2,381.34', pos: false },
-    total: { val: '+$4,179.89', pos: true },
-  },
-  {
-    name: 'USDT',
-    label: 'Tether',
-    color: '#26a17b',
-    avgBuy: '$3.98',
-    avgSell: '$1.80',
-    realized: { val: '+$14.98', pos: true },
-    unrealized: { val: '$0.30', pos: true },
-    total: { val: '+$85.68', pos: true },
-  },
-  {
-    name: 'MATIC',
-    label: 'Polygon',
-    color: '#8247e5',
-    avgBuy: '$4.19',
-    avgSell: '$0.76',
-    realized: { val: '-$808.48', pos: false },
-    unrealized: { val: '$0.30', pos: true },
-    total: { val: '-$418.86', pos: false },
-  },
+// ── Formatting / small helpers ────────────────────────────────────────────────
+//
+// Everything below renders REAL data only. Where a real source does not exist
+// for a field we render '—' (unknown) rather than inventing a value, and where
+// a source exists but needs setup we say what the user has to do.
+
+const HEX_ADDR = /^0x[a-fA-F0-9]{40}$/;
+
+function shortAddr(a: string): string {
+  return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
+
+/** Tauri rejects with the Rust error String; keep the message, never swallow it. */
+function errText(e: unknown, fallback: string): string {
+  if (typeof e === 'string' && e.trim()) return e;
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
+
+function fmtEth(n: number | null | undefined, signed = false): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const sign = signed && n > 0 ? '+' : n < 0 ? '-' : '';
+  return `${sign}${Math.abs(n).toFixed(4)} ETH`;
+}
+
+function fmtUsd(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtPct(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
+
+/**
+ * Analytics timestamps are Alchemy `metadata.blockTimestamp` (ISO) when present
+ * and fall back to a hex block number when it is not. Only the former is a date.
+ */
+function parseTs(s: string | null | undefined): number | null {
+  if (!s) return null;
+  if (/^0x/i.test(s)) return null;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
+}
+
+function fmtUnixDate(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec) || sec <= 0) return '—';
+  return new Date(sec * 1000).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtDuration(fromMs: number | null, toMs: number | null): string {
+  if (fromMs == null || toMs == null) return '—';
+  const ms = toMs - fromMs;
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const h = ms / 3_600_000;
+  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))} min`;
+  if (h < 48) return `${Math.round(h)} hrs`;
+  return `${Math.round(h / 24)} days`;
+}
+
+function windowMs(f: TimeFilter): number | null {
+  switch (f) {
+    case '24h': case '1d': return 86_400_000;
+    case '7d': return 7 * 86_400_000;
+    case '30d': case '1M': case '1m': return 30 * 86_400_000;
+    case '3M': return 90 * 86_400_000;
+    default: return null; // 'ALL' | 'All'
+  }
+}
+
+/** Deterministic swatch so a row keeps its colour between renders. Cosmetic only. */
+const SWATCHES = ['#627eea', '#4fe9b4', '#ffb020', '#a78bfa', '#2fc4d6', '#ff8a96', '#8247e5', '#26a17b'];
+function swatchFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return SWATCHES[h % SWATCHES.length];
+}
+
+const NODE_SWATCHES = [
+  { fill: '#3d0f0f', stroke: '#ff8a96', textColor: '#ff8a96' },
+  { fill: '#0f1f3d', stroke: '#90a6ff', textColor: '#90a6ff' },
+  { fill: '#1a0a2e', stroke: '#c084fc', textColor: '#c084fc' },
+  { fill: '#032232', stroke: '#2fc4d6', textColor: '#2fc4d6' },
+  { fill: '#231500', stroke: '#ffb020', textColor: '#ffb020' },
+  { fill: '#012318', stroke: '#4fe9b4', textColor: '#4fe9b4' },
 ];
 
-const RECENT_TRADES = [
-  { token: 'ETH',        tokenColor: '#627eea', name: 'Ethereum',    eth: '$1,396',  pnl: '+$508.44', pnlPos: true,  pct: '+41.8%', pctPos: true,  duration: '2 days' },
-  { token: 'BAYC#451',   tokenColor: '#ffb020', name: 'Bored Ape',   eth: '$13,491', pnl: '+$5,765',  pnlPos: true,  pct: '+125.4%',pctPos: true,  duration: '10 days' },
-  { token: 'USDC>ETH',   tokenColor: '#26a17b', name: 'Swap',        eth: '$1,886',  pnl: '-$88.82',  pnlPos: false, pct: '-4.61%', pctPos: false, duration: '1 day' },
-  { token: 'Azuki#331',  tokenColor: '#a78bfa', name: 'Azuki',       eth: '$9,108',  pnl: '+$973.30', pnlPos: true,  pct: '+9.75%', pctPos: true,  duration: '5 days' },
-];
+const SISTER_REASON_LABEL: Record<SisterReason, string> = {
+  common_funder: 'Common Funder',
+  funded_target: 'Funded This Wallet',
+  target_funded: 'Funded By This Wallet',
+  round_trip: 'Round Trip',
+};
 
-// ── Related Wallets tab data ───────────────────────────────────────────────────
-const RELATED_WALLETS = [
-  {
-    address: '0x1a3…and',
-    label: '0x1a3...and',
-    tags: [{ text: 'NFT Trace', color: '#ffb020', bg: '#2a1e05' }],
-    inflow: 5000,
-    outflow: 16954,
-    txIn: 5,
-    txOut: 1,
-    balance: '46,732 ETH',
-    action: 'Trade',
-  },
-  {
-    address: '0x4f3…12a68',
-    label: '0x4f3...12a68',
-    tags: [],
-    inflow: 0,
-    outflow: 8000,
-    txIn: 0,
-    txOut: 1,
-    balance: '1 ETH',
-    action: 'Farm',
-  },
-  {
-    address: '0x1b3…a9879',
-    label: '0x1b3...a9879',
-    tags: [{ text: 'Discounted', color: '#ffb020', bg: '#2a1e05' }],
-    inflow: 270,
-    outflow: 1710,
-    txIn: 5,
-    txOut: 2,
-    balance: '0.87 ETH',
-    action: 'Trade',
-  },
-  {
-    address: 'Natural/ir…',
-    label: 'Natural/ir...',
-    tags: [],
-    inflow: 0,
-    outflow: 1944,
-    txIn: 4,
-    txOut: 1,
-    balance: '2,934 ETH',
-    action: 'Trade',
-  },
-];
+// ── Derived row shapes (all built from real command output) ───────────────────
+interface TokenPnlRow {
+  key: string;
+  name: string;
+  color: string;
+  avgBuyEth: number | null;
+  avgSellEth: number | null;
+  realizedEth: number | null;
+  unrealizedEth: number | null;
+  totalEth: number | null;
+}
+
+interface TradeRow {
+  key: string;
+  token: string;
+  color: string;
+  name: string;
+  costEth: number | null;
+  pnlEth: number | null;
+  pctPnl: number | null;
+  duration: string;
+  sortTs: number;
+}
+
+interface BubbleNode {
+  id: string;
+  address: string;
+  label: string;
+  sub: string;
+  x: number;
+  y: number;
+  r: number;
+  fill: string;
+  stroke: string;
+  textColor: string;
+}
+
+interface BubbleEdge {
+  from: string;
+  to: string;
+  color: string;
+  width: number;
+  label: string;
+  dashed: boolean;
+}
 
 // ── SVG helpers ───────────────────────────────────────────────────────────────
-function DualPnLChart() {
+/**
+ * Cumulative realized P&L (ETH) over the closed trades returned by
+ * `get_trade_history`. No synthetic series — if there is nothing to plot the
+ * caller renders an empty state instead of calling this.
+ */
+function PnlAreaChart({ points }: { points: number[] }) {
   const W = 700, H = 100;
-  const greenPts = [0.3,0.32,0.28,0.35,0.38,0.42,0.48,0.55,0.52,0.60,0.65,0.70,0.68,0.75,0.72,0.80,0.85,0.82,0.88,0.92,0.90,0.95,1.00];
-  const redPts   = [0.10,0.12,0.15,0.12,0.08,0.10,0.12,0.08,0.10,0.12,0.08,0.05,0.08,0.06,0.10,0.08,0.05,0.06,0.04,0.05,0.03,0.04,0.02];
-  const n = greenPts.length;
-  const midY = H * 0.42;
-
-  const gCoords = greenPts.map((y, i) => ({ x: (i/(n-1))*W, y: midY - y * midY * 0.9 }));
-  const rCoords = redPts.map((y, i) => ({ x: (i/(n-1))*W, y: midY + y * (H - midY) * 0.85 }));
-
-  const gLine = gCoords.map((p,i) => `${i===0?'M':'L'}${p.x},${p.y}`).join(' ');
-  const gArea = `${gLine} L${W},${midY} L0,${midY} Z`;
-  const rLine = rCoords.map((p,i) => `${i===0?'M':'L'}${p.x},${p.y}`).join(' ');
-  const rArea = `${rLine} L${W},${midY} L0,${midY} Z`;
+  const n = points.length;
+  const max = Math.max(...points, 0);
+  const min = Math.min(...points, 0);
+  const span = max - min || 1;
+  // Zero line sits proportionally inside the box so gains draw up, losses down.
+  const zeroY = H - ((0 - min) / span) * H;
+  const coords = points.map((v, i) => ({
+    x: n === 1 ? W : (i / (n - 1)) * W,
+    y: H - ((v - min) / span) * H,
+  }));
+  const line = coords.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+  const area = `${line} L${W},${zeroY} L0,${zeroY} Z`;
+  const positive = (points[n - 1] ?? 0) >= 0;
+  const stroke = positive ? '#4fe9b4' : '#ff8a96';
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 100 }} preserveAspectRatio="none">
       <defs>
-        <linearGradient id="gGrad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="pnlGradUp" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#4fe9b4" stopOpacity="0.4" />
           <stop offset="100%" stopColor="#4fe9b4" stopOpacity="0.02" />
         </linearGradient>
-        <linearGradient id="rGrad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="pnlGradDown" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ff8a96" stopOpacity="0.05" />
           <stop offset="100%" stopColor="#ff8a96" stopOpacity="0.35" />
         </linearGradient>
       </defs>
-      <line x1="0" y1={midY} x2={W} y2={midY} stroke="#27272a" strokeWidth="0.5" />
-      <path d={gArea} fill="url(#gGrad)" />
-      <path d={gLine} fill="none" stroke="#4fe9b4" strokeWidth="1.5" />
-      <path d={rArea} fill="url(#rGrad)" />
-      <path d={rLine} fill="none" stroke="#ff8a96" strokeWidth="1.5" />
+      <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="#27272a" strokeWidth="0.5" />
+      <path d={area} fill={positive ? 'url(#pnlGradUp)' : 'url(#pnlGradDown)'} />
+      <path d={line} fill="none" stroke={stroke} strokeWidth="1.5" />
     </svg>
   );
 }
@@ -196,41 +269,23 @@ function HBar({ value, max, color }: { value: number; max: number; color: string
 }
 
 // ── Connections Bubble Map ─────────────────────────────────────────────────────
-const BUBBLE_NODES = [
-  { id: 'center', label: '0x7034…a122e', sub: 'This Wallet',   x: 450, y: 258, r: 44, fill: '#3b1f7a', stroke: '#a78bfa', textColor: '#f2f2f7' },
-  { id: 'n1',     label: '0x1a3…and',    sub: '$21.9K Flow',   x: 672, y: 148, r: 30, fill: '#3d0f0f', stroke: '#ff8a96', textColor: '#ff8a96' },
-  { id: 'n2',     label: '0x4f3…12a68',  sub: '$8K Out',       x: 648, y: 378, r: 26, fill: '#0f1f3d', stroke: '#90a6ff', textColor: '#90a6ff' },
-  { id: 'n3',     label: '0x1b3…a9879',  sub: '$1.98K Flow',   x: 228, y: 358, r: 22, fill: '#1a0a2e', stroke: '#c084fc', textColor: '#c084fc' },
-  { id: 'n4',     label: 'Natural/ir…',  sub: '$1.9K Out',     x: 262, y: 128, r: 20, fill: '#032232', stroke: '#2fc4d6', textColor: '#2fc4d6' },
-  { id: 'n5',     label: 'Exchange',      sub: 'CEX Hub',       x: 840, y: 235, r: 15, fill: '#231500', stroke: '#ffb020', textColor: '#ffb020' },
-  { id: 'n6',     label: 'DeFi Pool',     sub: 'Contract',      x: 118, y: 265, r: 13, fill: '#012318', stroke: '#4fe9b4', textColor: '#4fe9b4' },
-];
+// Nodes/edges are built from a real `find_sister_wallets` SisterReport by the
+// page and passed in. Edge labels are transfer COUNTS (the only quantity the
+// report carries) — never invented value flows.
 
-const BUBBLE_EDGES = [
-  { from: 'center', to: 'n1', color: '#ff8a96', width: 2.2, label: '16.9K', dashed: false },
-  { from: 'n1',     to: 'center', color: '#4fe9b4', width: 1.2, label: '5K',    dashed: true  },
-  { from: 'center', to: 'n2', color: '#ff8a96', width: 1.8, label: '8K',    dashed: false },
-  { from: 'center', to: 'n3', color: '#ff8a96', width: 1.2, label: '1.7K',  dashed: false },
-  { from: 'n3',     to: 'center', color: '#4fe9b4', width: 0.8, label: '270',   dashed: true  },
-  { from: 'center', to: 'n4', color: '#ff8a96', width: 1.2, label: '1.9K',  dashed: false },
-  { from: 'n1',     to: 'n5', color: '#ffb020', width: 1.0, label: '',      dashed: true  },
-  { from: 'n3',     to: 'n6', color: '#4fe9b4', width: 0.8, label: '',      dashed: true  },
-];
-
-const NODE_TAGS: Record<string, { text: string; color: string; bg: string }[]> = {
-  n1: [{ text: 'NFT Trace', color: '#ffb020', bg: '#2a1e05' }],
-  n3: [{ text: 'Discounted', color: '#ffb020', bg: '#2a1e05' }],
-};
-
-function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => void }) {
-  const nodeMap = Object.fromEntries(BUBBLE_NODES.map(n => [n.id, n]));
+function ConnectionsBubbleMap({ nodes, edges, onSelectNode }: {
+  nodes: BubbleNode[];
+  edges: BubbleEdge[];
+  onSelectNode: (id: string) => void;
+}) {
+  const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
 
   return (
     <svg viewBox="0 0 960 510" className="w-full" style={{ height: '100%' }} xmlns="http://www.w3.org/2000/svg">
       <defs>
         {/* Glow filters per node */}
-        {BUBBLE_NODES.map(n => (
-          <filter key={n.id} id={`glow-${n.id}`} x="-60%" y="-60%" width="220%" height="220%">
+        {nodes.map((n, ni) => (
+          <filter key={n.id} id={`glow-${ni}`} x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="6" result="blur" />
             <feFlood floodColor={n.stroke} floodOpacity="0.55" result="color" />
             <feComposite in="color" in2="blur" operator="in" result="glow" />
@@ -244,10 +299,13 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
         <marker id="arrow-in" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L0,6 L6,3 Z" fill="#4fe9b4" opacity="0.7" />
         </marker>
+        <marker id="arrow-link" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L6,3 Z" fill="#6e7590" opacity="0.7" />
+        </marker>
       </defs>
 
       {/* ── Edges ── */}
-      {BUBBLE_EDGES.map((e, i) => {
+      {edges.map((e, i) => {
         const src = nodeMap[e.from];
         const dst = nodeMap[e.to];
         if (!src || !dst) return null;
@@ -261,7 +319,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
         const cx = mx + (dx / len) * offset;
         const cy = my + (dy / len) * offset;
         const path = `M ${src.x} ${src.y} Q ${cx} ${cy} ${dst.x} ${dst.y}`;
-        const markerId = e.color === '#4fe9b4' ? 'arrow-in' : 'arrow-out';
+        const markerId = e.color === '#4fe9b4' ? 'arrow-in' : e.color === '#ff8a96' ? 'arrow-out' : 'arrow-link';
         return (
           <g key={i}>
             <path
@@ -282,7 +340,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
                 opacity="0.75"
                 style={{ fontFamily: 'var(--font-jetbrains)' }}
               >
-                ${e.label}
+                {e.label}
               </text>
             )}
           </g>
@@ -290,8 +348,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
       })}
 
       {/* ── Nodes ── */}
-      {BUBBLE_NODES.map(n => {
-        const tags = NODE_TAGS[n.id] ?? [];
+      {nodes.map((n, ni) => {
         const isCenter = n.id === 'center';
         return (
           <g
@@ -303,7 +360,7 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
             <circle cx={n.x} cy={n.y} r={n.r + 6} fill="none" stroke={n.stroke} strokeWidth="1" opacity="0.18" />
             {/* Main bubble */}
             <circle cx={n.x} cy={n.y} r={n.r} fill={n.fill} stroke={n.stroke} strokeWidth={isCenter ? 1.8 : 1.2}
-              filter={`url(#glow-${n.id})`} />
+              filter={`url(#glow-${ni})`} />
             {/* Center pulse ring */}
             {isCenter && (
               <circle cx={n.x} cy={n.y} r={n.r + 12} fill="none" stroke="#a78bfa" strokeWidth="0.5" opacity="0.35" strokeDasharray="3 3" />
@@ -318,16 +375,6 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
               style={{ fontFamily: 'var(--font-jetbrains)' }}>
               {n.sub}
             </text>
-            {/* Tags */}
-            {tags.map((tag, ti) => (
-              <g key={ti}>
-                <rect x={n.x - 28} y={n.y + n.r + 28 + ti * 14} width="56" height="12" rx="2" fill={tag.bg} opacity="0.9" />
-                <text x={n.x} y={n.y + n.r + 37 + ti * 14} textAnchor="middle" fill={tag.color} fontSize="7.5" fontWeight="700"
-                  style={{ fontFamily: 'var(--font-jetbrains)' }}>
-                  {tag.text}
-                </text>
-              </g>
-            ))}
             {/* Short address label inside big nodes */}
             {n.r >= 26 && (
               <text x={n.x} y={n.y + 4} textAnchor="middle" fill={n.textColor} fontSize={isCenter ? '11' : '9'}
@@ -346,12 +393,15 @@ function ConnectionsBubbleMap({ onSelectNode }: { onSelectNode: (id: string) => 
 // ── Wallet header sub-component ───────────────────────────────────────────────
 const TABS: Tab[] = ['Info', 'Feed', 'Portfolio', 'P&L', 'Stats', 'Connections'];
 
-function WalletHeader({ tab, setTab, display, address, raw }: {
+function WalletHeader({ tab, setTab, display, address, raw, snapshot, snapshotLoading, snapshotError }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   display: string;
   address: string;
   raw: string;
+  snapshot: PortfolioSnapshot | null;
+  snapshotLoading: boolean;
+  snapshotError: string | null;
 }) {
   return (
     <div className="border-b border-[#14161f] px-12 pt-6 pb-0">
@@ -371,25 +421,49 @@ function WalletHeader({ tab, setTab, display, address, raw }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 leading-none flex-wrap">
             <span className="text-[22px] font-bold text-white leading-none">{display}</span>
-            <a href={`https://etherscan.io/address/${raw}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
-              <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
+            {raw && (
+              <a href={`https://etherscan.io/address/${raw}`} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[#6e7590] hover:text-[#9298b8] transition-colors flex">
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </a>
+            )}
           </div>
-          <span className="text-[#6e7590] text-[11px] mt-0.5 font-mono">{raw}</span>
+          <span className="text-[#6e7590] text-[11px] mt-0.5 font-mono">{raw || '—'}</span>
         </div>
       </div>
 
-      {/* Stats row */}
+      {/* Stats row — live from get_portfolio_snapshot */}
       <div className="flex items-center gap-4 mb-4">
         <div className="bg-[#14161f] border border-[#14161f] px-6 py-4 min-w-[180px]">
           <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Native Token Balance</div>
-          <div className="text-[18px] font-bold text-white leading-none">4.32 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
-          <div className="text-[11px] text-[#6e7590] mt-1">$11,232</div>
+          {snapshotLoading ? (
+            <div className="text-[13px] text-[#6e7590] leading-none py-[3px]">Loading…</div>
+          ) : snapshot ? (
+            <div className="text-[18px] font-bold text-white leading-none">
+              {snapshot.eth_balance.toFixed(4)} <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} />
+            </div>
+          ) : (
+            <div className="text-[18px] font-bold text-[#6e7590] leading-none">—</div>
+          )}
+          <div className="text-[11px] mt-1" style={{ color: !snapshotLoading && !snapshot && snapshotError ? '#ff8a96' : '#6e7590' }}>
+            {snapshotLoading ? 'Fetching balance…' : snapshot ? fmtUsd(snapshot.eth_balance * snapshot.eth_price_usd) : (snapshotError ?? 'No data yet')}
+          </div>
         </div>
         <div className="bg-[#14161f] border border-[#14161f] px-6 py-4 min-w-[180px]">
           <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Portfolio Value</div>
-          <div className="text-[18px] font-bold text-white leading-none">18.7 <EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></div>
-          <div className="text-[11px] text-[#6e7590] mt-1">$48,620</div>
+          {snapshotLoading ? (
+            <div className="text-[13px] text-[#6e7590] leading-none py-[3px]">Loading…</div>
+          ) : snapshot ? (
+            <div className="text-[18px] font-bold text-white leading-none">{fmtUsd(snapshot.portfolio_value_usd)}</div>
+          ) : (
+            <div className="text-[18px] font-bold text-[#6e7590] leading-none">—</div>
+          )}
+          <div className="text-[11px] mt-1" style={{ color: !snapshotLoading && !snapshot && snapshotError ? '#ff8a96' : '#6e7590' }}>
+            {snapshotLoading
+              ? 'Fetching portfolio…'
+              : snapshot
+                ? `ETH only · ${snapshot.token_count} tokens · ${snapshot.nft_count} NFTs`
+                : (snapshotError ?? 'No data yet')}
+          </div>
         </div>
       </div>
 
@@ -420,26 +494,101 @@ function MonitorWalletInner() {
   const hoverOff = (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; };
   const [tab, setTab] = useState<Tab>('Feed');
 
-  const walletAddress = searchParams.get('address') ?? '0x7034…a122e';
-  const walletLabel   = searchParams.get('label') ?? '';
-  const walletRaw     = searchParams.get('raw') ?? '0x7034a122e5a4b0f7f6b4a3e9d8c21045b7f3a122e';
-  const walletDisplay = walletLabel || walletAddress;
+  const paramAddress = searchParams.get('address') ?? '';
+  const walletLabel  = searchParams.get('label') ?? '';
+  const paramRaw     = searchParams.get('raw') ?? '';
 
   useEffect(() => {
     if (searchParams.get('tab') === 'connections') setTab('Connections');
   }, [searchParams]);
   const [feedFilters, setFeedFilters] = useState<Set<string>>(new Set());
   const [feedTimeRange, setFeedTimeRange] = useState<'1d' | '7d' | '30d' | 'all'>('all');
-  const [pnlTime, setPnlTime] = useState<TimeFilter>('7d');
+  const [pnlTime, setPnlTime] = useState<TimeFilter>('ALL');
   const [statsTime, setStatsTime] = useState<TimeFilter>('3M');
-  const [relTime, setRelTime] = useState<TimeFilter>('30d');
-  const [liveFeed, setLiveFeed] = useState<FeedItem[] | null>(null);
+  const [relTime, setRelTime] = useState<TimeFilter>('All');
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
-  useEffect(() => {
-    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    const addr = loadWallets()[0]?.address ?? '';
+  // ── Shared bootstrap: which wallet, which key, are we in the desktop app ────
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [inTauri, setInTauri] = useState(false);
+  const [alchemyKey, setAlchemyKey] = useState('');
+  const [address, setAddress] = useState('');
 
+  // ── Per-block async state (each tab fetches only what it shows) ─────────────
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(true);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+
+  const [liveFeed, setLiveFeed] = useState<FeedItem[] | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedLoaded, setFeedLoaded] = useState(false);
+
+  const [pnl, setPnl] = useState<PnlSummary | null>(null);
+  const [trades, setTrades] = useState<TradeRecord[] | null>(null);
+  const [nftPnl, setNftPnl] = useState<NftPnlSummary | null>(null);
+  const [nftPnlError, setNftPnlError] = useState<string | null>(null);
+  const [pnlLoading, setPnlLoading] = useState(false);
+  const [pnlError, setPnlError] = useState<string | null>(null);
+  const [pnlLoaded, setPnlLoaded] = useState(false);
+
+  const [sisters, setSisters] = useState<SisterReport | null>(null);
+  const [sistersLoading, setSistersLoading] = useState(false);
+  const [sistersError, setSistersError] = useState<string | null>(null);
+  const [sistersLoaded, setSistersLoaded] = useState(false);
+
+  const walletDisplay = walletLabel || paramAddress || (address ? shortAddr(address) : 'Wallet');
+
+  useEffect(() => {
+    const tauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    setInTauri(tauri);
+
+    // Only a real 40-hex address is usable; otherwise fall back to the first
+    // wallet the user actually has. Never a placeholder.
+    let addr = HEX_ADDR.test(paramRaw) ? paramRaw : HEX_ADDR.test(paramAddress) ? paramAddress : '';
+    if (!addr) {
+      try { addr = loadWallets()[0]?.address ?? ''; } catch { addr = ''; }
+    }
+    setAddress(HEX_ADDR.test(addr) ? addr : '');
+
+    if (!tauri) { setBootstrapped(true); return; }
+    loadAlchemyKey()
+      .then(k => setAlchemyKey(k ?? ''))
+      .catch(() => setAlchemyKey(''))
+      .finally(() => setBootstrapped(true));
+  }, [paramRaw, paramAddress]);
+
+  /** Shared precondition check — returns the blocking message, or null if good. */
+  const blockedReason = (needsAlchemy: boolean): string | null => {
+    if (!inTauri) return 'Live data needs the Westron desktop app.';
+    if (!address) return 'No wallet selected — open this page from Monitor or add a wallet first.';
+    if (needsAlchemy && !alchemyKey) return 'Add an Alchemy API key in Settings to load this data.';
+    return null;
+  };
+
+  // ── Header snapshot (always visible, so it loads on mount — one command) ────
+  useEffect(() => {
+    if (!bootstrapped) return;
+    const blocked = blockedReason(true);
+    if (blocked) { setSnapshot(null); setSnapshotError(blocked); setSnapshotLoading(false); return; }
+    let cancelled = false;
+    setSnapshotLoading(true);
+    setSnapshotError(null);
+    getPortfolioSnapshot(address, alchemyKey)
+      .then(s => { if (!cancelled) setSnapshot(s); })
+      .catch(e => { if (!cancelled) setSnapshotError(errText(e, 'Failed to load balances.')); })
+      .finally(() => { if (!cancelled) setSnapshotLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, inTauri, address, alchemyKey]);
+
+  // ── Feed tab: real transfers (get_asset_transfers), fetched once ───────────
+  useEffect(() => {
+    if (!bootstrapped || tab !== 'Feed' || feedLoaded) return;
+    const blocked = blockedReason(true);
+    if (blocked) { setFeedError(blocked); setLiveFeed([]); setFeedLoaded(true); return; }
+
+    const addr = address;
     const toFeedItem = (t: AssetTransfer): FeedItem => {
       const isOut = t.from.toLowerCase() === addr.toLowerCase();
       const type  = isOut ? 'Sent' : 'Receive';
@@ -468,18 +617,239 @@ function MonitorWalletInner() {
       };
     };
 
-    if (!inTauri) return;
+    let cancelled = false;
+    setFeedLoading(true);
+    setFeedError(null);
+    getAssetTransfers(addr, alchemyKey)
+      .then(transfers => { if (!cancelled) setLiveFeed(transfers.map(toFeedItem)); })
+      .catch(e => { if (!cancelled) { setFeedError(errText(e, 'Failed to load transfers.')); setLiveFeed([]); } })
+      .finally(() => { if (!cancelled) { setFeedLoading(false); setFeedLoaded(true); } });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, tab, feedLoaded, inTauri, address, alchemyKey]);
+
+  // ── P&L tab: get_pnl_summary → get_trade_history → get_nft_pnl ─────────────
+  // Sequential on purpose: the free Alchemy tier has already produced 429s on
+  // this app when a screen fires several transfer-heavy commands at once.
+  useEffect(() => {
+    if (!bootstrapped || tab !== 'P&L' || pnlLoaded) return;
+    const blocked = blockedReason(true);
+    if (blocked) { setPnlError(blocked); setPnlLoaded(true); return; }
+
+    let cancelled = false;
+    setPnlLoading(true);
+    setPnlError(null);
+    setNftPnlError(null);
+
     (async () => {
-      const key = await loadAlchemyKey().catch(() => '');
-      if (!key || !addr) return;
-      const transfers = await getAssetTransfers(addr, key).catch(() => [] as AssetTransfer[]);
-      setLiveFeed(transfers.map(toFeedItem));
+      try {
+        const summary = await getPnlSummary(address, alchemyKey);
+        if (cancelled) return;
+        setPnl(summary);
+
+        const history = await getTradeHistory(address, alchemyKey);
+        if (cancelled) return;
+        setTrades(history);
+
+        // Cost-basis unrealized is an optional enrichment for the per-token
+        // column. A failure here must not blank the rest of the tab.
+        try {
+          const np = await getNftPnl(address, alchemyKey);
+          if (!cancelled) setNftPnl(np);
+        } catch (e) {
+          if (!cancelled) setNftPnlError(errText(e, 'Cost-basis data unavailable.'));
+        }
+      } catch (e) {
+        if (!cancelled) setPnlError(errText(e, 'Failed to load P&L.'));
+      } finally {
+        if (!cancelled) { setPnlLoading(false); setPnlLoaded(true); }
+      }
     })();
-  }, []);
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, tab, pnlLoaded, inTauri, address, alchemyKey]);
+
+  // ── Connections tab: find_sister_wallets (Etherscan, needs its own key) ────
+  useEffect(() => {
+    if (!bootstrapped || tab !== 'Connections' || sistersLoaded) return;
+    const blocked = blockedReason(false);
+    if (blocked) { setSistersError(blocked); setSistersLoaded(true); return; }
+
+    let cancelled = false;
+    setSistersLoading(true);
+    setSistersError(null);
+    findSisterWallets(address)
+      .then(r => { if (!cancelled) setSisters(r); })
+      .catch(e => { if (!cancelled) setSistersError(errText(e, 'Failed to find related wallets.')); })
+      .finally(() => { if (!cancelled) { setSistersLoading(false); setSistersLoaded(true); } });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, tab, sistersLoaded, inTauri, address]);
+
+  // ── Derived: per-token P&L rows from real trade history + NFT cost basis ───
+  const tokenPnlRows = useMemo<TokenPnlRow[]>(() => {
+    if (!trades) return [];
+    const groups = new Map<string, TradeRecord[]>();
+    for (const t of trades) {
+      const key = (t.contract_address || 'unknown').toLowerCase();
+      const list = groups.get(key);
+      if (list) list.push(t); else groups.set(key, [t]);
+    }
+
+    // Unrealized per collection comes from get_nft_pnl items (locally stored
+    // cost basis + current floor). Keyed on the collection label the trade
+    // history uses, so unmatched groups honestly show '—'.
+    const unrealizedByKey = new Map<string, number>();
+    for (const item of nftPnl?.items ?? []) {
+      if (item.unrealized_eth == null) continue;
+      for (const k of [item.collection, item.contract]) {
+        if (!k) continue;
+        const lk = k.toLowerCase();
+        unrealizedByKey.set(lk, (unrealizedByKey.get(lk) ?? 0) + item.unrealized_eth);
+      }
+    }
+
+    const rows: TokenPnlRow[] = [];
+    groups.forEach((list, key) => {
+      const buys = list.filter(t => t.buy_price_eth > 0);
+      const sells = list.filter(t => t.sell_price_eth != null && t.sell_price_eth > 0);
+      const closed = list.filter(t => t.pnl_eth != null);
+      const realized = closed.length ? closed.reduce((a, t) => a + (t.pnl_eth ?? 0), 0) : null;
+      const unrealized = unrealizedByKey.has(key) ? (unrealizedByKey.get(key) as number) : null;
+      const total = realized == null && unrealized == null ? null : (realized ?? 0) + (unrealized ?? 0);
+      rows.push({
+        key,
+        name: list[0].contract_address || 'unknown',
+        color: swatchFor(key),
+        avgBuyEth: buys.length ? buys.reduce((a, t) => a + t.buy_price_eth, 0) / buys.length : null,
+        avgSellEth: sells.length ? sells.reduce((a, t) => a + (t.sell_price_eth ?? 0), 0) / sells.length : null,
+        realizedEth: realized,
+        unrealizedEth: unrealized,
+        totalEth: total,
+      });
+    });
+    return rows.sort((a, b) => Math.abs(b.totalEth ?? 0) - Math.abs(a.totalEth ?? 0)).slice(0, 25);
+  }, [trades, nftPnl]);
+
+  // ── Derived: recent trades + cumulative realized curve, within the window ──
+  const pnlWindow = windowMs(pnlTime);
+
+  const recentTrades = useMemo<TradeRow[]>(() => {
+    if (!trades) return [];
+    const cutoff = pnlWindow == null ? null : Date.now() - pnlWindow;
+    return trades
+      .map<TradeRow | null>((t, i) => {
+        const buyTs = parseTs(t.buy_timestamp);
+        const sellTs = parseTs(t.sell_timestamp);
+        const sortTs = sellTs ?? buyTs;
+        if (cutoff != null && (sortTs == null || sortTs < cutoff)) return null;
+        const shortId = t.token_id ? `#${t.token_id.length > 8 ? `${t.token_id.slice(0, 6)}…` : t.token_id}` : '';
+        const cost = t.buy_price_eth > 0 ? t.buy_price_eth : null;
+        const pnlEth = t.pnl_eth ?? null;
+        return {
+          key: `${t.buy_tx_hash}-${t.token_id}-${i}`,
+          token: `${t.contract_address || 'unknown'}${shortId}`,
+          color: swatchFor(t.contract_address || 'unknown'),
+          name: t.contract_address || '—',
+          costEth: cost,
+          pnlEth,
+          pctPnl: pnlEth != null && cost != null && cost > 0 ? (pnlEth / cost) * 100 : null,
+          duration: t.sell_timestamp ? fmtDuration(buyTs, sellTs) : 'Open',
+          sortTs: sortTs ?? 0,
+        };
+      })
+      .filter((r): r is TradeRow => r !== null)
+      .sort((a, b) => b.sortTs - a.sortTs)
+      .slice(0, 25);
+  }, [trades, pnlWindow]);
+
+  const pnlCurve = useMemo<number[]>(() => {
+    if (!trades) return [];
+    const cutoff = pnlWindow == null ? null : Date.now() - pnlWindow;
+    const closed = trades
+      .map(t => ({ ts: parseTs(t.sell_timestamp), pnl: t.pnl_eth }))
+      .filter((t): t is { ts: number; pnl: number } => t.ts != null && t.pnl != null)
+      .filter(t => cutoff == null || t.ts >= cutoff)
+      .sort((a, b) => a.ts - b.ts);
+    let acc = 0;
+    return closed.map(t => (acc += t.pnl));
+  }, [trades, pnlWindow]);
+
+  // ── Derived: related-wallet graph from the real SisterReport ──────────────
+  const sisterCandidates = useMemo<SisterCandidate[]>(() => {
+    const list = sisters?.candidates ?? [];
+    const win = windowMs(relTime);
+    const cutoffSec = win == null ? null : (Date.now() - win) / 1000;
+    const filtered = cutoffSec == null
+      ? list
+      : list.filter(c => c.last_interaction != null && c.last_interaction >= cutoffSec);
+    return [...filtered].sort((a, b) => b.score - a.score).slice(0, 8);
+  }, [sisters, relTime]);
+
+  const bubbleNodes = useMemo<BubbleNode[]>(() => {
+    if (!address) return [];
+    const center: BubbleNode = {
+      id: 'center', address, label: shortAddr(address), sub: 'This Wallet',
+      x: 480, y: 255, r: 44, fill: '#3b1f7a', stroke: '#a78bfa', textColor: '#f2f2f7',
+    };
+    const n = sisterCandidates.length;
+    const others = sisterCandidates.map((c, i) => {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1);
+      const ring = i % 2 === 0 ? 1 : 0.82;
+      const sw = NODE_SWATCHES[i % NODE_SWATCHES.length];
+      return {
+        id: c.address,
+        address: c.address,
+        label: shortAddr(c.address),
+        sub: `Score ${c.score}`,
+        x: 480 + Math.cos(angle) * 330 * ring,
+        y: 255 + Math.sin(angle) * 165 * ring,
+        r: 14 + Math.round((Math.min(c.score, 100) / 100) * 20),
+        fill: sw.fill, stroke: sw.stroke, textColor: sw.textColor,
+      };
+    });
+    return [center, ...others];
+  }, [address, sisterCandidates]);
+
+  const bubbleEdges = useMemo<BubbleEdge[]>(() => {
+    const edges: BubbleEdge[] = [];
+    for (const c of sisterCandidates) {
+      if (c.direct_out > 0) {
+        edges.push({
+          from: 'center', to: c.address, color: '#ff8a96',
+          width: 1 + Math.min(c.direct_out, 6) * 0.25,
+          label: `${c.direct_out} tx`, dashed: false,
+        });
+      }
+      if (c.direct_in > 0) {
+        edges.push({
+          from: c.address, to: 'center', color: '#4fe9b4',
+          width: 1 + Math.min(c.direct_in, 6) * 0.25,
+          label: `${c.direct_in} tx`, dashed: true,
+        });
+      }
+      if (c.direct_out === 0 && c.direct_in === 0) {
+        // Linked by a shared funder rather than a direct transfer.
+        edges.push({ from: 'center', to: c.address, color: '#6e7590', width: 0.8, label: '', dashed: true });
+      }
+    }
+    return edges;
+  }, [sisterCandidates]);
+
+  const selectedCandidate = sisterCandidates.find(c => c.address === selectedNode) ?? null;
 
   return (
     <div className="min-h-full flex flex-col" style={{ backgroundColor: 'var(--wr-bg)', color: 'var(--wr-text)' }}>
-      <WalletHeader tab={tab} setTab={setTab} display={walletDisplay} address={walletAddress} raw={walletRaw} />
+      <WalletHeader
+        tab={tab} setTab={setTab}
+        display={walletDisplay}
+        address={address || paramAddress}
+        raw={address}
+        snapshot={snapshot}
+        snapshotLoading={snapshotLoading}
+        snapshotError={snapshotError}
+      />
 
       <div className="flex-1 px-12 py-6">
 
@@ -495,12 +865,12 @@ function MonitorWalletInner() {
                 <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--wr-border)', backgroundColor: 'var(--wr-surface-alt)' }}>
                   <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--wr-text-3)' }}>Full Address</div>
                   <div className="flex items-center gap-3">
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
-                      0x7034a122e5a4b0f7f6b4a3e9d8c21045b7f3a122e
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: address ? 'var(--wr-text)' : 'var(--wr-text-3)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                      {address || 'No wallet selected'}
                     </span>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0" style={{ display: address ? undefined : 'none' }}>
                       <button
-                        onClick={() => navigator.clipboard.writeText('0x7034a122e5a4b0f7f6b4a3e9d8c21045b7f3a122e')}
+                        onClick={() => { if (address) navigator.clipboard.writeText(address); }}
                         className="transition-colors"
                         style={{ color: 'var(--wr-text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
                         title="Copy address"
@@ -510,7 +880,7 @@ function MonitorWalletInner() {
                           <path d="M2 9V3C2 2.4 2.4 2 3 2H9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
                         </svg>
                       </button>
-                      <a href="https://etherscan.io/address/0x7034a122e5a4b0f7f6b4a3e9d8c21045b7f3a122e" target="_blank" rel="noopener noreferrer" className="transition-colors flex" style={{ color: 'var(--wr-text-3)' }} title="View on Etherscan">
+                      <a href={`https://etherscan.io/address/${address}`} target="_blank" rel="noopener noreferrer" className="transition-colors flex" style={{ color: 'var(--wr-text-3)' }} title="View on Etherscan">
                         <svg width="13" height="13" viewBox="0 0 10 10" fill="none"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </a>
                     </div>
@@ -694,7 +1064,16 @@ function MonitorWalletInner() {
 
             {/* Transactions */}
             <div className="border border-[#14161f] overflow-hidden">
-              {(liveFeed ?? []).filter(item => {
+              {feedLoading && (
+                <div className="px-4 py-6 text-[11px] text-[#6e7590]">Loading transfers…</div>
+              )}
+              {!feedLoading && feedError && (
+                <div className="px-4 py-6 text-[11px]" style={{ color: '#ff8a96' }}>{feedError}</div>
+              )}
+              {!feedLoading && !feedError && liveFeed !== null && liveFeed.length === 0 && (
+                <div className="px-4 py-6 text-[11px] text-[#6e7590]">No transfers found for this wallet.</div>
+              )}
+              {!feedLoading && (liveFeed ?? []).filter(item => {
                 // Type filter (multi-select; empty set = show all)
                 if (feedFilters.size > 0 && !feedFilters.has(item.type)) return false;
                 // Time range filter
@@ -857,25 +1236,52 @@ function MonitorWalletInner() {
                     <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
-                {TOKEN_PNL.map(tok => (
-                  <div key={tok.name} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
+                {pnlLoading && (
+                  <div className="px-4 py-6 text-[11px] text-[#6e7590]">Loading trade history…</div>
+                )}
+                {!pnlLoading && pnlError && (
+                  <div className="px-4 py-6 text-[11px]" style={{ color: '#ff8a96' }}>{pnlError}</div>
+                )}
+                {!pnlLoading && !pnlError && trades !== null && tokenPnlRows.length === 0 && (
+                  <div className="px-4 py-6 text-[11px] text-[#6e7590]">
+                    No matched trades found for this wallet. Westron pairs on-chain NFT transfers into trades — buys with no matching sale appear once they are sold.
+                  </div>
+                )}
+                {!pnlLoading && !pnlError && tokenPnlRows.map(row => (
+                  <div key={row.key} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '1.5fr 1fr 1fr 1.2fr 1.2fr 1.2fr' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
-                        style={{ backgroundColor: tok.color }}>{tok.name[0]}</span>
-                      <div>
-                        <div className="text-[12px] text-white font-medium">{tok.name}</div>
-                        <div className="text-[9px] text-[#6e7590]">{tok.label}</div>
+                        style={{ backgroundColor: row.color }}>{row.name.slice(0, 1).toUpperCase()}</span>
+                      <div className="min-w-0">
+                        <div className="text-[12px] text-white font-medium truncate">{row.name}</div>
+                        <div className="text-[9px] text-[#6e7590]">On-chain trades</div>
                       </div>
                     </div>
-                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.avgBuy}</div>
-                    <div className="text-[11px] text-[#9298b8] tabular-nums">{tok.avgSell}</div>
-                    <div className={`text-[11px] font-medium tabular-nums ${tok.realized.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.realized.val}</div>
-                    <div className={`text-[11px] tabular-nums ${tok.unrealized.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.unrealized.val}</div>
-                    <div className={`text-[11px] font-bold tabular-nums ${tok.total.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{tok.total.val}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{fmtEth(row.avgBuyEth)}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{fmtEth(row.avgSellEth)}</div>
+                    <div className={`text-[11px] font-medium tabular-nums ${row.realizedEth == null ? 'text-[#6e7590]' : row.realizedEth >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtEth(row.realizedEth, true)}
+                    </div>
+                    <div className={`text-[11px] tabular-nums ${row.unrealizedEth == null ? 'text-[#6e7590]' : row.unrealizedEth >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtEth(row.unrealizedEth, true)}
+                    </div>
+                    <div className={`text-[11px] font-bold tabular-nums ${row.totalEth == null ? 'text-[#6e7590]' : row.totalEth >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtEth(row.totalEth, true)}
+                    </div>
                   </div>
                 ))}
               </div>
+              {!pnlLoading && !pnlError && nftPnlError && (
+                <p className="text-[9px] mt-2" style={{ color: '#ff8a96' }}>
+                  Unrealized column unavailable: {nftPnlError}
+                </p>
+              )}
+              {!pnlLoading && !pnlError && !nftPnlError && tokenPnlRows.length > 0 && (
+                <p className="text-[9px] text-[#6e7590] mt-2">
+                  Values in ETH. Unrealized comes from stored cost basis vs current floor; &apos;—&apos; means no cost basis recorded yet.
+                </p>
+              )}
             </div>
 
             {/* P&L OVERVIEW */}
@@ -892,27 +1298,78 @@ function MonitorWalletInner() {
                 </div>
               </div>
 
-              {/* KPI row */}
+              {/* KPI row — get_pnl_summary (all-time; the range buttons drive the
+                  chart and the trade list below, which are time-stamped). */}
               <div className="grid grid-cols-4 gap-3 mb-4">
-                {[
-                  { label: 'Total P&L',       value: '+$4,821.30', sub: '+11.4%',              pos: true },
-                  { label: 'Realized P&L',    value: '+$2,340.00', sub: 'from 20 trades',      pos: true },
-                  { label: 'Unrealized P&L',  value: '+$2,481.30', sub: 'across 11 positions', pos: true },
-                  { label: 'Win Rate',        value: '72.2%',      sub: '15/21 trades',        pos: true },
-                ].map(k => (
-                  <div key={k.label} className="bg-[#14161f] border border-[#14161f] px-4 py-3">
-                    <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">{k.label}</div>
-                    <div className={`text-[18px] font-bold ${k.pos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{k.value}</div>
-                    <div className="text-[9px] text-[#6e7590] mt-0.5">{k.sub}</div>
-                  </div>
-                ))}
+                {(() => {
+                  const closed = pnl ? pnl.win_count + pnl.loss_count : 0;
+                  const totalEth = pnl ? pnl.realized_pnl_eth + pnl.unrealized_pnl_eth : null;
+                  const hasAny = !!pnl && (pnl.trade_count > 0 || pnl.realized_pnl_eth !== 0 || pnl.unrealized_pnl_eth !== 0);
+                  const cards: { label: string; value: string | null; sub: string; tone: number | null }[] = [
+                    {
+                      label: 'Total P&L',
+                      value: pnl && hasAny ? fmtEth(totalEth, true) : null,
+                      sub: !pnl ? 'No data yet' : hasAny ? 'realized + unrealized, all-time' : 'No matched trades yet',
+                      tone: totalEth,
+                    },
+                    {
+                      label: 'Realized P&L',
+                      value: pnl && pnl.trade_count > 0 ? fmtEth(pnl.realized_pnl_eth, true) : null,
+                      sub: pnl ? `from ${pnl.trade_count} closed trade${pnl.trade_count === 1 ? '' : 's'}` : 'No data yet',
+                      tone: pnl?.realized_pnl_eth ?? null,
+                    },
+                    {
+                      label: 'Unrealized P&L',
+                      value: pnl && pnl.unrealized_pnl_eth !== 0 ? fmtEth(pnl.unrealized_pnl_eth, true) : null,
+                      sub: !pnl ? 'No data yet' : pnl.unrealized_pnl_eth !== 0 ? 'held positions vs floor' : 'no floor price for held items',
+                      tone: pnl?.unrealized_pnl_eth ?? null,
+                    },
+                    {
+                      label: 'Win Rate',
+                      value: pnl && closed > 0 ? `${((pnl.win_count / closed) * 100).toFixed(1)}%` : null,
+                      sub: pnl ? `${pnl.win_count}/${closed} closed trades` : 'No data yet',
+                      tone: pnl && closed > 0 ? 1 : null,
+                    },
+                  ];
+                  return cards.map(k => (
+                    <div key={k.label} className="bg-[#14161f] border border-[#14161f] px-4 py-3">
+                      <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">{k.label}</div>
+                      {pnlLoading ? (
+                        <div className="text-[13px] font-bold text-[#6e7590] py-[3px]">Loading…</div>
+                      ) : (
+                        <div className={`text-[18px] font-bold ${k.value == null ? 'text-[#6e7590]' : (k.tone ?? 0) >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                          {k.value ?? '—'}
+                        </div>
+                      )}
+                      <div className="text-[9px] mt-0.5" style={{ color: !pnlLoading && pnlError ? '#ff8a96' : '#6e7590' }}>
+                        {pnlLoading ? 'Fetching…' : pnlError ? 'Unavailable' : k.sub}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
 
-              {/* Chart */}
+              {/* Chart — cumulative realized P&L from get_trade_history */}
               <div className="bg-[#14161f] border border-[#14161f] px-4 py-3">
-                <div className="text-[11px] text-[#4fe9b4] font-bold mb-1">+$4,821.30</div>
-                <div className="text-[9px] text-[#6e7590] mb-3">+ Last PnL</div>
-                <DualPnLChart />
+                {pnlLoading ? (
+                  <div className="text-[11px] text-[#6e7590] py-8 text-center">Loading P&amp;L history…</div>
+                ) : pnlError ? (
+                  <div className="text-[11px] py-8 text-center" style={{ color: '#ff8a96' }}>{pnlError}</div>
+                ) : pnlCurve.length < 2 ? (
+                  <div className="text-[11px] text-[#6e7590] py-8 text-center">
+                    Not enough closed trades with timestamps to chart P&amp;L{pnlTime === 'ALL' ? '.' : ` in the last ${pnlTime}.`}
+                  </div>
+                ) : (
+                  <>
+                    <div className={`text-[11px] font-bold mb-1 ${(pnlCurve[pnlCurve.length - 1] ?? 0) >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtEth(pnlCurve[pnlCurve.length - 1], true)}
+                    </div>
+                    <div className="text-[9px] text-[#6e7590] mb-3">
+                      Cumulative realized P&amp;L · {pnlCurve.length} closed trades · {pnlTime === 'ALL' ? 'all time' : `last ${pnlTime}`}
+                    </div>
+                    <PnlAreaChart points={pnlCurve} />
+                  </>
+                )}
               </div>
             </div>
 
@@ -922,22 +1379,37 @@ function MonitorWalletInner() {
               <div className="border border-[#14161f] overflow-hidden">
                 <div className="grid border-b border-[#14161f] px-4 py-2"
                   style={{ backgroundColor: 'var(--wr-surface)', gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr 0.6fr 0.8fr' }}>
-                  {['Token','Name','ETH','PnL','%','Duration'].map(h => (
+                  {['Token','Name','Cost','PnL','%','Duration'].map(h => (
                     <span key={h} className="text-[9px] text-[#6e7590] uppercase tracking-wider">{h}</span>
                   ))}
                 </div>
-                {RECENT_TRADES.map((t, i) => (
-                  <div key={i} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
+                {pnlLoading && (
+                  <div className="px-4 py-6 text-[11px] text-[#6e7590]">Loading trades…</div>
+                )}
+                {!pnlLoading && pnlError && (
+                  <div className="px-4 py-6 text-[11px]" style={{ color: '#ff8a96' }}>{pnlError}</div>
+                )}
+                {!pnlLoading && !pnlError && trades !== null && recentTrades.length === 0 && (
+                  <div className="px-4 py-6 text-[11px] text-[#6e7590]">
+                    No trades{pnlTime === 'ALL' ? '' : ` in the last ${pnlTime}`} for this wallet.
+                  </div>
+                )}
+                {!pnlLoading && !pnlError && recentTrades.map(t => (
+                  <div key={t.key} className="grid items-center px-4 py-3 border-b border-[#14161f] last:border-0 transition-colors"
                     style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 1fr 0.6fr 0.8fr' }} onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] text-white font-bold shrink-0"
-                        style={{ backgroundColor: t.tokenColor }}>{t.token[0]}</span>
-                      <span className="text-[11px] text-white font-mono">{t.token}</span>
+                        style={{ backgroundColor: t.color }}>{t.token.slice(0, 1).toUpperCase()}</span>
+                      <span className="text-[11px] text-white font-mono truncate">{t.token}</span>
                     </div>
-                    <div className="text-[11px] text-[#9298b8]">{t.name}</div>
-                    <div className="text-[11px] text-[#9298b8] tabular-nums">{t.eth}</div>
-                    <div className={`text-[11px] font-medium tabular-nums ${t.pnlPos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{t.pnl}</div>
-                    <div className={`text-[11px] tabular-nums ${t.pctPos ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>{t.pct}</div>
+                    <div className="text-[11px] text-[#9298b8] truncate">{t.name}</div>
+                    <div className="text-[11px] text-[#9298b8] tabular-nums">{fmtEth(t.costEth)}</div>
+                    <div className={`text-[11px] font-medium tabular-nums ${t.pnlEth == null ? 'text-[#6e7590]' : t.pnlEth >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtEth(t.pnlEth, true)}
+                    </div>
+                    <div className={`text-[11px] tabular-nums ${t.pctPnl == null ? 'text-[#6e7590]' : t.pctPnl >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`}>
+                      {fmtPct(t.pctPnl)}
+                    </div>
                     <div className="text-[11px] text-[#6e7590]">{t.duration}</div>
                   </div>
                 ))}
@@ -1050,15 +1522,15 @@ function MonitorWalletInner() {
 
             {/* Bubble map */}
             <div className="flex-1 relative" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '12px', overflow: 'hidden' }}>
-              {/* Legend */}
+              {/* Legend — edges are transfer counts from find_sister_wallets */}
               <div className="absolute top-3 left-4 flex items-center gap-4 z-10">
                 <div className="flex items-center gap-1.5">
                   <div className="w-5 h-px bg-[#ff8a96]" />
-                  <span className="text-[9px] text-[#6e7590]">Outflow</span>
+                  <span className="text-[9px] text-[#6e7590]">Sent to (tx)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-5 border-t border-dashed border-[#4fe9b4]" />
-                  <span className="text-[9px] text-[#6e7590]">Inflow</span>
+                  <span className="text-[9px] text-[#6e7590]">Received from (tx)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-[#a78bfa]" />
@@ -1074,74 +1546,134 @@ function MonitorWalletInner() {
                     }`}>{f}</button>
                 ))}
               </div>
-              <ConnectionsBubbleMap onSelectNode={id => setSelectedNode(prev => prev === id ? null : id)} />
+
+              {sistersLoading && (
+                <div className="absolute inset-0 flex items-center justify-center text-[11px] text-[#6e7590]">
+                  Finding related wallets…
+                </div>
+              )}
+              {!sistersLoading && sistersError && (
+                <div className="absolute inset-0 flex items-center justify-center px-8">
+                  <p className="text-[11px] text-center leading-relaxed" style={{ color: '#ff8a96' }}>
+                    {sistersError}
+                  </p>
+                </div>
+              )}
+              {!sistersLoading && !sistersError && sisters !== null && sisterCandidates.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center px-8">
+                  <p className="text-[11px] text-[#6e7590] text-center leading-relaxed">
+                    No related wallets found{relTime === 'All' ? '' : ` active in the last ${relTime}`}.
+                    {sisters.note ? <><br />{sisters.note}</> : null}
+                  </p>
+                </div>
+              )}
+              {!sistersLoading && !sistersError && sisterCandidates.length > 0 && (
+                <>
+                  <ConnectionsBubbleMap
+                    nodes={bubbleNodes}
+                    edges={bubbleEdges}
+                    onSelectNode={id => setSelectedNode(prev => prev === id ? null : id)}
+                  />
+                  <div className="absolute bottom-3 left-4 right-4 text-[9px] text-[#6e7590]">
+                    {sisters?.note ? `${sisters.note} · ` : ''}
+                    Clustered from Etherscan funding history. Edge labels are transfer counts, not amounts.
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Side panel */}
             <div style={{ width: '240px', flexShrink: 0 }}>
-              {selectedNode ? (() => {
-                const node = BUBBLE_NODES.find(n => n.id === selectedNode);
-                const relIdx = ['n1','n2','n3','n4'].indexOf(selectedNode);
-                const relW = relIdx >= 0 ? RELATED_WALLETS[relIdx] : undefined;
-                if (!node) return null;
+              {selectedCandidate ? (() => {
+                const c = selectedCandidate;
+                const node = bubbleNodes.find(n => n.id === c.address);
+                const totalTx = c.direct_in + c.direct_out;
                 return (
                   <div style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', borderRadius: '12px', padding: '20px', minHeight: '100%' }}>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-[9px] font-bold"
-                          style={{ backgroundColor: node.fill, border: `1px solid ${node.stroke}`, color: node.textColor }}>
+                          style={{
+                            backgroundColor: node?.fill ?? 'var(--wr-surface)',
+                            border: `1px solid ${node?.stroke ?? 'var(--wr-border)'}`,
+                            color: node?.textColor ?? 'var(--wr-text)',
+                          }}>
                           0x
                         </div>
                         <div>
-                          <div className="text-[11px] font-mono text-white font-semibold">{node.label}</div>
-                          <div className="text-[9px] text-[#6e7590]">{node.sub}</div>
+                          <div className="text-[11px] font-mono text-white font-semibold">{shortAddr(c.address)}</div>
+                          <div className="text-[9px] text-[#6e7590]">Link score {c.score}/100</div>
                         </div>
                       </div>
                       <button onClick={() => setSelectedNode(null)} className="text-[#6e7590] text-[12px] hover:text-white">✕</button>
                     </div>
-                    {(NODE_TAGS[selectedNode] ?? []).map(t => (
-                      <span key={t.text} className="inline-block text-[8px] font-bold px-2 py-0.5 mb-3 mr-1"
-                        style={{ color: t.color, backgroundColor: t.bg }}>{t.text}</span>
-                    ))}
-                    {relW && (
-                      <div className="space-y-3">
-                        {[
-                          { label: 'Inflow',  value: relW.inflow > 0 ? `$${relW.inflow.toLocaleString()}` : '$0', color: '#4fe9b4' },
-                          { label: 'Outflow', value: `$${relW.outflow.toLocaleString()}`, color: '#ff8a96' },
-                          { label: 'Tx In',   value: String(relW.txIn),   color: 'var(--wr-text-2)' },
-                          { label: 'Tx Out',  value: String(relW.txOut),  color: 'var(--wr-text-2)' },
-                          { label: 'Balance', value: relW.balance,        color: 'var(--wr-text)' },
-                        ].map(s => (
-                          <div key={s.label} className="flex items-center justify-between">
-                            <span className="text-[10px] text-[#6e7590] uppercase tracking-wider">{s.label}</span>
-                            <span className="text-[11px] font-semibold tabular-nums" style={{ color: s.color }}>{s.value}</span>
-                          </div>
+
+                    {c.reasons.length > 0 ? (
+                      <div className="mb-3">
+                        {c.reasons.map(r => (
+                          <span key={r} className="inline-block text-[8px] font-bold px-2 py-0.5 mb-1 mr-1"
+                            style={{ color: '#ffb020', backgroundColor: '#2a1e05' }}>
+                            {SISTER_REASON_LABEL[r] ?? r}
+                          </span>
                         ))}
-                        <div className="pt-3">
-                          <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Flow Ratio</div>
-                          <div className="h-1.5 bg-[#14161f] overflow-hidden rounded-full">
-                            <div className="h-full rounded-full"
-                              style={{
-                                width: `${Math.min((relW.outflow / (relW.inflow + relW.outflow || 1)) * 100, 100)}%`,
-                                background: 'linear-gradient(90deg, #ffb020, #ff8a96)',
-                              }} />
-                          </div>
-                          <div className="flex justify-between mt-1">
-                            <span className="text-[8px] text-[#4fe9b4]">In</span>
-                            <span className="text-[8px] text-[#ff8a96]">Out</span>
-                          </div>
-                        </div>
                       </div>
+                    ) : (
+                      <div className="text-[9px] text-[#6e7590] mb-3">No link reason recorded.</div>
                     )}
+
+                    <div className="space-y-3">
+                      {[
+                        { label: 'Tx In',      value: String(c.direct_in),  color: '#4fe9b4' },
+                        { label: 'Tx Out',     value: String(c.direct_out), color: '#ff8a96' },
+                        { label: 'Score',      value: `${c.score}/100`,     color: 'var(--wr-text)' },
+                        { label: 'First Seen', value: fmtUnixDate(c.first_interaction), color: 'var(--wr-text-2)' },
+                        { label: 'Last Seen',  value: fmtUnixDate(c.last_interaction),  color: 'var(--wr-text-2)' },
+                      ].map(s => (
+                        <div key={s.label} className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#6e7590] uppercase tracking-wider">{s.label}</span>
+                          <span className="text-[11px] font-semibold tabular-nums" style={{ color: s.color }}>{s.value}</span>
+                        </div>
+                      ))}
+                      <div className="pt-3">
+                        <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-2">Transfer Direction</div>
+                        {totalTx > 0 ? (
+                          <>
+                            <div className="h-1.5 bg-[#14161f] overflow-hidden rounded-full">
+                              <div className="h-full rounded-full"
+                                style={{
+                                  width: `${Math.min((c.direct_out / totalTx) * 100, 100)}%`,
+                                  background: 'linear-gradient(90deg, #ffb020, #ff8a96)',
+                                }} />
+                            </div>
+                            <div className="flex justify-between mt-1">
+                              <span className="text-[8px] text-[#4fe9b4]">In</span>
+                              <span className="text-[8px] text-[#ff8a96]">Out</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-[9px] text-[#6e7590]">No direct transfers — linked by a shared funder.</div>
+                        )}
+                      </div>
+                      <div className="pt-1">
+                        <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1">Balance</div>
+                        <div className="text-[10px] text-[#6e7590]">Not fetched — open the wallet to load it.</div>
+                      </div>
+                    </div>
+
                     <div className="flex flex-col gap-2 mt-5">
-                      <button className="text-[10px] font-semibold px-3 py-2"
-                        style={{ color: '#2fc4d6', backgroundColor: '#0e2630', border: '1px solid #0e2630' }}>
-                        Track Wallet
-                      </button>
-                      <button className="text-[10px] font-semibold px-3 py-2"
-                        style={{ color: 'var(--wr-accent)', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid #7c5cff33' }}>
-                        Create Alert
-                      </button>
+                      <Link
+                        href={`/monitor/wallet?raw=${c.address}`}
+                        className="text-[10px] font-semibold px-3 py-2 text-center"
+                        style={{ color: '#2fc4d6', backgroundColor: '#0e2630', border: '1px solid #0e2630', textDecoration: 'none' }}>
+                        Open in Monitor
+                      </Link>
+                      <a
+                        href={`https://etherscan.io/address/${c.address}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] font-semibold px-3 py-2 text-center"
+                        style={{ color: 'var(--wr-accent)', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid #7c5cff33', textDecoration: 'none' }}>
+                        View on Etherscan
+                      </a>
                     </div>
                   </div>
                 );
@@ -1150,7 +1682,13 @@ function MonitorWalletInner() {
                   <div className="text-center">
                     <div className="text-[28px] mb-3 opacity-30">◎</div>
                     <p className="text-[11px] text-[#6e7590] leading-relaxed">
-                      Click a node to<br />inspect wallet details
+                      {sistersLoading
+                        ? 'Loading related wallets…'
+                        : sistersError
+                          ? 'Related wallets unavailable'
+                          : sisterCandidates.length === 0
+                            ? 'No related wallets to inspect'
+                            : <>Click a node to<br />inspect wallet details</>}
                     </p>
                   </div>
                 </div>

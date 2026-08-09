@@ -1001,7 +1001,10 @@ export default function Dashboard() {
         if (cancelled) return;
         const newSnaps: Record<string, PortfolioSnapshot> = {};
         snapEntries.forEach(r => { if (r.status === 'fulfilled') newSnaps[r.value.id] = r.value.snap; });
-        setSnapshots(newSnaps);
+        // Merge, don't replace — a wallet whose fetch failed this round (e.g. a
+        // transient 429 from the burst of requests a newly-added wallet triggers)
+        // must keep its last-known-good snapshot instead of reverting to blank.
+        setSnapshots(prev => ({ ...prev, ...newSnaps }));
 
         // Fetch transactions for first wallet (merge later)
         const primaryWallet = storedWallets[0];

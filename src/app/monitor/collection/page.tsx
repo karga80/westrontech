@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Tag, NFT_ACTIVITY_VARIANT } from '@/components/Tag';
-import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, fetchCollectionNfts, getEthBalance, getTokenBalances, loadAlchemyKey, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue } from '@/lib/tauri';
+import { fetchCollectionStats, fetchCollectionEvents, fetchCollectionHolders, fetchCollectionOffers, fetchCollectionTraits, getEthBalance, getTokenBalances, loadAlchemyKey, listAlerts, createAlert, deleteAlert as deleteAlertCmd, setAlertActive, type CollectionStats, type CollectionEvent, type CollectionHolder, type CollectionOffer, type CollectionTrait, type TraitValue, type AlertRule as TauriAlertRule } from '@/lib/tauri';
 import {
   addTrackedNft, isTracked, loadTrackedNfts, removeTrackedNft, trackedNftId,
   type TrackedNft,
@@ -34,25 +33,25 @@ const FALLBACK = { name: '', symbol: '?', color: '#6e7590', opensea_slug: '' };
 type NftItem = { id: string; rank: number; price: string; lastSale: string; owner: string; traits: string[] };
 
 // ── Alert rules ────────────────────────────────────────────────────────────────
-type AlertRule = { id: number; label: string; enabled: boolean; channel: string };
-const ALERT_CHANNELS = ['macOS', 'Discord', 'macOS + Discord'] as const;
-const ALERTS: AlertRule[] = [
-  { id: 1, label: 'Floor drops below 12 ETH',       enabled: true,  channel: 'macOS + Discord' },
-  { id: 2, label: 'Floor rises above 20 ETH',       enabled: false, channel: 'macOS' },
-  { id: 3, label: 'Volume spike > 500 ETH in 1hr',  enabled: true,  channel: 'Discord' },
-  { id: 4, label: 'Whale buy ≥ 5 items in 10 min',  enabled: true,  channel: 'macOS + Discord' },
-];
+// Rules are REAL rows from the local alerts DB (list_alerts / create_alert /
+// delete_alert / set_alert_active). The only alert kind the backend can evaluate
+// for a collection is `floor_price` (alerts::engine::check_floor_price_alerts,
+// driven by the OpenSea stream), with condition "above" | "below" and a
+// threshold in ETH — so that is exactly what this tab offers. Nothing here is
+// invented: an empty DB renders an empty list.
+type AlertCondition = 'above' | 'below';
 
-// ── Stats bar data ─────────────────────────────────────────────────────────────
-function MiniBarChart({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(...values);
-  return (
-    <div className="flex items-end gap-[2px]" style={{ height: 32 }}>
-      {values.map((v, i) => (
-        <div key={i} style={{ width: 6, height: `${(v / max) * 100}%`, backgroundColor: color, opacity: 0.7 + (i / values.length) * 0.3, borderRadius: 1 }} />
-      ))}
-    </div>
-  );
+/** Surface the backend's own message rather than swallowing it. */
+function errText(e: unknown, fallback: string): string {
+  if (typeof e === 'string' && e.trim()) return e;
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
+
+/** Human label for a stored rule — derived from its real fields, never guessed. */
+function alertLabel(r: TauriAlertRule): string {
+  const dir = r.condition === 'above' ? 'rises above' : r.condition === 'below' ? 'drops below' : r.condition;
+  return `Floor ${dir} ${r.threshold_eth} ETH`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,25 +61,25 @@ function MonitorCollectionInner() {
   const hoverOn  = (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--wr-hover-bg)'; };
   const hoverOff = (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; };
   const [tab, setTab] = useState<Tab>('Items');
-  const [alerts, setAlerts] = useState<AlertRule[]>(ALERTS);
-  const toggleAlert = (id: number) => setAlerts(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
-  const deleteAlert = (id: number) => setAlerts(prev => prev.filter(a => a.id !== id));
-  const [alertEditor, setAlertEditor] = useState<{ mode: 'add' | 'edit'; id: number | null; label: string; channel: string } | null>(null);
-  const openAddAlert = () => setAlertEditor({ mode: 'add', id: null, label: '', channel: ALERT_CHANNELS[0] });
-  const openEditAlert = (a: AlertRule) => setAlertEditor({ mode: 'edit', id: a.id, label: a.label, channel: a.channel });
+  const [alerts, setAlerts] = useState<TauriAlertRule[] | null>(null);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [alertEditor, setAlertEditor] = useState<
+    { mode: 'add' | 'edit'; id: string | null; condition: AlertCondition; threshold: string; webhook: string; saving: boolean; error: string | null } | null
+  >(null);
+  const openAddAlert = () =>
+    setAlertEditor({ mode: 'add', id: null, condition: 'below', threshold: '', webhook: '', saving: false, error: null });
+  const openEditAlert = (a: TauriAlertRule) =>
+    setAlertEditor({
+      mode: 'edit',
+      id: a.id,
+      condition: a.condition === 'above' ? 'above' : 'below',
+      threshold: String(a.threshold_eth),
+      webhook: a.discord_webhook ?? '',
+      saving: false,
+      error: null,
+    });
   const closeAlertEditor = () => setAlertEditor(null);
-  const saveAlertEditor = () => {
-    if (!alertEditor) return;
-    const label = alertEditor.label.trim();
-    if (!label) return;
-    if (alertEditor.mode === 'add') {
-      const nextId = alerts.reduce((m, a) => Math.max(m, a.id), 0) + 1;
-      setAlerts(prev => [...prev, { id: nextId, label, channel: alertEditor.channel, enabled: true }]);
-    } else if (alertEditor.id != null) {
-      setAlerts(prev => prev.map(a => a.id === alertEditor.id ? { ...a, label, channel: alertEditor.channel } : a));
-    }
-    setAlertEditor(null);
-  };
 
   const collectionName = searchParams.get('name') ?? '';
   const slugParam = searchParams.get('slug') ?? '';
@@ -100,23 +99,110 @@ function MonitorCollectionInner() {
   const [nftsLoading, setNftsLoading] = useState(false);
   const [nftsError, setNftsError] = useState<string | null>(null);
   const [liveStats, setLiveStats] = useState<CollectionStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [liveEvents, setLiveEvents] = useState<CollectionEvent[] | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   type FeedFilterType = 'sale' | 'listing' | 'offer' | 'transfer' | 'mint' | 'collection_offer' | 'trait_offer';
   const [feedFilters, setFeedFilters] = useState<Set<FeedFilterType>>(new Set()); // empty = All
   const [liveHolders, setLiveHolders] = useState<CollectionHolder[] | null>(null);
   const [holdersLoading, setHoldersLoading] = useState(false);
+  const [holdersError, setHoldersError] = useState<string | null>(null);
   const [liveOffers, setLiveOffers] = useState<CollectionOffer[] | null>(null);
   const [offersLoading, setOffersLoading] = useState(false);
+  const [offersError, setOffersError] = useState<string | null>(null);
   const [liveTraits, setLiveTraits] = useState<CollectionTrait[] | null>(null);
   const [traitsLoading, setTraitsLoading] = useState(false);
+  const [traitsError, setTraitsError] = useState<string | null>(null);
   const [selectedTraitCategory, setSelectedTraitCategory] = useState<string | null>(null);
   const [traitSearch, setTraitSearch] = useState('');
 
   const activeSlug = col.opensea_slug || slugParam;
   const contractParam = searchParams.get('contract') ?? '';
   const imageParam = searchParams.get('image') ?? '';
-  const wallets = loadWallets();
+  const wallets: { id: string; name: string; address: string }[] = loadWallets();
+
+  // ── Alerts: real rows from the local alerts DB ───────────────────────────
+  // list_alerts is keyed by wallet (the DB has no per-collection index for
+  // inactive rules), so we read the rules of the user's first saved wallet and
+  // keep the floor_price rules that belong to THIS collection.
+  const alertWallet = wallets[0]?.address ?? '';
+  const alertsBlockedReason = (): string | null => {
+    if (typeof window !== 'undefined' && !('__TAURI_INTERNALS__' in window)) return 'Alerts need the Westron desktop app.';
+    if (!alertWallet) return 'No wallet saved yet — add one in Wallets to attach alerts to it.';
+    if (!activeSlug) return 'This collection has no OpenSea slug, so floor alerts cannot be attached to it.';
+    return null;
+  };
+  const refreshAlerts = async () => {
+    const blocked = alertsBlockedReason();
+    if (blocked) { setAlerts([]); setAlertsError(blocked); setAlertsLoading(false); return; }
+    setAlertsLoading(true);
+    setAlertsError(null);
+    try {
+      const all = await listAlerts(alertWallet);
+      setAlerts(all.filter(a => a.alert_type === 'floor_price' && a.collection_slug === activeSlug));
+    } catch (e) {
+      setAlerts([]);
+      setAlertsError(errText(e, 'Could not read alert rules.'));
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+  // Local DB read (no HTTP, no rate-limit cost) — but still only on tab open.
+  useEffect(() => {
+    if (tab !== 'Alerts') return;
+    if (alerts !== null) return;
+    void refreshAlerts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, alertWallet, activeSlug]);
+
+  const toggleAlert = async (a: TauriAlertRule) => {
+    setAlertsError(null);
+    try {
+      await setAlertActive(a.id, !a.active);
+      setAlerts(prev => (prev ?? []).map(r => r.id === a.id ? { ...r, active: !a.active } : r));
+    } catch (e) {
+      setAlertsError(errText(e, 'Could not update the rule.'));
+    }
+  };
+  const removeAlert = async (id: string) => {
+    setAlertsError(null);
+    try {
+      await deleteAlertCmd(id);
+      setAlerts(prev => (prev ?? []).filter(r => r.id !== id));
+    } catch (e) {
+      setAlertsError(errText(e, 'Could not delete the rule.'));
+    }
+  };
+  const saveAlertEditor = async () => {
+    if (!alertEditor) return;
+    const threshold = parseFloat(alertEditor.threshold);
+    if (!isFinite(threshold) || threshold <= 0) {
+      setAlertEditor(prev => prev ? { ...prev, error: 'Enter a threshold in ETH greater than 0.' } : prev);
+      return;
+    }
+    const blocked = alertsBlockedReason();
+    if (blocked) { setAlertEditor(prev => prev ? { ...prev, error: blocked } : prev); return; }
+    setAlertEditor(prev => prev ? { ...prev, saving: true, error: null } : prev);
+    try {
+      // No update command exists, so an edit is create-then-delete (in that
+      // order, so a failure can never lose the original rule).
+      await createAlert({
+        alert_type: 'floor_price',
+        wallet_address: alertWallet,
+        collection_slug: activeSlug,
+        threshold_eth: threshold,
+        condition: alertEditor.condition,
+        discord_webhook: alertEditor.webhook.trim() || undefined,
+      });
+      if (alertEditor.mode === 'edit' && alertEditor.id) await deleteAlertCmd(alertEditor.id);
+      setAlertEditor(null);
+      await refreshAlerts();
+    } catch (e) {
+      setAlertEditor(prev => prev ? { ...prev, saving: false, error: errText(e, 'Could not save the rule.') } : prev);
+    }
+  };
 
   // ── Items filter state (declared early — used in fetch effects) ─────────
   type FilterStatus = 'all' | 'listed' | 'unlisted' | 'owned';
@@ -152,13 +238,35 @@ function MonitorCollectionInner() {
   const [notifModalIds, setNotifModalIds] = useState<string[] | undefined>(undefined);
   const [listingsFetchedCount, setListingsFetchedCount] = useState(0);
 
-  // Fetch stats + top offer on mount
+  // Header data on mount: exactly two OpenSea calls (stats, then the 5 best
+  // offers for the "Top Offer" KPI), awaited one after the other so the screen
+  // never opens with a parallel burst. Every KPI renders '—' until its real
+  // value arrives, and a failure is shown rather than silently left blank.
   useEffect(() => {
-    if (!activeSlug) return;
-    fetchCollectionStats(activeSlug).then(setLiveStats).catch(() => {});
-    fetchCollectionOffers(activeSlug, 5)
-      .then(data => { if (liveOffers === null) setLiveOffers(data); })
-      .catch(() => {});
+    if (!activeSlug) { setStatsError('This collection has no OpenSea slug, so live stats cannot be loaded.'); return; }
+    let cancelled = false;
+    setStatsLoading(true);
+    setStatsError(null);
+    (async () => {
+      try {
+        const stats = await fetchCollectionStats(activeSlug);
+        if (cancelled) return;
+        setLiveStats(stats);
+      } catch (e) {
+        if (cancelled) return;
+        setLiveStats(null);
+        setStatsError(errText(e, 'Could not load collection stats.'));
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+      try {
+        const offers = await fetchCollectionOffers(activeSlug, 5);
+        if (!cancelled) setLiveOffers(prev => (prev === null ? offers : prev));
+      } catch {
+        // The Offers tab reports its own failure; the header just keeps '—'.
+      }
+    })();
+    return () => { cancelled = true; };
   }, [activeSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch NFT items when Items tab active; re-fetch on filter/sort change
@@ -236,9 +344,10 @@ function MonitorCollectionInner() {
     setLiveEvents(null);
     setEventsLoading(true);
     // Always fetch all events; client-side filter handles multi-select
+    setEventsError(null);
     fetchCollectionEvents(activeSlug, '', 50)
       .then(data => { setLiveEvents(data); })
-      .catch(() => { setLiveEvents([]); })
+      .catch(e => { setLiveEvents([]); setEventsError(errText(e, 'Could not load collection activity.')); })
       .finally(() => setEventsLoading(false));
   }, [tab, activeSlug]);
 
@@ -247,9 +356,10 @@ function MonitorCollectionInner() {
     if (tab !== 'Offers' || !activeSlug) return;
     setLiveOffers(null);
     setOffersLoading(true);
+    setOffersError(null);
     fetchCollectionOffers(activeSlug, 50)
       .then(data => { setLiveOffers(data); })
-      .catch(err => { console.error('fetchCollectionOffers error:', err); setLiveOffers([]); })
+      .catch(e => { setLiveOffers([]); setOffersError(errText(e, 'Could not load collection offers.')); })
       .finally(() => setOffersLoading(false));
   }, [tab, activeSlug]);
 
@@ -259,9 +369,10 @@ function MonitorCollectionInner() {
     if (!activeSlug) return;
     if (liveTraits !== null) return;
     setTraitsLoading(true);
+    setTraitsError(null);
     fetchCollectionTraits(activeSlug, liveStats?.total_supply ?? 0)
       .then(data => { setLiveTraits(data); })
-      .catch(() => { setLiveTraits([]); })
+      .catch(e => { setLiveTraits([]); setTraitsError(errText(e, 'Could not load traits.')); })
       .finally(() => setTraitsLoading(false));
   }, [tab, activeSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -271,9 +382,10 @@ function MonitorCollectionInner() {
     if (liveHolders !== null) return;
     if (!contractParam) return;
     setHoldersLoading(true);
+    setHoldersError(null);
     fetchCollectionHolders(contractParam, 50)
       .then(data => { setLiveHolders(data); })
-      .catch(() => { setLiveHolders([]); })
+      .catch(e => { setLiveHolders([]); setHoldersError(errText(e, 'Could not load holders.')); })
       .finally(() => setHoldersLoading(false));
   }, [tab, activeSlug, contractParam]);
 
@@ -287,7 +399,6 @@ function MonitorCollectionInner() {
   const [buyWallet,     setBuyWallet]    = useState('');
   const [buyDropOpen,   setBuyDropOpen]  = useState(false);
   const buyDropRef = useRef<HTMLDivElement>(null);
-  const [buyStep,       setBuyStep]      = useState<'confirm' | 'processing' | 'done'>('confirm');
 
   useEffect(() => {
     if (!buyDropOpen) return;
@@ -305,27 +416,10 @@ function MonitorCollectionInner() {
   const [offerExpiryUnit, setOfferExpiryUnit] = useState<ExpiryUnit>('days');
   const [offerExpiryOpen, setOfferExpiryOpen] = useState(false);
   const offerExpiryRef = useRef<HTMLDivElement>(null);
-  const [offerStep,    setOfferStep]   = useState<'form' | 'processing' | 'done'>('form');
-  type TxnStatus = 'signing' | 'broadcasting' | 'confirmed' | 'failed';
-  const [txnProgress, setTxnProgress] = useState<Record<string, TxnStatus>>({});
-  const offerTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const submitOffers = () => {
-    if (!offerValid) return;
-    const ids = Object.keys(offerConfigs);
-    // init all to 'signing'
-    setTxnProgress(Object.fromEntries(ids.map(id => [id, 'signing'])));
-    setOfferStep('processing');
-    // stagger: each wallet advances with a small offset
-    ids.forEach((id, i) => {
-      const t1 = setTimeout(() => setTxnProgress(p => ({ ...p, [id]: 'broadcasting' })), 900 + i * 300);
-      const t2 = setTimeout(() => setTxnProgress(p => ({ ...p, [id]: 'confirmed' })), 2000 + i * 300);
-      offerTimersRef.current.push(t1, t2);
-    });
-    // transition to done after all confirmed
-    const total = setTimeout(() => setOfferStep('done'), 2200 + ids.length * 300);
-    offerTimersRef.current.push(total);
-  };
+  // Placing an order is not implemented in this build. There is no signing,
+  // no broadcast and no order hash, so no submit state machine exists either —
+  // the previous timer-driven signing → broadcasting → confirmed track and its
+  // "Offers Submitted" screen reported transactions that never happened.
 
   const [filterPriceMin, setFilterPriceMin] = useState('');
   const [filterPriceMax, setFilterPriceMax] = useState('');
@@ -348,11 +442,13 @@ function MonitorCollectionInner() {
   const colBidTraitDropRef = useRef<HTMLDivElement>(null);
   const colBidTraitBtnRef = useRef<HTMLButtonElement>(null);
   const [colBidTraitDropPos, setColBidTraitDropPos] = useState<{ top: number; right: number } | null>(null);
-  const [colBidTraitCat, setColBidTraitCat] = useState('');
   const [colBidTraitSearch, setColBidTraitSearch] = useState('');
-  const [colBidStep, setColBidStep] = useState<'form' | 'review' | 'processing' | 'done'>('form');
+  // 'form' → 'review' only. There is no 'processing'/'done': no collection
+  // offer is signed or posted by this build, so there is no result to report.
+  const [colBidStep, setColBidStep] = useState<'form' | 'review'>('form');
   const [colBidWallet, setColBidWallet] = useState<string>('');
   const [colBidWalletBalances, setColBidWalletBalances] = useState<Record<string, { eth?: number; weth?: number }>>({});
+  const [balancesNote, setBalancesNote] = useState<string | null>(null);
   const [colBidWalletDropOpen, setColBidWalletDropOpen] = useState(false);
   const colBidWalletDropRef = useRef<HTMLDivElement>(null);
   const colBidExpiryBtnRef = useRef<HTMLButtonElement>(null);
@@ -458,27 +554,50 @@ function MonitorCollectionInner() {
     return () => document.removeEventListener('mousedown', h);
   }, [colBidWalletDropOpen]);
 
-  // Fetch real ETH + WETH balances for the buy/offer/collection-bid wallet pickers
+  // Real ETH + WETH balances for the wallet pickers.
+  //
+  // Rate limits: this used to re-run on EVERY tab switch and fire two Alchemy
+  // calls per wallet in parallel (a 2N burst per switch, a documented 429
+  // source). It now runs at most once per mount, only for the tab that actually
+  // shows a wallet picker, and awaits each call in turn. Unfetched balances stay
+  // undefined and render as '—' — never 0.
+  const balancesFetchedRef = useRef(false);
   useEffect(() => {
+    if (tab !== 'Make Collection Bid') return;
     if (wallets.length === 0) return;
-    if (tab === 'Make Collection Bid' && !colBidWallet) setColBidWallet(wallets[0].address);
+    if (!colBidWallet) setColBidWallet(wallets[0].address);
+    if (balancesFetchedRef.current) return;
+    balancesFetchedRef.current = true;
+
+    let cancelled = false;
     (async () => {
       const apiKey = await loadAlchemyKey().catch(() => '');
-      if (!apiKey) return;
+      if (cancelled) return;
+      if (!apiKey) { setBalancesNote('Add an Alchemy API key in Settings to load wallet balances.'); return; }
       const WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-      wallets.forEach(w => {
-        getEthBalance(w.address, apiKey).then(b => {
+      let failed = 0;
+      for (const w of wallets) {
+        if (cancelled) return;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const b = await getEthBalance(w.address, apiKey);
+          if (cancelled) return;
           setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), eth: b.eth } }));
-        }).catch(() => {});
-        getTokenBalances(w.address, apiKey).then(toks => {
+        } catch { failed += 1; }
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const toks = await getTokenBalances(w.address, apiKey);
+          if (cancelled) return;
           const wethTok = toks.find(t => t.contract_address.toLowerCase() === WETH);
-          if (wethTok?.token_balance && wethTok.token_balance !== '0x0' && wethTok.token_balance !== '0x00') {
-            const weth = Number(BigInt(wethTok.token_balance)) / 1e18;
-            setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), weth } }));
-          }
-        }).catch(() => {});
-      });
+          const weth = wethTok?.token_balance && wethTok.token_balance !== '0x0' && wethTok.token_balance !== '0x00'
+            ? Number(BigInt(wethTok.token_balance)) / 1e18
+            : 0;
+          setColBidWalletBalances(prev => ({ ...prev, [w.address]: { ...(prev[w.address] ?? {}), weth } }));
+        } catch { failed += 1; }
+      }
+      if (!cancelled && failed > 0) setBalancesNote(`${failed} balance request(s) failed — those wallets show '—'.`);
     })();
+    return () => { cancelled = true; };
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -499,9 +618,6 @@ function MonitorCollectionInner() {
   const setOfferField = (id: string, field: keyof OfferConfig, value: string | number) =>
     setOfferConfigs(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
 
-  const offerValid = Object.keys(offerConfigs).length > 0 &&
-    Object.values(offerConfigs).every(c => parseFloat(c.amount) > 0 && c.qty >= 1);
-
   useEffect(() => {
     const t = searchParams.get('tab') as Tab | null;
     if (t && TABS.includes(t)) setTab(t);
@@ -518,12 +634,12 @@ function MonitorCollectionInner() {
             onMouseDown={e => e.stopPropagation()}>
             <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
               <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>
-                {buyStep === 'done' ? 'Purchase Complete' : 'Confirm Purchase'}
+                Purchase
               </h2>
               <button onClick={() => setBuyNft(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px' }}>×</button>
             </div>
 
-            {buyStep === 'confirm' && (
+            {(
               <>
                 <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
                   Review and sign to complete the purchase
@@ -579,34 +695,27 @@ function MonitorCollectionInner() {
                   </div>
                   <div className="flex justify-between" style={{ marginTop: '4px' }}>
                     <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>Est. Gas</span>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>~0.003 ETH</span>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>—</span>
                   </div>
+                </div>
+                {/* Buying is not implemented: no Seaport fulfilment, no signing,
+                    no broadcast. The control is disabled rather than replaying a
+                    fake "Purchase Complete". */}
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ffb020', border: '1px solid #ffb020', backgroundColor: 'rgba(255,176,32,0.08)', padding: '10px 12px', marginBottom: '12px' }}>
+                  Buying is not enabled in this build — no transaction is signed or
+                  broadcast, so no purchase can be confirmed here.
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setBuyNft(null)} style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'pointer' }}>
-                    Cancel
+                    Close
                   </button>
                   <button
-                    onClick={() => { if (!buyWallet) return; setBuyStep('processing'); setTimeout(() => setBuyStep('done'), 2200); }}
-                    style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000', backgroundColor: buyWallet ? '#7c5cff' : 'var(--wr-surface-alt)', border: 'none', padding: '11px 0', cursor: buyWallet ? 'pointer' : 'not-allowed', opacity: buyWallet ? 1 : 0.5 }}>
-                    Confirm & Buy
+                    disabled
+                    title="Not enabled in this build"
+                    style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text-4)', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', padding: '11px 0', cursor: 'not-allowed' }}>
+                    Buy — unavailable
                   </button>
                 </div>
-              </>
-            )}
-
-            {buyStep === 'processing' && (
-              <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', marginBottom: '8px' }}>Broadcasting transaction…</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#9298b8' }}>Please wait</div>
-              </div>
-            )}
-            {buyStep === 'done' && (
-              <>
-                <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#4fe9b4', marginBottom: '20px' }}>
-                  ✓ {col.symbol} {buyNft.id} purchased for {buyNft.price}
-                </p>
-                <button onClick={() => setBuyNft(null)} style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '11px 0', cursor: 'pointer' }}>Done</button>
               </>
             )}
           </div>
@@ -621,12 +730,12 @@ function MonitorCollectionInner() {
             onMouseDown={e => e.stopPropagation()}>
             <div className="flex items-center justify-between" style={{ marginBottom: '6px' }}>
               <h2 style={{ fontFamily: 'var(--font-inter)', fontSize: '18px', fontWeight: 600, color: 'var(--wr-text)' }}>
-                {offerStep === 'done' ? 'Offers Submitted' : 'Make an Offer'}
+                Make an Offer
               </h2>
               <button onClick={() => setOfferNft(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--wr-text-3)', fontSize: '18px' }}>×</button>
             </div>
 
-            {offerStep === 'form' && (
+            {(
               <>
                 <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
                   {col.symbol} {offerNft.id} · Floor {offerNft.price}
@@ -724,109 +833,24 @@ function MonitorCollectionInner() {
                   </div>
                 </div>
 
+                {/* Submitting an offer is not implemented: no Seaport order is
+                    built, signed or posted. Disabled rather than animating a fake
+                    signing → broadcasting → confirmed track. */}
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ffb020', border: '1px solid #ffb020', backgroundColor: 'rgba(255,176,32,0.08)', padding: '10px 12px', marginTop: '20px' }}>
+                  Submitting offers is not enabled in this build — nothing is signed
+                  and no order reaches OpenSea, so no offer can be confirmed here.
+                </div>
                 {/* CTA row */}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '24px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
                   <button onClick={() => setOfferNft(null)}
                     style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '12px 0', cursor: 'pointer' }}>
-                    Cancel
+                    Close
                   </button>
-                  <button onClick={submitOffers} disabled={!offerValid}
-                    style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#0b0c14', backgroundColor: offerValid ? '#7c5cff' : '#7c5cff40', border: 'none', padding: '12px 0', cursor: offerValid ? 'pointer' : 'not-allowed', letterSpacing: '0.5px' }}>
-                    Submit {Object.keys(offerConfigs).length > 1 ? `${Object.keys(offerConfigs).length} Offers` : 'Offer'}
+                  <button disabled title="Not enabled in this build"
+                    style={{ flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text-4)', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', padding: '12px 0', cursor: 'not-allowed', letterSpacing: '0.5px' }}>
+                    Submit — unavailable
                   </button>
                 </div>
-              </>
-            )}
-
-            {/* ── Processing: per-wallet TXN progress ── */}
-            {offerStep === 'processing' && (
-              <div style={{ paddingTop: '4px' }}>
-                <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
-                  {col.symbol} {offerNft.id} · {offerExpiryQty} {offerExpiryUnit}
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {Object.entries(offerConfigs).map(([id, cfg]) => {
-                    const w = wallets.find(x => x.id === id);
-                    const status = txnProgress[id] ?? 'signing';
-                    const steps: TxnStatus[] = ['signing', 'broadcasting', 'confirmed'];
-                    const stepIdx = steps.indexOf(status);
-                    return w ? (
-                      <div key={id} style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '14px 16px' }}>
-                        {/* Wallet + amount */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                          <div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: 'var(--wr-text)' }}>{w.name}</div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>{w.address.slice(0,6)}…{w.address.slice(-4)}</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: 'var(--wr-text)' }}>{cfg.amount} WETH</div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>qty {cfg.qty}</div>
-                          </div>
-                        </div>
-                        {/* Step track */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
-                          {steps.map((step, i) => {
-                            const done  = stepIdx > i;
-                            const active = stepIdx === i;
-                            const label = step.charAt(0).toUpperCase() + step.slice(1);
-                            return (
-                              <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : undefined }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                  <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${done || active ? '#7c5cff' : 'var(--wr-border)'}`, backgroundColor: done ? '#7c5cff' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                    {done
-                                      ? <span style={{ color: '#000', fontSize: '10px', fontWeight: 900 }}>✓</span>
-                                      : active
-                                        ? <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: '#7c5cff', animation: 'wr-pulse 1s ease-in-out infinite' }} />
-                                        : null}
-                                  </div>
-                                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: done || active ? 'var(--wr-text)' : 'var(--wr-text-3)', letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>{label}</span>
-                                </div>
-                                {i < steps.length - 1 && (
-                                  <div style={{ flex: 1, height: 2, backgroundColor: done ? '#7c5cff' : 'var(--wr-border)', marginBottom: '13px', margin: '0 4px 13px 4px' }} />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null;
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ── Done ── */}
-            {offerStep === 'done' && (
-              <>
-                <p style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '20px' }}>
-                  {col.symbol} {offerNft.id} · {offerExpiryQty} {offerExpiryUnit}
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-                  {Object.entries(offerConfigs).map(([id, cfg]) => {
-                    const w = wallets.find(x => x.id === id);
-                    return w ? (
-                      <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid #1a3320', padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: '#7c5cff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span style={{ color: '#000', fontSize: '10px', fontWeight: 900 }}>✓</span>
-                          </div>
-                          <div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-text)' }}>{w.name}</div>
-                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>Offer submitted</div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, color: '#4fe9b4' }}>{cfg.amount} WETH</div>
-                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)' }}>qty {cfg.qty}</div>
-                        </div>
-                      </div>
-                    ) : null;
-                  })}
-                </div>
-                <button onClick={() => { setOfferNft(null); setTxnProgress({}); }}
-                  style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none', padding: '13px 0', cursor: 'pointer', letterSpacing: '0.5px' }}>
-                  Done
-                </button>
               </>
             )}
           </div>
@@ -856,13 +880,14 @@ function MonitorCollectionInner() {
           {/* Name + symbol */}
           <div className="flex-1 min-w-0">
             <div className="text-[22px] font-bold text-white leading-none">{col.name}</div>
-            <div className="text-[#6e7590] text-[11px] mt-0.5 font-mono">{col.symbol} · ERC-721 · Ethereum Mainnet</div>
+            <div className="text-[#6e7590] text-[11px] mt-0.5 font-mono">{col.symbol} · Ethereum Mainnet</div>
           </div>
 
           {/* KPI bar */}
           {(() => {
             const floor = liveStats?.floor_price_eth != null ? `${liveStats.floor_price_eth.toFixed(3)} ETH` : '—';
-            const floorChange = liveStats?.vol_1d_change != null ? liveStats.vol_1d_change * 100 : null;
+            // This is the 1-day VOLUME change from OpenSea stats — there is no floor-change field.
+            const volChange = liveStats?.vol_1d_change != null ? liveStats.vol_1d_change * 100 : null;
             const topOffer = liveOffers != null && liveOffers.length > 0
               ? `${Math.max(...liveOffers.map(o => o.price_eth)).toFixed(3)} ETH`
               : '—';
@@ -878,10 +903,10 @@ function MonitorCollectionInner() {
                   <div className="text-[13px] font-bold text-white" style={{ fontFamily: 'var(--font-jetbrains)' }}>{floor}</div>
                 </div>
                 <div className="bg-[#14161f] border border-[#14161f] px-4 py-2 text-center min-w-[90px]">
-                  <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1" style={{ fontFamily: 'var(--font-jetbrains)' }}>1D Floor Chg</div>
-                  {floorChange != null ? (
-                    <div className={`text-[13px] font-bold ${floorChange >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`} style={{ fontFamily: 'var(--font-jetbrains)' }}>
-                      {floorChange >= 0 ? '+' : ''}{floorChange.toFixed(1)}%
+                  <div className="text-[9px] text-[#6e7590] uppercase tracking-wider mb-1" style={{ fontFamily: 'var(--font-jetbrains)' }}>1D Vol Chg</div>
+                  {volChange != null ? (
+                    <div className={`text-[13px] font-bold ${volChange >= 0 ? 'text-[#4fe9b4]' : 'text-[#ff8a96]'}`} style={{ fontFamily: 'var(--font-jetbrains)' }}>
+                      {volChange >= 0 ? '+' : ''}{volChange.toFixed(1)}%
                     </div>
                   ) : (
                     <div className="text-[13px] font-bold text-[#6e7590]" style={{ fontFamily: 'var(--font-jetbrains)' }}>—</div>
@@ -903,6 +928,13 @@ function MonitorCollectionInner() {
             );
           })()}
         </div>
+
+        {/* Header data state — the KPIs above show '—' until real numbers land. */}
+        {(statsLoading || statsError) && (
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: statsError ? '#ff8a96' : '#6e7590', marginBottom: '10px' }}>
+            {statsError ?? 'Loading collection stats…'}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex items-center gap-0">
@@ -975,9 +1007,11 @@ function MonitorCollectionInner() {
                   );
                 })}
               </div>
+              {/* Not a live socket: this tab fetches one page of events when it is
+                  opened, so it must not claim to be streaming. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#6e7590' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#4fe9b4', display: 'inline-block' }} />
-                Live
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#6e7590', display: 'inline-block' }} />
+                {eventsLoading ? 'Loading…' : liveEvents === null ? 'Not loaded' : `Snapshot · ${liveEvents.length} latest events`}
               </div>
             </div>
 
@@ -993,7 +1027,10 @@ function MonitorCollectionInner() {
               {eventsLoading && (
                 <div className="px-4 py-6 text-[11px] text-[#6e7590]">Loading events…</div>
               )}
-              {!eventsLoading && liveEvents !== null && liveEvents.length === 0 && (
+              {!eventsLoading && eventsError && (
+                <div className="px-4 py-6 text-[11px] text-[#ff8a96]">{eventsError}</div>
+              )}
+              {!eventsLoading && !eventsError && liveEvents !== null && liveEvents.length === 0 && (
                 <div className="px-4 py-6 text-[11px] text-[#6e7590]">No events found.</div>
               )}
 
@@ -1107,8 +1144,9 @@ function MonitorCollectionInner() {
                       )}
                     </div>
 
-                    {/* QTY col */}
-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#f2f2f7' }}>1</div>
+                    {/* QTY col — OpenSea's event payload carries no quantity, so
+                        showing "1" would be an invented number. */}
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: '#6e7590' }}>—</div>
 
                     {/* FROM col */}
                     <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#9298b8' }}>{fromAddr || '—'}</div>
@@ -1187,7 +1225,10 @@ function MonitorCollectionInner() {
                 {offersLoading && (
                   <div style={{ padding: '24px 16px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590' }}>Loading offers…</div>
                 )}
-                {!offersLoading && groups.length === 0 && (
+                {!offersLoading && offersError && (
+                  <div style={{ padding: '24px 16px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96' }}>{offersError}</div>
+                )}
+                {!offersLoading && !offersError && groups.length === 0 && (
                   <div style={{ padding: '24px 16px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590' }}>No active offers.</div>
                 )}
                 {!offersLoading && groups.map((g, i) => {
@@ -1265,7 +1306,10 @@ function MonitorCollectionInner() {
                 {!holdersLoading && !contractParam && (
                   <div className="px-4 py-6 text-[11px] text-[#6e7590]">Contract address not available.</div>
                 )}
-                {!holdersLoading && liveHolders !== null && liveHolders.length === 0 && (
+                {!holdersLoading && holdersError && (
+                  <div className="px-4 py-6 text-[11px] text-[#ff8a96]">{holdersError}</div>
+                )}
+                {!holdersLoading && !holdersError && liveHolders !== null && liveHolders.length === 0 && (
                   <div className="px-4 py-6 text-[11px] text-[#6e7590]">No holders data.</div>
                 )}
                 {!holdersLoading && (liveHolders ?? []).map((h, i) => {
@@ -1405,6 +1449,12 @@ function MonitorCollectionInner() {
                   <div>
                     {traitsLoading && (
                       <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '8px 0' }}>Loading traits…</div>
+                    )}
+                    {!traitsLoading && traitsError && (
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', padding: '8px 0' }}>{traitsError}</div>
+                    )}
+                    {!traitsLoading && !traitsError && (liveTraits ?? []).length === 0 && (
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '8px 0' }}>No traits data.</div>
                     )}
                     {(liveTraits ?? []).map(trait => (
                       <div key={trait.category} style={{ borderTop: '1px solid var(--wr-border)' }}>
@@ -1733,13 +1783,13 @@ function MonitorCollectionInner() {
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
                           <button
-                            onClick={e => { e.stopPropagation(); setBuyWallet(''); setBuyStep('confirm'); setBuyNft(nftItem); }}
+                            onClick={e => { e.stopPropagation(); setBuyWallet(''); setBuyNft(nftItem); }}
                             className="btn-cta"
                             style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: '#000', backgroundColor: '#7c5cff', border: 'none', padding: '6px 0', cursor: 'pointer' }}>
                             Buy
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); setOfferConfigs({}); setOfferStep('form'); setOfferNft(nftItem); }}
+                            onClick={e => { e.stopPropagation(); setOfferConfigs({}); setOfferNft(nftItem); }}
                             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.4)'; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none'; }}
                             style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 600, color: 'var(--wr-info)', backgroundColor: 'var(--wr-info-bg)', border: '1px solid var(--wr-info)', padding: '6px 0', cursor: 'pointer', transition: 'filter 0.12s ease' }}>
@@ -1831,8 +1881,16 @@ function MonitorCollectionInner() {
               {traitsLoading && (
                 <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590', padding: '40px 0', textAlign: 'center' }}>Loading traits…</div>
               )}
-              {!traitsLoading && (liveTraits ?? []).length === 0 && (
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590', padding: '40px 0', textAlign: 'center' }}>No traits data available.</div>
+              {!traitsLoading && traitsError && (
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ff8a96', padding: '40px 0', textAlign: 'center' }}>{traitsError}</div>
+              )}
+              {!traitsLoading && !traitsError && (liveTraits ?? []).length === 0 && (
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590', padding: '40px 0', textAlign: 'center' }}>
+                  No traits data available.
+                  <span style={{ display: 'block', fontSize: '10px', color: '#4d5375', marginTop: '4px' }}>
+                    Traits come from OpenSea — add an OpenSea API key in Settings if you have not.
+                  </span>
+                </div>
               )}
 
               {!traitsLoading && (
@@ -1842,44 +1900,32 @@ function MonitorCollectionInner() {
                     .flatMap(trait =>
                       trait.values
                         .filter(v => !traitSearch || v.value.toLowerCase().includes(traitSearch.toLowerCase()) || trait.category.toLowerCase().includes(traitSearch.toLowerCase()))
-                        .map((v: TraitValue, vi) => {
-                          // Use liveNfts images as visual placeholders (cycle by index)
-                          const allNfts = liveNfts ?? [];
-                          const imgSlots = 4;
-                          const startIdx = vi % Math.max(allNfts.length, 1);
-                          const overflow = Math.max(0, v.count - imgSlots);
-
+                        .map((v: TraitValue) => {
                           return (
                             <div key={`${trait.category}-${v.value}`} style={{ border: '1px solid #14161f', backgroundColor: '#0b0c14', overflow: 'hidden', cursor: 'pointer' }}>
-                              {/* NFT image grid */}
+                              {/* Preview tiles. The traits endpoint returns counts only — it
+                                  carries no example token ids — and fetching samples per trait
+                                  value would be a request per row against the OpenSea free
+                                  tier. Previously this cycled through unrelated items from the
+                                  Items tab, which showed NFTs that do not have this trait, so
+                                  the tiles are now neutral placeholders. */}
                               <div style={{ position: 'relative' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-                                  {Array.from({ length: 4 }).map((_, si) => {
-                                    const nft = allNfts[(startIdx + si) % Math.max(allNfts.length, 1)];
-                                    const imgSrc = nft?.image_url ?? nft?.display_image_url ?? null;
-                                    return (
-                                      <div key={si} style={{ aspectRatio: '1', backgroundColor: '#111', overflow: 'hidden' }}>
-                                        {imgSrc ? (
-                                          <img src={imgSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                        ) : (
-                                          <div style={{ width: '100%', height: '100%', backgroundColor: '#161616', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                              <rect x="3" y="3" width="18" height="18" rx="2" stroke="#232533" strokeWidth="1.5"/>
-                                              <circle cx="8.5" cy="8.5" r="1.5" stroke="#232533" strokeWidth="1.2"/>
-                                              <path d="M3 16l5-5 4 4 3-3 6 6" stroke="#232533" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                                            </svg>
-                                          </div>
-                                        )}
+                                  {Array.from({ length: 4 }).map((_, si) => (
+                                    <div key={si} style={{ aspectRatio: '1', backgroundColor: '#111', overflow: 'hidden' }}>
+                                      <div style={{ width: '100%', height: '100%', backgroundColor: '#161616', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                          <rect x="3" y="3" width="18" height="18" rx="2" stroke="#232533" strokeWidth="1.5"/>
+                                          <circle cx="8.5" cy="8.5" r="1.5" stroke="#232533" strokeWidth="1.2"/>
+                                          <path d="M3 16l5-5 4 4 3-3 6 6" stroke="#232533" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        </svg>
                                       </div>
-                                    );
-                                  })}
+                                    </div>
+                                  ))}
                                 </div>
-                                {/* Overflow badge */}
-                                {overflow > 0 && (
-                                  <div style={{ position: 'absolute', bottom: '4px', right: '4px', backgroundColor: 'rgba(0,0,0,0.75)', border: '1px solid #232533', padding: '2px 6px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#f2f2f7', fontWeight: 700 }}>
-                                    +{overflow > 999 ? `${(overflow / 1000).toFixed(1)}k` : overflow}
-                                  </div>
-                                )}
+                                <div style={{ position: 'absolute', bottom: '4px', right: '4px', backgroundColor: 'rgba(0,0,0,0.75)', border: '1px solid #232533', padding: '2px 6px', fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#6e7590', fontWeight: 700 }}>
+                                  No previews
+                                </div>
                               </div>
                               {/* Info rows */}
                               <div style={{ padding: '10px 12px', borderTop: '1px solid #14161f' }}>
@@ -1916,27 +1962,6 @@ function MonitorCollectionInner() {
           const EXPIRY_OPTIONS = ['1 hour', '6 hours', '12 hours', '1 day', '3 days', '7 days', '1 month'];
           const imgUrl = searchParams.get('image') ?? '';
 
-          if (colBidStep === 'processing') return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '16px' }}>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', color: 'var(--wr-text-3)' }}>Signing & broadcasting…</div>
-            </div>
-          );
-
-          if (colBidStep === 'done') return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '16px' }}>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '24px', color: 'var(--wr-success)', fontWeight: 700 }}>✓</div>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '14px', color: 'var(--wr-success)' }}>Collection offer submitted</div>
-              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-2)' }}>
-                {totalVal.toFixed(4)} WETH · {colBidExpiry}
-                {colBidTraits.length > 0 && ` · ${colBidTraits.map(t => `${t.category}: ${t.value}`).join(', ')}`}
-              </div>
-              <button onClick={() => { setColBidStep('form'); setColBidAmount(''); setColBidQty(1); setColBidTraits([]); }}
-                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '8px 24px', cursor: 'pointer', marginTop: '8px' }}>
-                Place Another
-              </button>
-            </div>
-          );
-
           return (
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: '500px' }}>
               {/* Header */}
@@ -1956,9 +1981,18 @@ function MonitorCollectionInner() {
               </div>
 
               {/* Wallet selector */}
+              {wallets.length === 0 && (
+                <div style={{ marginBottom: '24px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', border: '1px solid var(--wr-border)', padding: '14px', maxWidth: '360px' }}>
+                  No wallets yet.
+                  <span style={{ display: 'block', fontSize: '10px', color: 'var(--wr-text-4)', marginTop: '4px' }}>Add one in Wallets to see balances here.</span>
+                </div>
+              )}
               {wallets.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--wr-text-3)', marginBottom: '8px', textTransform: 'uppercase' }}>Offering Wallet</div>
+                  {balancesNote && (
+                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginBottom: '6px' }}>{balancesNote}</div>
+                  )}
                   <div ref={colBidWalletDropRef} style={{ position: 'relative', maxWidth: '360px' }}>
                     <button
                       onClick={() => setColBidWalletDropOpen(o => !o)}
@@ -2226,7 +2260,11 @@ function MonitorCollectionInner() {
                   </button>
                   );
                 })() : (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ffb020', border: '1px solid #ffb020', backgroundColor: 'rgba(255,176,32,0.08)', padding: '8px 10px' }}>
+                      Placing collection offers is not enabled in this build — nothing is
+                      signed and no order reaches OpenSea.
+                    </div>
                     <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)' }}>
                       {colBidQty}× {colBidAmount} WETH · {colBidExpiry}
                       {colBidTraits.length > 0 && ` · ${colBidTraits.map(t => t.value).join(', ')}`}
@@ -2235,9 +2273,9 @@ function MonitorCollectionInner() {
                       style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '10px 16px', cursor: 'pointer' }}>
                       Edit
                     </button>
-                    <button onClick={() => { setColBidStep('processing'); setTimeout(() => setColBidStep('done'), 2400); }}
-                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: '#000', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '10px 28px', cursor: 'pointer' }}>
-                      Confirm &amp; Submit
+                    <button disabled title="Not enabled in this build"
+                      style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700, color: 'var(--wr-text-4)', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border)', padding: '10px 28px', cursor: 'not-allowed' }}>
+                      Submit — unavailable
                     </button>
                   </div>
                 )}
@@ -2249,6 +2287,21 @@ function MonitorCollectionInner() {
         {/* ── ANALYTICS TAB ── */}
         {tab === 'Analytics' && (
           <div className="flex flex-col gap-6">
+            {/* Every figure below comes from the single fetch_collection_stats call
+                made on mount — this tab issues no requests of its own. */}
+            {(statsLoading || statsError) && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: statsError ? '#ff8a96' : '#6e7590' }}>
+                {statsError ?? 'Loading collection stats…'}
+              </div>
+            )}
+            {!statsLoading && !statsError && liveStats === null && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#6e7590' }}>
+                No data yet.
+                <span style={{ display: 'block', fontSize: '10px', color: '#4d5375', marginTop: '4px' }}>
+                  These figures come from OpenSea — add an OpenSea API key in Settings if you have not.
+                </span>
+              </div>
+            )}
             {/* Key metrics grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
               {[
@@ -2360,27 +2413,44 @@ function MonitorCollectionInner() {
             </div>
 
             <div className="border border-[#14161f] overflow-hidden">
-              {alerts.map(a => (
+              {alertsLoading && (
+                <div className="px-4 py-6 text-[11px] text-[#6e7590]">Loading alert rules…</div>
+              )}
+              {!alertsLoading && alertsError && (
+                <div className="px-4 py-6 text-[11px] text-[#ff8a96]">{alertsError}</div>
+              )}
+              {!alertsLoading && !alertsError && alerts !== null && alerts.length === 0 && (
+                <div className="px-4 py-6 text-[11px] text-[#6e7590]">
+                  No alert rules yet.
+                  <span className="block text-[10px] text-[#4d5375] mt-1">
+                    Add one with “+ Add Rule” — it is stored locally and attached to {alertWallet ? `${alertWallet.slice(0, 6)}…${alertWallet.slice(-4)}` : 'your wallet'}.
+                  </span>
+                </div>
+              )}
+              {!alertsLoading && (alerts ?? []).map(a => (
                 <div key={a.id} className="flex items-center gap-4 px-4 py-4 border-b border-[#14161f] last:border-0 transition-colors" onMouseEnter={hoverOn} onMouseLeave={hoverOff}>
                   {/* Toggle */}
                   <div
                     role="switch"
-                    aria-checked={a.enabled}
+                    aria-checked={a.active}
                     className="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors"
-                    style={{ backgroundColor: a.enabled ? '#7c5cff' : 'var(--wr-overlay)' }}
-                    onClick={() => toggleAlert(a.id)}
+                    style={{ backgroundColor: a.active ? '#7c5cff' : 'var(--wr-overlay)' }}
+                    onClick={() => { void toggleAlert(a); }}
                   >
                     <div className="absolute top-0.5 w-3 h-3 rounded-full bg-black transition-all"
-                      style={{ left: a.enabled ? '18px' : '2px' }} />
+                      style={{ left: a.active ? '18px' : '2px' }} />
                   </div>
                   <div className="flex-1">
-                    <div className="text-[12px] text-white font-medium">{a.label}</div>
-                    <div className="text-[10px] text-[#6e7590] mt-0.5">Channel: {a.channel}</div>
+                    <div className="text-[12px] text-white font-medium">{alertLabel(a)}</div>
+                    <div className="text-[10px] text-[#6e7590] mt-0.5">
+                      macOS notification{a.discord_webhook ? ' + Discord webhook' : ' only (no Discord webhook set)'}
+                      {a.last_triggered_at ? ` · last fired ${a.last_triggered_at}` : ' · never fired'}
+                    </div>
                   </div>
                   <button onClick={() => openEditAlert(a)} className="text-[9px] text-[#6e7590] hover:text-[#9298b8] border border-[#14161f] px-2.5 py-1 transition-colors cursor-pointer">
                     Edit
                   </button>
-                  <button onClick={() => deleteAlert(a.id)} className="text-[9px] text-[#ff8a96] hover:text-[#ff8a96] border border-[#14161f] px-2.5 py-1 transition-colors cursor-pointer">
+                  <button onClick={() => { void removeAlert(a.id); }} className="text-[9px] text-[#ff8a96] hover:text-[#ff8a96] border border-[#14161f] px-2.5 py-1 transition-colors cursor-pointer">
                     Delete
                   </button>
                 </div>
@@ -2388,7 +2458,10 @@ function MonitorCollectionInner() {
             </div>
 
             <p className="text-[10px] text-[#6e7590]">
-              Alerts fire when conditions are met for this collection. Notifications go to macOS system notifications and/or a Discord webhook configured in Settings.
+              Floor-price rules are stored locally against your wallet and evaluated while the
+              OpenSea live stream is connected — they are not checked when the stream is off.
+              A triggered rule raises a macOS notification, and also posts to a Discord webhook
+              if you set one on the rule.
             </p>
 
             {alertEditor && (
@@ -2406,36 +2479,68 @@ function MonitorCollectionInner() {
                     </div>
                   </div>
                   <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Condition — the backend only evaluates floor above/below a
+                        threshold, so the editor offers exactly that instead of a
+                        free-text rule it could never honour. */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Condition</label>
-                      <input
-                        autoFocus
-                        type="text"
-                        value={alertEditor.label}
-                        onChange={e => setAlertEditor(prev => prev ? { ...prev, label: e.target.value } : prev)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveAlertEditor(); if (e.key === 'Escape') closeAlertEditor(); }}
-                        placeholder="e.g. Floor drops below 10 ETH"
-                        style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 10px', outline: 'none', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Channel</label>
+                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Condition — floor price</label>
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        {ALERT_CHANNELS.map(ch => (
+                        {([['below', 'Drops below'], ['above', 'Rises above']] as [AlertCondition, string][]).map(([val, label]) => (
                           <button
-                            key={ch}
-                            onClick={() => setAlertEditor(prev => prev ? { ...prev, channel: ch } : prev)}
-                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: alertEditor.channel === ch ? '#000' : 'var(--wr-text)', backgroundColor: alertEditor.channel === ch ? '#7c5cff' : 'transparent', border: '1px solid', borderColor: alertEditor.channel === ch ? '#7c5cff' : 'var(--wr-border)', padding: '7px 10px', cursor: 'pointer' }}
+                            key={val}
+                            onClick={() => setAlertEditor(prev => prev ? { ...prev, condition: val } : prev)}
+                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: alertEditor.condition === val ? '#000' : 'var(--wr-text)', backgroundColor: alertEditor.condition === val ? '#7c5cff' : 'transparent', border: '1px solid', borderColor: alertEditor.condition === val ? '#7c5cff' : 'var(--wr-border)', padding: '7px 10px', cursor: 'pointer' }}
                           >
-                            {ch}
+                            {label}
                           </button>
                         ))}
                       </div>
                     </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Threshold (ETH)</label>
+                      <input
+                        autoFocus
+                        type="text"
+                        inputMode="decimal"
+                        value={alertEditor.threshold}
+                        onChange={e => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v)) setAlertEditor(prev => prev ? { ...prev, threshold: v } : prev); }}
+                        onKeyDown={e => { if (e.key === 'Enter') void saveAlertEditor(); if (e.key === 'Escape') closeAlertEditor(); }}
+                        placeholder="10.5"
+                        style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 10px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      {liveStats?.floor_price_eth != null && (
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)' }}>
+                          Current floor: {liveStats.floor_price_eth.toFixed(4)} ETH
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', fontWeight: 700, color: 'var(--wr-text-3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Discord webhook (optional)</label>
+                      <input
+                        type="text"
+                        value={alertEditor.webhook}
+                        onChange={e => setAlertEditor(prev => prev ? { ...prev, webhook: e.target.value } : prev)}
+                        placeholder="https://discord.com/api/webhooks/…"
+                        style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 10px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: 'var(--wr-text-3)' }}>
+                        Leave empty for a macOS notification only.
+                      </span>
+                    </div>
+                    {alertEditor.error && (
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96' }}>{alertEditor.error}</div>
+                    )}
                   </div>
                   <div style={{ padding: '12px 16px', borderTop: '1px solid var(--wr-border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button onClick={closeAlertEditor} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'transparent', border: '1px solid var(--wr-border)', padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={saveAlertEditor} disabled={!alertEditor.label.trim()} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: alertEditor.label.trim() ? '#7c5cff' : '#241c4d', border: '1px solid', borderColor: alertEditor.label.trim() ? '#7c5cff' : '#241c4d', padding: '7px 14px', cursor: alertEditor.label.trim() ? 'pointer' : 'not-allowed' }}>{alertEditor.mode === 'add' ? 'Add Rule' : 'Save'}</button>
+                    {(() => {
+                      const canSave = !alertEditor.saving && parseFloat(alertEditor.threshold) > 0;
+                      return (
+                        <button onClick={() => { void saveAlertEditor(); }} disabled={!canSave} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 700, color: '#000', backgroundColor: canSave ? '#7c5cff' : '#241c4d', border: '1px solid', borderColor: canSave ? '#7c5cff' : '#241c4d', padding: '7px 14px', cursor: canSave ? 'pointer' : 'not-allowed' }}>
+                          {alertEditor.saving ? 'Saving…' : alertEditor.mode === 'add' ? 'Add Rule' : 'Save'}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

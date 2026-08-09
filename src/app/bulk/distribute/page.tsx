@@ -5,7 +5,7 @@ import Link from 'next/link';
 import ProGate from '@/components/ProGate';
 import { loadAddressBook, type AddressEntry } from '@/lib/addressBook';
 import { loadWallets } from '@/lib/walletStore';
-import { loadAlchemyKey, getPortfolioSnapshot, getWalletTokens } from '@/lib/tauri';
+import { loadAlchemyKey, getWalletTokens, estimateGas } from '@/lib/tauri';
 
 // ─── Distribute Funds ─────────────────────────────────────────────────────────
 
@@ -16,10 +16,31 @@ const STEP_LABELS = ['Select & Amounts', 'Confirm', 'Process'] as const;
 
 const WETH_CONTRACT = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 
-interface DistWallet { id: string; name: string; address: string; eth: number; weth: number }
+// Balances are `null` until a real Alchemy response fills them in — never 0,
+// which would read as a genuine "this wallet is empty".
+interface DistWallet { id: string; name: string; address: string; eth: number | null; weth: number | null }
 
 function shortAddr(a: string): string {
   return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
+
+/** Balance renderer: '—' until the real number arrives. */
+function bal(v: number | null, digits: number): string {
+  return v == null ? '—' : v.toFixed(digits);
+}
+
+/** Decimal ETH string → wei decimal string (no float rounding). */
+function ethToWei(eth: string): string {
+  const [whole = '0', frac = ''] = eth.trim().split('.');
+  const fracPadded = (frac + '0'.repeat(18)).slice(0, 18);
+  const digits = (whole.replace(/\D/g, '') || '0') + fracPadded.replace(/\D/g, '').padEnd(18, '0');
+  return (BigInt(digits)).toString();
+}
+
+function errText(e: unknown, fallback: string): string {
+  if (typeof e === 'string' && e.trim()) return e;
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
 }
 
 function StepIndicator({ current }: { current: Step }) {
@@ -57,28 +78,56 @@ function StepIndicator({ current }: { current: Step }) {
 export default function DistributeFundsPage() {
   const [step, setStep] = useState<Step>(1);
 
-  // Real wallets + live balances (Alchemy). No mock fixtures.
+  // Real wallets (walletStore) + live balances (Alchemy). No fixtures: a wallet
+  // starts with null balances and only ever shows a number the backend returned.
   const [wallets, setWallets] = useState<DistWallet[]>([]);
+  const [walletsLoaded, setWalletsLoaded] = useState(false);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [balancesNote, setBalancesNote] = useState<string | null>(null);
+  const [alchemyKey, setAlchemyKey] = useState('');
+
   useEffect(() => {
-    const stored = loadWallets();
-    const base: DistWallet[] = stored.map(w => ({ id: w.id, name: w.name, address: w.address, eth: 0, weth: 0 }));
-    setWallets(base);
+    let stored: { id: string; name: string; address: string }[] = [];
+    try { stored = loadWallets(); } catch { stored = []; }
+    setWallets(stored.map(w => ({ id: w.id, name: w.name, address: w.address, eth: null, weth: null })));
+    setWalletsLoaded(true);
+
     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    if (!inTauri || stored.length === 0) return;
+    if (!inTauri) { setBalancesNote('Live balances need the Westron desktop app.'); return; }
+    if (stored.length === 0) return;
+
+    let cancelled = false;
     (async () => {
-      const key = await loadAlchemyKey().catch(() => '');
-      if (!key) return;
-      const filled = await Promise.all(stored.map(async (w): Promise<DistWallet> => {
-        let eth = 0, weth = 0;
-        try { eth = (await getPortfolioSnapshot(w.address, key)).eth_balance; } catch {}
+      let key = '';
+      try { key = (await loadAlchemyKey()) ?? ''; } catch { key = ''; }
+      if (cancelled) return;
+      setAlchemyKey(key);
+      if (!key) { setBalancesNote('Add an Alchemy API key in Settings to load balances.'); return; }
+
+      setBalancesLoading(true);
+      // One command per wallet, strictly sequential. get_wallet_tokens returns
+      // the native ETH row and every ERC-20 in a single Alchemy request, so
+      // there is no per-row fan-out and no Promise.all burst (free tier / 429s).
+      const failures: string[] = [];
+      for (const w of stored) {
+        if (cancelled) return;
         try {
+          // eslint-disable-next-line no-await-in-loop
           const toks = await getWalletTokens(w.address, key);
-          weth = toks.find(t => (t.tokenAddress ?? '').toLowerCase() === WETH_CONTRACT.toLowerCase())?.balance ?? 0;
-        } catch {}
-        return { id: w.id, name: w.name, address: w.address, eth, weth };
-      }));
-      setWallets(filled);
+          if (cancelled) return;
+          const eth = toks.find(t => t.isNative)?.balance ?? null;
+          const weth = toks.find(t => (t.tokenAddress ?? '').toLowerCase() === WETH_CONTRACT.toLowerCase())?.balance ?? 0;
+          setWallets(prev => prev.map(p => p.id === w.id ? { ...p, eth, weth } : p));
+        } catch (e) {
+          failures.push(`${w.name}: ${errText(e, 'balance unavailable')}`);
+        }
+      }
+      if (cancelled) return;
+      setBalancesLoading(false);
+      setBalancesNote(failures.length > 0 ? `Could not load ${failures.length} balance(s) — ${failures[0]}` : null);
     })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const sourceWallets = wallets.map(w => ({ id: w.id, label: `${w.name} — ${shortAddr(w.address)}`, eth: w.eth, weth: w.weth }));
@@ -90,7 +139,7 @@ export default function DistributeFundsPage() {
   const [amountEqual, setAmountEqual] = useState('');
   const [amountCustom, setAmountCustom] = useState<Record<string, string>>({});
 
-  const addressBookEntries = loadAddressBook();
+  const addressBookEntries: AddressEntry[] = loadAddressBook();
   const [abSelected, setAbSelected] = useState<Set<string>>(new Set());
   const [abAmounts, setAbAmounts] = useState<Record<string, string>>({});
 
@@ -111,6 +160,36 @@ export default function DistributeFundsPage() {
         abSelectedList.every(e => !!abAmounts[e.id] && parseFloat(abAmounts[e.id]) > 0)
   );
 
+  // ── Gas estimate (real eth_estimateGas, one call for the whole review) ──────
+  // The Rust command returns GAS UNITS, not a fee: converting to ETH needs a
+  // gas price, which this build does not expose. So we show the real unit count
+  // and say plainly that the ETH cost is not available.
+  const [gasUnits, setGasUnits] = useState<number | null>(null);
+  const [gasLoading, setGasLoading] = useState(false);
+  const [gasError, setGasError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (step !== 2) return;
+    const firstAddr = selectedList[0]?.address ?? abSelectedList[0]?.address ?? '';
+    const firstAmount = mode === 'equal'
+      ? amountEqual
+      : (selectedList[0] ? amountCustom[selectedList[0].id] : abSelectedList[0] ? abAmounts[abSelectedList[0].id] : '') ?? '';
+    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    if (!inTauri) { setGasUnits(null); setGasError('Needs the Westron desktop app.'); return; }
+    if (!alchemyKey) { setGasUnits(null); setGasError('Add an Alchemy API key in Settings.'); return; }
+    if (!firstAddr || !firstAmount) { setGasUnits(null); setGasError(null); return; }
+
+    let cancelled = false;
+    setGasLoading(true);
+    setGasError(null);
+    estimateGas(firstAddr, ethToWei(firstAmount), undefined, alchemyKey)
+      .then(g => { if (!cancelled) setGasUnits(g); })
+      .catch(e => { if (!cancelled) { setGasUnits(null); setGasError(errText(e, 'Gas estimate failed.')); } })
+      .finally(() => { if (!cancelled) setGasLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, alchemyKey]);
+
   const TxPanel = () => (
     <div style={{ flex: 1, backgroundColor: 'var(--wr-surface)', border: '1px solid var(--wr-border)', padding: '24px', minHeight: '400px' }}>
       <div className="flex items-center justify-between mb-6">
@@ -127,6 +206,11 @@ export default function DistributeFundsPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#ffb020', border: '1px solid #ffb020', backgroundColor: 'rgba(255,176,32,0.08)', padding: '10px 12px' }}>
+            Nothing was broadcast. Sending funds from this screen is not enabled in this
+            build, so there are no transaction hashes or statuses to show — the rows
+            below are the distribution you configured, not on-chain transactions.
+          </div>
           {selectedList.map((w, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
               <div>
@@ -135,8 +219,21 @@ export default function DistributeFundsPage() {
                   {mode === 'equal' ? amountEqual : (amountCustom[w.id] ?? '0')} ETH
                 </div>
               </div>
-              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: i === 0 ? '#ffb020' : 'var(--wr-text-3)' }}>
-                {i === 0 ? 'Processing' : 'Pending'}
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)' }}>
+                Not sent
+              </span>
+            </div>
+          ))}
+          {abSelectedList.map(ab => (
+            <div key={ab.id} className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
+              <div>
+                <div style={{ color: 'var(--wr-text)', fontSize: '12px', fontFamily: 'var(--font-jetbrains)' }}>{shortAddr(ab.address)}</div>
+                <div style={{ color: 'var(--wr-text-3)', fontSize: '11px', fontFamily: 'var(--font-jetbrains)', marginTop: '2px' }}>
+                  {mode === 'equal' ? amountEqual : (abAmounts[ab.id] ?? '0')} ETH
+                </div>
+              </div>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, color: 'var(--wr-text-3)' }}>
+                Not sent
               </span>
             </div>
           ))}
@@ -180,6 +277,9 @@ export default function DistributeFundsPage() {
                     onChange={e => setSource(e.target.value)}
                     style={{ width: '100%', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: '1px solid var(--wr-border)', padding: '10px 32px 10px 14px', appearance: 'none', cursor: 'pointer', outline: 'none' }}
                   >
+                    <option value="" disabled>
+                      {walletsLoaded && wallets.length === 0 ? 'No saved wallets' : 'Select wallet…'}
+                    </option>
                     {sourceWallets.map(w => (
                       <option key={w.id} value={w.id}>{w.label}</option>
                     ))}
@@ -196,15 +296,23 @@ export default function DistributeFundsPage() {
                     <div style={{ display: 'flex', gap: '16px', marginTop: '7px', paddingLeft: '2px' }}>
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
                         <span style={{ color: 'var(--wr-text-4)', marginRight: '4px' }}>ETH</span>
-                        <span style={{ color: 'var(--wr-text)', fontWeight: 600 }}>{sw.eth.toFixed(4)}</span>
+                        <span style={{ color: sw.eth == null ? 'var(--wr-text-4)' : 'var(--wr-text)', fontWeight: 600 }}>{bal(sw.eth, 4)}</span>
                       </span>
                       <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
                         <span style={{ color: 'var(--wr-text-4)', marginRight: '4px' }}>WETH</span>
-                        <span style={{ color: sw.weth > 0 ? 'var(--wr-text)' : 'var(--wr-text-4)', fontWeight: 600 }}>{sw.weth.toFixed(4)}</span>
+                        <span style={{ color: sw.weth != null && sw.weth > 0 ? 'var(--wr-text)' : 'var(--wr-text-4)', fontWeight: 600 }}>{bal(sw.weth, 4)}</span>
                       </span>
+                      {balancesLoading && (
+                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-4)' }}>Loading balances…</span>
+                      )}
                     </div>
                   );
                 })()}
+                {balancesNote && (
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '6px' }}>
+                    {balancesNote}
+                  </div>
+                )}
               </div>
 
               {/* TO — wallet grid */}
@@ -212,6 +320,14 @@ export default function DistributeFundsPage() {
                 <label style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--wr-text-3)', display: 'block', marginBottom: '10px' }}>
                   To
                 </label>
+                {walletsLoaded && wallets.length === 0 && (
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', border: '1px solid var(--wr-border)', padding: '14px' }}>
+                    No wallets yet.
+                    <span style={{ display: 'block', fontSize: '10px', color: 'var(--wr-text-4)', marginTop: '4px' }}>
+                      Add a wallet in Wallets, or pick a destination from the Address Book.
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   {wallets.map(w => {
                     const isSel = selected.has(w.id);
@@ -246,11 +362,11 @@ export default function DistributeFundsPage() {
                           <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                             <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px' }}>
                               <span style={{ color: 'var(--wr-text-4)' }}>ETH </span>
-                              <span style={{ color: 'var(--wr-text-2)', fontWeight: 600 }}>{w.eth.toFixed(3)}</span>
+                              <span style={{ color: w.eth == null ? 'var(--wr-text-4)' : 'var(--wr-text-2)', fontWeight: 600 }}>{bal(w.eth, 3)}</span>
                             </span>
                             <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px' }}>
                               <span style={{ color: 'var(--wr-text-4)' }}>WETH </span>
-                              <span style={{ color: w.weth > 0 ? 'var(--wr-text-2)' : 'var(--wr-text-4)', fontWeight: 600 }}>{w.weth.toFixed(3)}</span>
+                              <span style={{ color: w.weth != null && w.weth > 0 ? 'var(--wr-text-2)' : 'var(--wr-text-4)', fontWeight: 600 }}>{bal(w.weth, 3)}</span>
                             </span>
                           </div>
                         </div>
@@ -417,7 +533,7 @@ export default function DistributeFundsPage() {
                   </span>
                 </div>
               ))}
-              {abSelectedList.map((ab, i) => (
+              {abSelectedList.map(ab => (
                 <div key={ab.id} className="flex items-center justify-between px-3 py-2.5" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -433,11 +549,18 @@ export default function DistributeFundsPage() {
               ))}
               <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--wr-border)' }}>
                 <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Gas estimate:</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text)' }}>~0.004 ETH</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: gasUnits == null ? 'var(--wr-text-4)' : 'var(--wr-text)' }}>
+                  {gasLoading ? 'Estimating…' : gasUnits != null ? `${gasUnits.toLocaleString()} gas / transfer` : '—'}
+                </span>
+              </div>
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: gasError ? '#ff8a96' : 'var(--wr-text-4)', marginTop: '-8px' }}>
+                {gasError
+                  ? gasError
+                  : 'eth_estimateGas for the first recipient. Gas units only — the ETH cost depends on the gas price at send time, which this build does not fetch.'}
               </div>
               <div className="flex gap-2 mt-2">
                 <button onClick={() => setStep(1)} style={{ flex: 1, backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>Back</button>
-                <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 0', border: 'none', cursor: 'pointer' }}>Confirm & Send</button>
+                <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: '#7c5cff', color: '#0b0c14', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 700, padding: '10px 0', border: 'none', cursor: 'pointer' }}>Continue (nothing is sent)</button>
               </div>
             </div>
           )}
@@ -446,11 +569,15 @@ export default function DistributeFundsPage() {
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex flex-col items-center py-6 gap-3">
-                <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>⚡</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Processing</div>
-                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>Transactions are being submitted to the network</div>
+                <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-overlay)', border: '1px solid var(--wr-border-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>⚠</div>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>Not sent</div>
+                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
+                  No transaction was signed or broadcast — sending funds from this screen
+                  is not enabled in this build. Your selection is shown on the right for
+                  review only.
+                </div>
               </div>
-              <button onClick={() => { setStep(1); setAmountEqual(''); setAmountCustom({}); setAbAmounts({}); setAbSelected(new Set()); setSelected(new Set(['main', 'defi', 'emir1', 'burner'])); }}
+              <button onClick={() => { setStep(1); setAmountEqual(''); setAmountCustom({}); setAbAmounts({}); setAbSelected(new Set()); setSelected(new Set()); }}
                 style={{ width: '100%', backgroundColor: 'transparent', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500, padding: '10px 0', border: '1px solid var(--wr-border)', cursor: 'pointer' }}>
                 New Distribution
               </button>
