@@ -31,7 +31,7 @@ Westron, Ethereum yatırımcıları ve NFT trader'ları için geliştirilmekte o
 | Katman | Teknoloji |
 |--------|-----------|
 | Frontend | Next.js (React) |
-| Runtime | macOS native wrapper — Electron veya Tauri (karar bekleniyor) |
+| Runtime | **Tauri** (karar verildi ve uygulandı — Rust backend + Next.js static export) |
 | Package Manager | npm |
 | Blockchain Data | ETH RPC — Alchemy / Infura + indexing API'leri |
 | Local Storage | Encrypted local DB + macOS Keychain (key material için) |
@@ -48,13 +48,20 @@ Westron, Ethereum yatırımcıları ve NFT trader'ları için geliştirilmekte o
 5. **Alerts & Monitoring** — floor, wallet activity, portfolio value — macOS notif + Discord webhook
 6. **Sniping & Automation** — floor/trait sniper, scheduled sweeps, automation rules engine
 
-## Açık Teknik Kararlar (çözüm bekliyor)
+## Çözülmüş Teknik Kararlar
 
-**Transaction signing / confirmation sorunu:**
-Dokümanda not düşülmüş: her transaction için kullanıcı onayı istemek sniping ve scheduled task'larda imkânsız. Atlas bu konuda bir mimari öneri geliştirmeli — spend cap + pre-authorization modeli veya session-level signing yetkilendirmesi gibi seçenekler değerlendirilmeli. Bu karar Emir onayına sunulacak.
+**Transaction signing / confirmation — ÇÖZÜLDÜ: harcama zarfı (envelope) modeli.**
+Her işlem için kullanıcı onayı istemek sniping ve zamanlanmış görevlerde imkânsızdı.
+Çözüm: kullanıcı önceden bir zarf tanımlar — tek işlem tavanı, toplam harcama sınırı,
+izinli adres kapsamı ve süre. Zarf içinde kalan işlemler onay istemeden imzalanır;
+dışına çıkan reddedilir. Kill switch her şeyi anında durdurur. Tüm kararlar
+`audit/*.jsonl` dosyasına yazılır.
 
-**Electron vs Tauri:**
-macOS wrapper seçimi henüz kesinleşmemiş. Atlas tradeoff analizi yapacak.
+Uygulama: `src-tauri/src/envelope/`. Saf `evaluate()` fonksiyonu hem yan etkisiz
+`preview_transaction`'ı hem de harcamayı işleyen `check_and_authorize`'ı besler —
+kural ayrışması yapısal olarak imkânsız.
+
+**Electron vs Tauri — ÇÖZÜLDÜ: Tauri.**
 
 ## Güvenlik Kuralları (Değiştirilemez)
 
@@ -64,6 +71,50 @@ macOS wrapper seçimi henüz kesinleşmemiş. Atlas tradeoff analizi yapacak.
 - Wallet adresleri dışında hiçbir kullanıcı verisi dışarıya çıkmaz
 - Her finansal veya irreversible aksiyon için guard mekanizması zorunludur
 - Spend cap ve safety limit'ler default olarak uygulanır
+- **Adres asla çağırandan alınmaz.** Cüzdan kimliği private key'den türetilir
+  (`import_wallet` → `PrivateKeySigner`). Frontend'den gelen adres yalnızca bir
+  iddiadır ve eşleşmezse işlem reddedilir. Gerekçe: 09.08.2026'da dashboard'daki
+  Add Wallet modalı private key'i adres alanına yazıyordu; key düz metin
+  localStorage'a gidiyor ve Alchemy'ye adres parametresi olarak gönderiliyordu.
+- **Private key hiçbir ekranda, logda veya adres alanında görünmez.**
+  `walletStore.loadWallets()` adres alanı 64-hex olan kaydı okurken siler ve uyarır.
+
+## Dürüstlük Kuralları (Değiştirilemez — 09.08.2026'da kanla yazıldı)
+
+Bu kurallar bir stil tercihi değil. İhlal edildiklerinde kullanıcı parasını
+kaybeder ya da kaybettiğini sanır.
+
+1. **Ekran, olmayan veriyi uydurmaz.** Veri yoksa `—` yazılır, boş durum gösterilir.
+   Placeholder rakam (`$12,847.32`, `+%28.4`), sahte floor fiyatı, örnek cüzdan
+   listesi yasaktır. Demo görüntüsü gerekiyorsa açıkça "örnek veri" etiketlenir.
+
+2. **Hiçbir ekran gerçekleşmemiş bir işlemi gerçekleşmiş gibi göstermez.**
+   "Confirmed", "Broadcast", "Sent" yazıları yalnızca gerçek bir zincir yanıtından
+   gelir. `setTimeout` ile ilerleyen sahte durum göstergesi yasaktır. Bir özellik
+   henüz bağlanmadıysa ekran bunu açıkça söyler ("Not sent — bu sürümde etkin değil").
+
+3. **Sessiz başarısızlık yasak.** Bir düğme çalışmıyorsa nedenini söyler.
+   Koşul sağlanmadığı için `return` eden bir handler, kullanıcıya hangi koşulun
+   eksik olduğunu göstermek zorundadır.
+
+4. **"Hata" ile "kayıt yok" aynı şey değildir.** Boş sonuç `Ok(vec![])` döner,
+   `Err` değil. Kullanıcıya "yüklenemedi" demek, aslında gösterilecek bir şey
+   olmadığında yanlış bilgidir.
+
+## Doğrulama Zorunluluğu
+
+**Testlerin geçmesi ekranın çalıştığı anlamına gelmez.** 09.08.2026'da 86/86 test
+geçerken iki kritik hata canlıydı: private key'in adres sanılması (form alanlarının
+bağlanmasındaydı) ve Distribute ekranının sahte "Confirmed" göstermesi (bir
+`setTimeout`'taydı). Hiçbir test bu ikisine bakmıyordu.
+
+Bir iş "bitti" sayılmadan önce:
+- `cargo test` + `cargo check` + `tsc --noEmit` temiz olmalı (gerekli ama yeterli değil)
+- Para veya key'e dokunan her değişiklik **çalışan uygulamada** denenmeli
+- İddia edilen her davranışın gözlemlenebilir bir kanıtı olmalı: tx hash, audit log
+  kaydı, `spent_wei` değişimi, Keychain kaydı. "Kod doğru görünüyor" kanıt değildir.
+- Doğrulanamayan şeyler **doğrulanmadı diye açıkça yazılır**. Sessizce "tamam"
+  denmez.
 
 ## Rekabet Bağlamı
 
