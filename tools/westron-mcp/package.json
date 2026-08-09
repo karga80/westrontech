@@ -1,0 +1,17 @@
+{
+  "name": "westron-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP stdio shim for the Westron in-app control server (127.0.0.1:7777).",
+  "type": "module",
+  "main": "index.js",
+  "bin": { "westron-mcp": "index.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "check": "node --check index.js",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
