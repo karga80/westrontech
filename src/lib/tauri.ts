@@ -66,12 +66,18 @@ export async function deactivateKillSwitch(): Promise<boolean> {
   return invoke<boolean>('deactivate_kill_switch');
 }
 
+/**
+ * Stores a private key in the macOS Keychain and returns the address the
+ * backend derived from that key. `address`, if supplied, is only an assertion:
+ * the backend rejects the import when it does not match the derived address.
+ * Always use the returned address as the wallet identity.
+ */
 export async function importWallet(params: {
-  address: string;
+  address?: string;
   private_key_hex: string;
 }): Promise<string> {
   return invoke<string>('import_wallet', {
-    address: params.address,
+    address: params.address ?? null,
     privateKeyHex: params.private_key_hex,
   });
 }

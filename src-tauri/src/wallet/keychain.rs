@@ -360,17 +360,38 @@ fn delete_secret(name: &str) -> Result<(), String> {
 
 // ── Wallet private keys ───────────────────────────────────────────────────────
 
+/// Keychain accounts are exact-match strings, but an Ethereum address has two
+/// equally valid spellings (checksummed and lowercase). Keying on the raw
+/// spelling meant a wallet stored as `0x9Ec1…` could not be found when looked
+/// up as `0x9ec1…`, and signing would fail with "key not found" at transfer
+/// time. All new entries are keyed lowercase; reads fall back to the raw
+/// spelling so entries written by older builds still resolve.
+fn key_account(address: &str) -> String {
+    format!("wallet_{}", address.trim().to_lowercase())
+}
+
+fn legacy_key_account(address: &str) -> String {
+    format!("wallet_{}", address.trim())
+}
+
 pub fn store_key(address: &str, private_key_hex: &str) -> Result<(), String> {
-    store_secret(&format!("wallet_{address}"), private_key_hex)
+    store_secret(&key_account(address), private_key_hex)
 }
 
 pub fn fetch_key(address: &str) -> Result<String, String> {
-    fetch_secret(&format!("wallet_{address}"))
+    match fetch_secret(&key_account(address)) {
+        Ok(k) => Ok(k),
+        Err(e) => fetch_secret(&legacy_key_account(address)).map_err(|_| e),
+    }
 }
 
 #[allow(dead_code)]
 pub fn delete_key(address: &str) -> Result<(), String> {
-    delete_secret(&format!("wallet_{address}"))
+    let primary = delete_secret(&key_account(address));
+    // A legacy entry may exist under the original spelling; remove it too so a
+    // deleted wallet cannot leave a key behind.
+    let _ = delete_secret(&legacy_key_account(address));
+    primary
 }
 
 // ── Alchemy API key ───────────────────────────────────────────────────────────

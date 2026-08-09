@@ -9,6 +9,8 @@ import {
 } from '@/lib/tauri';
 import { useWalletTxStream, useConnectionState } from '@/hooks/useRealtime';
 import { loadWallets, addWallet as persistWallet, removeWallet as deleteWallet, updateWallet as updateWalletInStore, type StoredWallet } from '@/lib/walletStore';
+import { importWallet } from '@/lib/tauri';
+import { deriveAddress, isValidAddress, normalizeKey } from '@/lib/walletImport';
 import { EMPTY_SNAPSHOT, EMPTY_TRANSFERS } from '@/lib/emptyData';
 import { Tag, TX_TYPE_VARIANT, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import { useTheme } from '@/lib/themeContext';
@@ -433,6 +435,38 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // The address is DERIVED from the private key, never typed and never taken
+  // from the key field. A previous build stored the key itself as the address,
+  // which leaked it to localStorage and to Alchemy.
+  const handleSubmit = async () => {
+    setError('');
+    if (!name.trim()) { setError('Wallet name is required.'); return; }
+    setBusy(true);
+    try {
+      let addr: string;
+      if (tab === 'import') {
+        addr = await deriveAddress(key);
+        const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+        if (inTauri) {
+          // Backend re-derives and returns the authoritative address.
+          addr = await importWallet({ private_key_hex: normalizeKey(key) });
+        }
+      } else {
+        addr = address.trim();
+        if (!isValidAddress(addr)) { setError('Invalid Ethereum address (0x + 40 hex characters).'); setBusy(false); return; }
+      }
+      persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+      onAdded();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const FIELD = {
     fontFamily: 'var(--font-jetbrains)',
@@ -518,6 +552,10 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             </div>
           )}
 
+          {error && (
+            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96' }}>{error}</div>
+          )}
+
           <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
             <button onClick={onClose} style={{
               flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 500,
@@ -526,18 +564,13 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             }}>Cancel</button>
             <button
               className="btn-cta"
-              onClick={() => {
-                const addr = tab === 'import' ? key : address;
-                if (!addr.trim() || !name.trim()) return;
-                persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr.trim() });
-                onAdded();
-                onClose();
-              }}
+              disabled={busy}
+              onClick={handleSubmit}
               style={{
                 flex: 2, fontFamily: 'var(--font-jetbrains)', fontSize: '13px', fontWeight: 700,
                 color: '#0b0c14', backgroundColor: '#7c5cff', border: 'none',
                 padding: '11px 0', cursor: 'pointer',
-              }}>{tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
+              }}>{busy ? 'Importing…' : tab === 'import' ? 'Import Wallet' : 'Add Watch Wallet'}</button>
           </div>
         </div>
       </div>

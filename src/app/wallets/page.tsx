@@ -10,6 +10,7 @@ import {
   loadWallets, saveWallets, addWallet as persistWallet, removeWallet as deleteWalletFromStore,
   updateWallet as updateWalletInStore, type StoredWallet,
 } from '@/lib/walletStore';
+import { deriveAddress, normalizeKey } from '@/lib/walletImport';
 import { EMPTY_SNAPSHOT } from '@/lib/emptyData';
 import { Tag, WALLET_TOKEN_VARIANT } from '@/components/Tag';
 import SisterWalletFinder from '@/components/SisterWalletFinder';
@@ -218,10 +219,15 @@ function AddWalletModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
                   if (!key.trim()) return;
                   setImporting(true);
                   try {
-                    const cleanKey = key.trim().startsWith('0x') ? key.trim().slice(2) : key.trim();
+                    // Address is derived from the key, never taken from the form.
+                    const cleanKey = normalizeKey(key);
                     const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-                    if (inTauri) await importWallet({ address: addr, private_key_hex: cleanKey });
-                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+                    let resolved = await deriveAddress(key);
+                    if (inTauri) resolved = await importWallet({ private_key_hex: cleanKey });
+                    if (addr && addr.toLowerCase() !== resolved.toLowerCase()) {
+                      setImportError(`Imported as ${resolved} — derived from the private key.`);
+                    }
+                    persistWallet({ id: Date.now().toString(), name: name.trim(), address: resolved });
                     onAdded();
                     onClose();
                   } catch (e) {

@@ -5,6 +5,7 @@ import { loadWallets, addWallet, removeWallet } from '@/lib/walletStore';
 import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription } from '@/lib/tauri';
 import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, DEFAULT_SUBSCRIPTION, type SubscriptionState } from '@/lib/subscriptionStore';
 import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
+import { deriveAddress } from '@/lib/walletImport';
 import { Tag } from '@/components/Tag';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -273,8 +274,11 @@ function ImportWalletModal({ onClose, onImported }: { onClose: () => void; onImp
     const key = privateKey.trim().startsWith('0x') ? privateKey.trim().slice(2) : privateKey.trim();
 
     try {
-      if (isTauri) await importWallet({ address: addr, private_key_hex: key });
-      addWallet({ id: Date.now().toString(), name: name.trim(), address: addr });
+      // The backend derives the address from the key and rejects a mismatch,
+      // so a typo in the address field can no longer file a key wrongly.
+      let resolved = await deriveAddress(privateKey);
+      if (isTauri) resolved = await importWallet({ address: addr, private_key_hex: key });
+      addWallet({ id: Date.now().toString(), name: name.trim(), address: resolved });
       onImported();
       onClose();
     } catch (e) {

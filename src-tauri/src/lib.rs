@@ -128,13 +128,40 @@ fn deactivate_kill_switch(engine: tauri::State<Arc<EnvelopeEngine>>) -> bool {
     true
 }
 
+/// Derives the wallet address from the private key itself and stores the key
+/// under that derived address.
+///
+/// The caller-supplied `address` is NEVER trusted: an earlier build passed the
+/// private key straight through as the address, which put the key in
+/// localStorage and sent it to Alchemy as a query parameter. The key is the
+/// only source of truth. A supplied address is treated as an assertion and must
+/// match, so a UI bug can no longer file a key under the wrong identity.
 #[tauri::command]
 fn import_wallet(
-    address: String,
+    address: Option<String>,
     private_key_hex: String,
 ) -> Result<String, String> {
-    wallet::keychain::store_key(&address, &private_key_hex)?;
-    Ok(address)
+    use alloy::signers::local::PrivateKeySigner;
+
+    let pk_hex = private_key_hex.trim();
+    let pk_hex = pk_hex.strip_prefix("0x").unwrap_or(pk_hex);
+
+    let signer: PrivateKeySigner = pk_hex
+        .parse()
+        .map_err(|_| "Invalid private key - expected 64 hex characters.".to_string())?;
+
+    let derived = signer.address().to_checksum(None);
+
+    if let Some(claimed) = address.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if !claimed.eq_ignore_ascii_case(&derived) {
+            return Err(format!(
+                "Address mismatch: this private key belongs to {derived}, not {claimed}."
+            ));
+        }
+    }
+
+    wallet::keychain::store_key(&derived, pk_hex)?;
+    Ok(derived)
 }
 
 #[tauri::command]
