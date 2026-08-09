@@ -84,6 +84,10 @@ pub enum AuditEvent {
     ScopeViolation,
     PerTxCeilingViolation,
     HardCapViolation,
+    /// A prior `TxAuthorized` spend was reversed because the transaction it
+    /// authorised never reached the chain (broadcast failed after the budget
+    /// was consumed). See `EnvelopeEngine::rollback_authorization`.
+    TxAuthorizationRolledBack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

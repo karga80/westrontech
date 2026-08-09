@@ -313,14 +313,26 @@ pub async fn send_eth(
         .check_and_authorize(&tx_req_envelope)
         .map_err(|e| format!("Envelope rejected: {e:?}"))?;
 
-    // İmzala ve gönder
+    // İmzala ve gönder. `check_and_authorize` already consumed the spend cap
+    // above — it has to run before signing, so an unauthorised transaction is
+    // never even built. But that means a failure anywhere below (signing,
+    // nonce, RPC, broadcast) has already been paid for out of the user's
+    // budget without a single wei moving. Roll the consumed spend back for
+    // every path that is not "the chain accepted the raw transaction", so a
+    // dropped/failed send never eats into the cap the user sees next time.
     let request = TxRequest {
         to,
         value_wei,
         data: None,
         gas_limit: None,
     };
-    LocalSigner::sign_and_send(&wallet_address, request, &api_key).await
+    match LocalSigner::sign_and_send(&wallet_address, request, &api_key).await {
+        Ok(tx_hash) => Ok(tx_hash),
+        Err(e) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            Err(e)
+        }
+    }
 }
 
 /// Tauri command: Gas tahmini

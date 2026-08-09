@@ -329,6 +329,41 @@ impl EnvelopeEngine {
         Ok(())
     }
 
+    /// Reverses the budget consumed by a prior successful `check_and_authorize`
+    /// call whose transaction never reached the chain — broadcast failed or
+    /// errored after the spend was already recorded.
+    ///
+    /// **Only call this for a request that `check_and_authorize` just accepted
+    /// and that was never sent.** It does not re-run `evaluate`; it exists
+    /// entirely because `check_and_authorize` and the broadcast are two
+    /// separate fallible steps, and the budget must not stay consumed for a
+    /// transfer that didn't happen — otherwise the user hits a spend cap they
+    /// never actually used.
+    ///
+    /// Subtracts with a saturating floor of zero rather than erroring: if the
+    /// spend was already reset by other activity (e.g. a concurrent hard-cap
+    /// breach cleared it), silently refusing to go negative is the safe
+    /// direction. If the kill switch auto-engaged from a hard-cap breach on
+    /// this same request, this does not disengage it — that is a separate,
+    /// deliberate user action.
+    pub fn rollback_authorization(&self, request: &TransactionRequest) {
+        let mut guard = self.envelope.lock().unwrap();
+        let Some(env) = guard.as_mut() else { return };
+        env.spent_wei = env.spent_wei.saturating_sub(request.value_wei);
+        let entry = AuditEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now().timestamp_millis(),
+            envelope_id: env.id,
+            event_type: AuditEvent::TxAuthorizationRolledBack,
+            tx_to: Some(request.to.clone()),
+            value_wei: Some(request.value_wei),
+            reject_reason: Some("broadcast_failed".to_string()),
+            spent_wei_snapshot: env.spent_wei,
+        };
+        let _ = self.audit.write_entry(&entry);
+        self.persist(&guard);
+    }
+
     /// **Read-only.** Runs exactly the guards `check_and_authorize` runs and
     /// reports the verdict without touching `spent_wei`, without engaging the
     /// kill switch, without writing an audit entry and without persisting
@@ -752,6 +787,42 @@ mod tests {
         assert_eq!(p.reject_code.as_deref(), Some(reject_code::KILL_SWITCH));
         assert!(!p.in_scope);
         assert!(p.kill_switch);
+    }
+
+    /// T6c: `send_eth` used to consume the spend cap before broadcasting. If
+    /// the broadcast then failed, the budget stayed consumed for a transfer
+    /// that never happened, so the user's very next (unrelated) send could
+    /// trip a cap they never actually used. This pins the fix: rolling back
+    /// after a failed send must restore the exact headroom that authorizing
+    /// it took away.
+    #[test]
+    fn rollback_after_failed_broadcast_restores_spend_headroom() {
+        let e = engine_with(2 * ETH, 5 * ETH, 0, false, false);
+
+        assert!(e.check_and_authorize(&req(ADDR, ETH)).is_ok());
+        assert_eq!(e.get_status().unwrap().spent_wei, ETH, "authorize must consume budget");
+
+        // Broadcast "failed" — roll the consumed spend back.
+        e.rollback_authorization(&req(ADDR, ETH));
+        assert_eq!(
+            e.get_status().unwrap().spent_wei,
+            0,
+            "a rolled-back authorization must not leave the cap consumed"
+        );
+
+        // The full cap must be available again, not partially consumed.
+        assert!(e.check_and_authorize(&req(ADDR, 2 * ETH)).is_ok());
+    }
+
+    /// Rollback must not resurrect a budget that was legitimately spent by an
+    /// unrelated, successful send in between.
+    #[test]
+    fn rollback_never_drives_spent_wei_below_zero() {
+        let e = engine_with(2 * ETH, 5 * ETH, 0, false, false);
+        // Nothing was ever authorized; rolling back an amount larger than
+        // spent_wei must saturate at zero, not underflow/panic.
+        e.rollback_authorization(&req(ADDR, ETH));
+        assert_eq!(e.get_status().unwrap().spent_wei, 0);
     }
 
     #[test]
