@@ -1030,6 +1030,44 @@ taşımasını bekliyor. Worker bu isteğe `401` döner, masaüstü de eski/baya
 **Ajanlar:** → `scout` (Rust abonelik istemcisinin tam yolu ve mevcut akışı) → `vault` (protokolü
 Worker'a uydur) → `vera` (gerçek signup/login/license döngüsüyle doğrula, kod okuyarak değil).
 
+**Scout keşfi tamamlandı (10.08.2026) — hiçbir kod değişmedi, aşağısı bir sonraki `vault`
+turu için hazır zemin:**
+
+- Worker sözleşmesi (`subscription-worker/src/index.ts`): `POST /signup` ve `POST /login`
+  `{email,password}` alır, `{token, account, access, license}` döner. `POST /license`
+  `Authorization: Bearer <token>` ister, `{access, license:{payload, sig}}` döner —
+  `license.payload` JSON'u `{account_id, email, active, reason, plan, expires_at, issued_at}`
+  (wallet alanı YOK), `access.active` iç içe, üst seviye değil.
+- Kırık istemci: `src-tauri/src/subscription/mod.rs`. `Payload` struct (satır 57-64) hâlâ
+  `wallet` alanı taşıyor. `fetch_license` (satır 229-260) çıplak `{wallet}` postluyor,
+  `Authorization` header'ı yok, cevabı üst seviyeden (`active`/`payload`/`sig`) okuyor —
+  olması gereken `access.active`/`license.payload`/`license.sig`. `evaluate()` (satır 164) ve
+  satır 179'daki `payload.wallet.to_lowercase() == addr` eşleşmesi artık hesap/email tabanlı
+  olmalı. İmza doğrulama (`verify()`, satır 122-131) ve disk cache (`store_license`/
+  `load_license`, satır 148-160, anti-rollback) **doğru, dokunulmayacak** — sadece taşıdıkları
+  şema değişecek.
+- Komut yüzeyi: `check_subscription` (`src-tauri/src/lib.rs:478-481`, kayıt satır 842) şu an
+  `wallet_address: String` alıyor — token tabanlı olmalı, muhtemelen ayrı
+  `subscription_signup`/`subscription_login` komutları eklenmeli.
+- Token saklama deseni: `src-tauri/src/wallet/keychain.rs`'teki `store_secret`/`fetch_secret`/
+  `delete_secret` (satır 325-359) + per-purpose wrapper'lar (`store_alchemy_key` vb., satır
+  399-411) örnek alınacak; analog `store_subscription_token`/`fetch_subscription_token`/
+  `delete_subscription_token` eklenmeli.
+- Frontend çağıran yerler (henüz okunmadı, bir sonraki vault turu önce bunları okumalı):
+  `src/lib/tauri.ts:852-865` (`checkSubscription` wrapper), `src/app/settings/page.tsx`
+  `BillingSection`/`handleCheckStatus` (~954-999).
+- `subscription-worker/DEPLOY.md` deploy akışını doğruluyor ama canlı deploy edilmiş
+  `LICENSE_PUBLIC_KEY_B64`'ün (`mod.rs:34`) gerçek Worker'ın `LICENSE_SIGNING_KEY`'iyle
+  eşleştiği dosya okumayla değil, ancak canlı bir probe ile doğrulanabilir.
+- Güvenlik kontrolü yapıldı: `subscription-worker/license-key.private.txt` git'e commit
+  edilmemiş, `.gitignore`'da — sızıntı yok.
+- **İki vault turu üst üste context tükenmesi yüzünden hiç kod yazamadan durdu.** Bir sonraki
+  turun kapsamı genişçe: Rust'a signup/login+Keychain token saklama eklemek, `Payload`
+  struct'ını değiştirmek, `fetch_license`'ı yeniden yazmak, komut imzasını değiştirmek,
+  `tauri.ts` + `settings/page.tsx`'i güncellemek, gerçek bir signup ile uçtan uca denemek.
+  Tek turda bitirilemeyebilir — gerekirse alt adımlara bölünüp ayrı vault turlarında
+  ilerlenmeli (örn. önce sadece Rust tarafı, sonra frontend).
+
 ## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor 🆕 10.08.2026, `API.md`'den
 
 Worker'ın Alchemy REST proxy'si üç ailede yanlış rota kuruyor (canlı test kanıtı `API.md`
