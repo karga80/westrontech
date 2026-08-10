@@ -417,3 +417,24 @@ Hiçbir ekran ÇALIŞTIRILMADI. Kontrol sunucusu hiç soket açmadı. macOS Keyc
 Linux'ta derlenebilir ama çalıştırılamaz (cross-compile ile doğrulandı, runtime değil).
 Nonce düzeltmesinin ağ yarısı test edilmedi. **Hiç gerçek transfer yapılmadı.**
 Mac'teki ilk çalıştırma gerçek testtir.
+
+## 2026-08-10 — maskeli alan takibi kapandı (T17 sonrası açık kalan soru)
+
+T17 kapanışında flag'lenen "Sniping & Automation ekranındaki etiketsiz maskeli alan"
+(`scout` ile, salt-okunur) incelendi. Sonuç: **güvenli**. `src/app/sniping/page.tsx:686-692`
+— Alchemy API key alanı (`type="password"`, state `apiKey`), Keychain'de tamamen ayrı bir
+hesap adı altında (`"alchemy"`, `fetch_alchemy_key()`) tutuluyor; cüzdan private key
+depolamasıyla (`key_account(address)`, adres bazlı) hiçbir ilişkisi yok. 09.08.2026'daki
+private-key-adres-alanına-sızması olayının tekrarı DEĞİL. Tek bulgu kozmetik: `<label>`
+yok, sadece `placeholder` var — güvenlik açığı değil, istenmedi, düzeltilmedi.
+
+**Sıradaki oturum için açık maddeler (öncelik sırasıyla değil, hiçbiri bu oturumda
+onaylanmış öncelik değil):**
+- T14 — Alchemy proxy route uyuşmazlıkları (task #13), T17 Phase (c) aynı marketplace
+  kod alanına dokunduğu için tekrar alakalı olabilir.
+- T15 — MCP smoke test path hatası (task #14).
+- T16 — canlıda kapsanmayan endpoint'ler, Emir'in staging ortamı kararını bekliyor (task #15).
+- Kozmetik, istenmedi: sniping sayfasındaki API key alanına `<label>` eklenmesi.
+
+Bu oturum context limiti nedeniyle burada durdu; T17 ve maskeli alan sorusu tamamen
+kapalı, commit'lenmiş ve push'lanmış durumda. Yeni oturum temiz bir noktadan başlayabilir.
