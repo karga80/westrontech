@@ -7,14 +7,15 @@ import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, is
 import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
 import { deriveAddress } from '@/lib/walletImport';
 import { Tag } from '@/components/Tag';
+import AutonomySection from './AutonomySection';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 // ─── Settings — matches ISsB0 design ─────────────────────────────────────────
 
-type SettingsSection = 'Profile' | 'Security' | 'Notifications' | 'Billing';
+type SettingsSection = 'Profile' | 'Security' | 'Notifications' | 'Autonomy' | 'Billing';
 
-const SIDEBAR_ITEMS: SettingsSection[] = ['Profile', 'Security', 'Notifications', 'Billing'];
+const SIDEBAR_ITEMS: SettingsSection[] = ['Profile', 'Security', 'Notifications', 'Autonomy', 'Billing'];
 
 // ─── Email Verification Modal — matches FXqbR design ─────────────────────────
 
@@ -1277,6 +1278,7 @@ const SECTION_COMPONENTS: Record<SettingsSection, React.FC> = {
   Profile: ProfileSection,
   Security: SecuritySection,
   Notifications: NotificationsSection,
+  Autonomy: AutonomySection,
   Billing: BillingSection,
 };
 

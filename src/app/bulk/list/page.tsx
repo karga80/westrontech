@@ -13,7 +13,7 @@ import { Tag, type TagVariant } from '@/components/Tag';
 
 // ─── Types & Data ─────────────────────────────────────────────────────────────
 
-type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'Confirmed' | 'Failed';
+type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'PendingApproval' | 'Confirmed' | 'Failed';
 
 const COL_COLORS = ['#ffb020', '#ff8a96', '#90a6ff', '#4fe9b4', '#a78bfa', '#ffb020', '#2fc4d6', '#ec4899'];
 
@@ -57,11 +57,12 @@ function getNftTraits(nft: NFT): NFTTrait[] {
 }
 
 const TX_STATUS_VARIANT: Record<TxStatus, TagVariant> = {
-  Pending:      'neutral',
-  Signing:      'warning',
-  Broadcasting: 'info',
-  Confirmed:    'success',
-  Failed:       'danger',
+  Pending:         'neutral',
+  Signing:         'warning',
+  Broadcasting:    'info',
+  PendingApproval: 'warning',
+  Confirmed:       'success',
+  Failed:          'danger',
 };
 
 function fakeHash() {
@@ -103,7 +104,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
 
           setStatuses(s => ({ ...s, [id]: 'Signing' }));
           try {
-            const result = await marketplaceListNft({
+            const outcome = await marketplaceListNft({
               walletAddress,
               contractAddress: nft.collection, // placeholder until real contract addresses are stored
               tokenId: String(nft.id),
@@ -114,6 +115,13 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
               expiryHours: 72,
               apiKey,
             });
+            if (outcome.outcome === 'pending_approval') {
+              // Queued by the wallet's autonomy policy, not sent — this is not
+              // a failure, so it must not be reported as one.
+              setStatuses(s => ({ ...s, [id]: 'PendingApproval' }));
+              continue;
+            }
+            const result = outcome.result;
             setStatuses(s => ({ ...s, [id]: result.error ? 'Failed' : 'Broadcasting' }));
             if (result.tx_hash) setHashes(h => ({ ...h, [id]: result.tx_hash! }));
             await new Promise(r => setTimeout(r, 400));
@@ -140,17 +148,20 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
     }
   }, []);
 
-  const confirmed = nftIds.filter(id => statuses[id] === 'Confirmed').length;
-  const failed    = nftIds.filter(id => statuses[id] === 'Failed').length;
-  const done      = confirmed + failed === nftIds.length;
-  const nfts      = nftIds.map(id => allNfts.find(n => n.id === id)!).filter(Boolean);
+  const confirmed        = nftIds.filter(id => statuses[id] === 'Confirmed').length;
+  const failed           = nftIds.filter(id => statuses[id] === 'Failed').length;
+  const pendingApproval  = nftIds.filter(id => statuses[id] === 'PendingApproval').length;
+  const done             = confirmed + failed + pendingApproval === nftIds.length;
+  const nfts             = nftIds.map(id => allNfts.find(n => n.id === id)!).filter(Boolean);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
           <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '18px', fontWeight: 700, color: 'var(--wr-text)', marginBottom: '6px' }}>
-            {done ? `Done — ${confirmed} listed, ${failed} failed` : `Listing ${nftIds.length} NFTs on ${marketplace}…`}
+            {done
+              ? `Done — ${confirmed} listed, ${failed} failed${pendingApproval > 0 ? `, ${pendingApproval} queued for approval` : ''}`
+              : `Listing ${nftIds.length} NFTs on ${marketplace}…`}
           </div>
           <div style={{ width: '360px', height: '3px', backgroundColor: 'var(--wr-border)' }}>
             <div style={{ height: '100%', backgroundColor: '#7c5cff', width: `${(confirmed / nftIds.length) * 100}%`, transition: 'width 0.4s ease' }} />
@@ -169,7 +180,8 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
         {[
           { l: 'Total', v: nftIds.length, c: '#f2f2f7', bg: '#14161f', b: '#14161f' },
           { l: 'Confirmed', v: confirmed, c: '#4fe9b4', bg: '#06251b', b: '#06251b' },
-          { l: 'Processing', v: nftIds.length - confirmed - failed, c: '#90a6ff', bg: '#1c1c3a', b: '#3b3b6a' },
+          { l: 'Processing', v: nftIds.length - confirmed - failed - pendingApproval, c: '#90a6ff', bg: '#1c1c3a', b: '#3b3b6a' },
+          { l: 'Needs approval', v: pendingApproval, c: '#ffb020', bg: '#2b1f06', b: '#2b1f06' },
           { l: 'Failed', v: failed, c: '#ff8a96', bg: '#2b070c', b: '#2b070c' },
         ].map(ch => (
           <div key={ch.l} style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: ch.c, backgroundColor: ch.bg, border: `1px solid ${ch.b}`, padding: '4px 12px', display: 'flex', gap: '5px' }}>
@@ -186,7 +198,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
         {nfts.map(nft => {
           const st = statuses[nft.id] ?? 'Pending';
           const hash = hashes[nft.id];
-          const txPrefix: Record<TxStatus, string> = { Pending: '', Signing: '✏ ', Broadcasting: '↑ ', Confirmed: '✓ ', Failed: '✕ ' };
+          const txPrefix: Record<TxStatus, string> = { Pending: '', Signing: '✏ ', Broadcasting: '↑ ', PendingApproval: '⏳ ', Confirmed: '✓ ', Failed: '✕ ' };
           return (
             <div key={nft.id} className="grid px-4 py-3 border-b border-[#14161f] last:border-b-0 items-center"
               style={{ gridTemplateColumns: '2fr 1.5fr 0.9fr 0.9fr 1fr 1.8fr' }}>
@@ -200,7 +212,7 @@ function TrackingView({ nftIds, prices, marketplace, onDone, allNfts }: {
               </div>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-accent)' }}>{prices[nft.id] ? prices[nft.id] : nft.floor}<EthIcon size={10} color="var(--wr-text-3)" style={{ verticalAlign: 'middle', marginLeft: 2 }} /></span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>{marketplace}</span>
-              <Tag variant={TX_STATUS_VARIANT[st]} dot={st === 'Pending'} size="xs">{txPrefix[st]}{st}</Tag>
+              <Tag variant={TX_STATUS_VARIANT[st]} dot={st === 'Pending'} size="xs">{txPrefix[st]}{st === 'PendingApproval' ? 'Needs approval' : st}</Tag>
               {hash
                 ? <a href={`https://etherscan.io/tx/${hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: '#5b7cfa', textDecoration: 'none' }}>{hash} ↗</a>
                 : <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-4)' }}>—</span>

@@ -7,7 +7,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { sendEth } from '@/lib/tauri';
 
-export type SendState = 'queued' | 'submitting' | 'broadcast' | 'failed' | 'skipped';
+export type SendState = 'queued' | 'submitting' | 'broadcast' | 'pending_approval' | 'failed' | 'skipped';
 
 export interface SendRow {
   id: string;
@@ -112,9 +112,17 @@ export async function runDistribution(
     onUpdate(work.map(r => ({ ...r })));
 
     try {
-      const hash = await sendEth(fromAddress, work[i].address, work[i].valueWei.toString(), apiKey);
-      work[i].state = 'broadcast';
-      work[i].hash = hash;
+      const outcome = await sendEth(fromAddress, work[i].address, work[i].valueWei.toString(), apiKey);
+      if (outcome.outcome === 'sent') {
+        work[i].state = 'broadcast';
+        work[i].hash = outcome.tx_hash;
+      } else {
+        // Autonomy policy queued this send instead of signing it now — not
+        // an error, but nothing broadcast either. Say so explicitly rather
+        // than showing a hash that does not exist yet.
+        work[i].state = 'pending_approval';
+        work[i].error = `Queued for approval: ${outcome.reason}`;
+      }
     } catch (e) {
       work[i].state = 'failed';
       work[i].error = e instanceof Error ? e.message : String(e);

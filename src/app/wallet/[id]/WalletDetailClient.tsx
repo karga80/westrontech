@@ -152,7 +152,7 @@ function EthIcon() {
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const ZERO_ADDR_RE = /^0x0{40}$/;
 
-type SendState = 'queued' | 'submitting' | 'broadcast' | 'failed' | 'skipped';
+type SendState = 'queued' | 'submitting' | 'broadcast' | 'pending_approval' | 'failed' | 'skipped';
 
 interface Destination {
   key: string;
@@ -554,8 +554,16 @@ function TransferModal({
       setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'submitting' } : r)));
       const res = await settle(() => sendEth(fromAddress, rows[i].address, rows[i].valueWei.toString(), alchemyKey));
       if (res.ok) {
-        const hash = res.value;
-        setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'broadcast', hash } : r)));
+        const outcome = res.value;
+        if (outcome.outcome === 'sent') {
+          const hash = outcome.tx_hash;
+          setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'broadcast', hash } : r)));
+        } else {
+          // Queued by the wallet's autonomy policy, not sent — say so rather
+          // than showing a hash that was never produced.
+          const reason = outcome.reason;
+          setSendRows(prev => prev.map((r, j) => (j === i ? { ...r, state: 'pending_approval', error: `Queued for approval: ${reason}` } : r)));
+        }
       } else {
         setSendRows(prev => prev.map((r, j) =>
           j === i ? { ...r, state: 'failed', error: res.error } : j > i ? { ...r, state: 'skipped' } : r));
@@ -1063,11 +1071,13 @@ function TransferModal({
                   tx.state === 'broadcast' ? '#4fe9b4'
                   : tx.state === 'failed' ? '#ff8a96'
                   : tx.state === 'submitting' ? '#7c5cff'
+                  : tx.state === 'pending_approval' ? 'var(--wr-warn)'
                   : '#9298b8';
                 const statusLabel =
                   tx.state === 'broadcast' ? 'Broadcast — pending on-chain'
                   : tx.state === 'failed' ? 'Failed'
                   : tx.state === 'submitting' ? 'Signing & broadcasting…'
+                  : tx.state === 'pending_approval' ? 'Queued — needs approval'
                   : tx.state === 'skipped' ? 'Not sent (stopped after failure)'
                   : 'Queued';
                 return (

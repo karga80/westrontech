@@ -186,7 +186,7 @@ export default function DistributeModal({
   const [nftPreviewError, setNftPreviewError] = useState<string | null>(null);
   const [nftPreviewBusy, setNftPreviewBusy] = useState(false);
   const [nftSending, setNftSending] = useState(false);
-  const [nftState, setNftState] = useState<'queued' | 'submitting' | 'broadcast' | 'failed'>('queued');
+  const [nftState, setNftState] = useState<'queued' | 'submitting' | 'broadcast' | 'pending_approval' | 'failed'>('queued');
   const [nftHash, setNftHash] = useState<string | null>(null);
   const [nftError, setNftError] = useState<string | null>(null);
   const nftSendStartedRef = useRef(false);
@@ -337,7 +337,7 @@ export default function DistributeModal({
     nftSendStartedRef.current = true;
     setNftState('submitting'); setNftHash(null); setNftError(null); setNftSending(true); setStep(3);
     try {
-      const hash = await transferNft(
+      const outcome = await transferNft(
         source.address,
         selectedNft.contract.address,
         selectedNft.token_id,
@@ -345,7 +345,14 @@ export default function DistributeModal({
         nftTokenStandard(selectedNft.contract.token_type),
         distKey,
       );
-      setNftState('broadcast'); setNftHash(hash);
+      if (outcome.outcome === 'sent') {
+        setNftState('broadcast'); setNftHash(outcome.tx_hash);
+      } else {
+        // Queued by the wallet's autonomy policy, not sent — say so rather
+        // than claiming a hash that was never produced.
+        setNftState('pending_approval');
+        setNftError(`Queued for approval: ${outcome.reason}`);
+      }
     } catch (e) {
       setNftState('failed'); setNftError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -981,12 +988,14 @@ export default function DistributeModal({
         {step === 3 && tab === 'nft' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="flex flex-col items-center" style={{ padding: '20px 0 16px', gap: '10px' }}>
-              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{nftSending ? '⚡' : nftState === 'failed' ? '!' : '✓'}</div>
-              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{nftSending ? 'Signing and broadcasting' : nftState === 'failed' ? 'Not sent' : 'Done'}</div>
+              <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--wr-accent-dim)', border: '1px solid var(--wr-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px' }}>{nftSending ? '⚡' : nftState === 'failed' ? '!' : nftState === 'pending_approval' ? '⏳' : '✓'}</div>
+              <div style={{ fontFamily: 'var(--font-inter)', fontSize: '16px', fontWeight: 600, color: 'var(--wr-text)' }}>{nftSending ? 'Signing and broadcasting' : nftState === 'failed' ? 'Not sent' : nftState === 'pending_approval' ? 'Waiting for approval' : 'Done'}</div>
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', textAlign: 'center' }}>
                 {nftSending
                   ? 'One at a time — a second send from the same address would reuse the nonce.'
-                  : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
+                  : nftState === 'pending_approval'
+                    ? 'The wallet’s autonomy policy queued this transfer instead of signing it. Approve or reject it from the pending queue.'
+                    : 'A transaction hash means the network accepted it. Confirmation still takes a block or two.'}
               </div>
             </div>
             {selectedNft && (
@@ -1002,8 +1011,8 @@ export default function DistributeModal({
                     </div>
                   </div>
                   <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap',
-                    color: nftState === 'broadcast' ? 'var(--wr-accent)' : nftState === 'submitting' ? c.submittingColor : nftState === 'failed' ? '#ff8a96' : 'var(--wr-text-3)' }}>
-                    {nftState === 'broadcast' ? 'Broadcast' : nftState === 'submitting' ? 'Signing…' : nftState === 'failed' ? 'Failed' : 'Queued'}
+                    color: nftState === 'broadcast' ? 'var(--wr-accent)' : nftState === 'submitting' ? c.submittingColor : nftState === 'failed' ? '#ff8a96' : nftState === 'pending_approval' ? 'var(--wr-warn)' : 'var(--wr-text-3)' }}>
+                    {nftState === 'broadcast' ? 'Broadcast' : nftState === 'submitting' ? 'Signing…' : nftState === 'failed' ? 'Failed' : nftState === 'pending_approval' ? 'Needs approval' : 'Queued'}
                   </span>
                 </div>
                 {nftHash && (
@@ -1020,7 +1029,9 @@ export default function DistributeModal({
                   </button>
                 )}
                 {nftError && (
-                  <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(nftError)}</div>
+                  <div style={{ marginTop: '6px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: nftState === 'pending_approval' ? 'var(--wr-warn)' : '#ff8a96', lineHeight: 1.6 }}>
+                    {nftState === 'pending_approval' ? nftError : explainSendError(nftError)}
+                  </div>
                 )}
               </div>
             )}

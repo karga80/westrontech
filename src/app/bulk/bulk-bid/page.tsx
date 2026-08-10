@@ -15,7 +15,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 type SortKey = 'floor' | 'change' | 'topOffer' | 'vol' | 'sales' | 'owners' | 'supply';
 type SortDir = 'asc' | 'desc';
 type TimeFilter = '1h' | '6h' | '1d' | '7d' | '30d' | 'all';
-type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'Confirmed' | 'Failed';
+type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'PendingApproval' | 'Confirmed' | 'Failed';
 
 interface Collection {
   id: string; name: string; emoji: string; color: string;
@@ -53,11 +53,12 @@ const COLLECTION_TRAITS: Record<string, Trait[]> = {};
 const DEFAULT_TRAITS = (_floor: number): Trait[] => [];
 
 const TX_STATUS_VARIANT: Record<TxStatus, TagVariant> = {
-  Pending:      'neutral',
-  Signing:      'warning',
-  Broadcasting: 'info',
-  Confirmed:    'success',
-  Failed:       'danger',
+  Pending:         'neutral',
+  Signing:         'warning',
+  Broadcasting:    'info',
+  PendingApproval: 'warning',
+  Confirmed:       'success',
+  Failed:          'danger',
 };
 
 function fakeHash() {
@@ -151,7 +152,7 @@ export default function BulkBidPage() {
         const bid = queue[i];
         setTxRows(r => r.map((x, j) => j === i ? { ...x, status: 'Signing' } : x));
         try {
-          const result = await marketplacePlaceBid({
+          const outcome = await marketplacePlaceBid({
             walletAddress,
             contractAddress: bid.collectionId,
             priceEth: parseFloat(bid.price) || 0,
@@ -160,6 +161,14 @@ export default function BulkBidPage() {
             expiryHours: 24,
             apiKey,
           });
+          if (outcome.outcome === 'pending_approval') {
+            // Queued by the wallet's autonomy policy, not sent — not a
+            // failure, so it must not be reported as one.
+            setTxRows(r => r.map((x, j) => j === i ? { ...x, status: 'PendingApproval' } : x));
+            setProgress(Math.round(((i + 1) / rows.length) * 100));
+            continue;
+          }
+          const result = outcome.result;
           const status: TxStatus = result.error ? 'Failed' : 'Broadcasting';
           setTxRows(r => r.map((x, j) => j === i ? { ...x, status } : x));
           await new Promise(res => setTimeout(res, 400));
@@ -184,7 +193,7 @@ export default function BulkBidPage() {
 
   // ── Tracking View ────────────────────────────────────────────────────────────
   if (tracking) {
-    const done = txRows.filter(r => r.status === 'Confirmed' || r.status === 'Failed').length;
+    const done = txRows.filter(r => r.status === 'Confirmed' || r.status === 'Failed' || r.status === 'PendingApproval').length;
     return (
       <main style={{ backgroundColor: 'var(--wr-bg)', minHeight: '100%', padding: '28px 48px 48px', color: 'var(--wr-text)', fontFamily: 'var(--font-jetbrains)' }}>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', marginBottom: '32px' }}>
@@ -216,7 +225,7 @@ export default function BulkBidPage() {
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--wr-accent)', fontFamily: 'var(--font-jetbrains)' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{row.price}</td>
                   <td style={{ padding: '14px 16px', fontSize: '12px', color: '#555', fontFamily: 'monospace' }}>{row.hash}</td>
                   <td style={{ padding: '14px 16px' }}>
-                    <Tag variant={TX_STATUS_VARIANT[row.status]} size="xs">{row.status}</Tag>
+                    <Tag variant={TX_STATUS_VARIANT[row.status]} size="xs">{row.status === 'PendingApproval' ? 'Needs approval' : row.status}</Tag>
                   </td>
                 </tr>
               ))}

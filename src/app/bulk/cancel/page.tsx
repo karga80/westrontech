@@ -14,7 +14,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 type OrderType = 'Listing' | 'Bid';
 type OrderStatus = 'Active' | 'Expiring Soon' | 'Expired';
-type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'Confirmed' | 'Failed';
+type TxStatus = 'Pending' | 'Signing' | 'Broadcasting' | 'PendingApproval' | 'Confirmed' | 'Failed';
 
 interface Order {
   id: string;
@@ -49,11 +49,12 @@ const MP_COLOR: Record<string, string> = {
 };
 
 const TX_STATUS_VARIANT: Record<TxStatus, TagVariant> = {
-  Pending:      'neutral',
-  Signing:      'warning',
-  Broadcasting: 'info',
-  Confirmed:    'success',
-  Failed:       'danger',
+  Pending:         'neutral',
+  Signing:         'warning',
+  Broadcasting:    'info',
+  PendingApproval: 'warning',
+  Confirmed:       'success',
+  Failed:          'danger',
 };
 
 function fakeHash() {
@@ -134,12 +135,20 @@ export default function BulkCancelPage() {
         const order = selectedOrders[i];
         setTxRows(r => r.map((x, j) => j === i ? { ...x, status: 'Signing' } : x));
         try {
-          const result = await marketplaceCancelOrder({
+          const outcome = await marketplaceCancelOrder({
             orderHash: order.id,
             walletAddress,
             marketplace: order.marketplace.toLowerCase() === 'blur' ? 'blur' : 'opensea',
             apiKey,
           });
+          if (outcome.outcome === 'pending_approval') {
+            // Queued by the wallet's autonomy policy, not sent — not a
+            // failure, so it must not be reported as one.
+            setTxRows(r => r.map((x, j) => j === i ? { ...x, status: 'PendingApproval' } : x));
+            setProgress(Math.round(((i + 1) / rows.length) * 100));
+            continue;
+          }
+          const result = outcome.result;
           const status: TxStatus = result.error ? 'Failed' : 'Broadcasting';
           setTxRows(r => r.map((x, j) => j === i ? { ...x, status, hash: result.tx_hash ?? x.hash } : x));
           await new Promise(res => setTimeout(res, 400));
@@ -164,7 +173,7 @@ export default function BulkCancelPage() {
 
   // ── Tracking View ────────────────────────────────────────────────────────────
   if (tracking) {
-    const done = txRows.filter(r => r.status === 'Confirmed' || r.status === 'Failed').length;
+    const done = txRows.filter(r => r.status === 'Confirmed' || r.status === 'Failed' || r.status === 'PendingApproval').length;
     return (
       <main style={{ backgroundColor: 'var(--wr-bg)', minHeight: '100%', padding: '28px 48px 48px', color: 'var(--wr-text)', fontFamily: 'var(--font-jetbrains)' }}>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px', color: 'var(--wr-text-3)', fontFamily: 'var(--font-jetbrains)', marginBottom: '32px' }}>
@@ -208,7 +217,7 @@ export default function BulkCancelPage() {
                   <td style={{ padding: '13px 16px', fontSize: '13px', color: 'var(--wr-text-2)' }}><EthIcon size={10} color="currentColor" style={{ verticalAlign: 'middle', marginRight: 2 }} />{row.price}</td>
                   <td style={{ padding: '13px 16px', fontSize: '12px', color: '#555', fontFamily: 'monospace' }}>{row.hash}</td>
                   <td style={{ padding: '13px 16px' }}>
-                    <Tag variant={TX_STATUS_VARIANT[row.status]} size="xs">{row.status}</Tag>
+                    <Tag variant={TX_STATUS_VARIANT[row.status]} size="xs">{row.status === 'PendingApproval' ? 'Needs approval' : row.status}</Tag>
                   </td>
                 </tr>
               ))}
