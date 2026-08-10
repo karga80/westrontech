@@ -3,6 +3,38 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-10): T13 — frontend now wired to the new account protocol
+
+Second half of T13 (the Rust-side rewrite below was already committed and verified live).
+
+- `src/lib/tauri.ts`: `checkSubscription()` is now zero-arg, matching the Rust command exactly.
+  Added `subscriptionSignup(email, password)`, `subscriptionLogin(email, password)`,
+  `subscriptionLogout()`, `subscriptionCurrentAccount()` — thin wrappers, one `invoke` call each,
+  no logic duplicated from the Rust side.
+- `src/app/settings/page.tsx` `BillingSection`: added a plain (unstyled-is-fine, per task scope)
+  email+password Account block — shows the logged-in email + a Log out button when a session
+  exists, or a sign-up/log-in form when it doesn't. `handleCheckStatus` no longer reads a wallet
+  address at all; it calls `checkSubscription()` for whoever is currently logged in and refuses
+  to call it if nobody is (shows "No account logged in..." instead of silently doing nothing).
+  Dev/browser mode (no Tauri) still shows an explicit "requires the desktop app" message rather
+  than pretending to work.
+- `src/components/ProGate.tsx` and `src/lib/useSubscription.ts` were **not touched**, per the
+  task's explicit scope boundary — they still read the same `subscriptionStore` localStorage
+  cache (`plan`/`expiresAt`), which `BillingSection` continues to populate via `saveSubscription`,
+  so their contract with the rest of the app is unchanged.
+
+**Verified this half:** `npx tsc --noEmit` clean. `npx eslint src/app/settings/page.tsx` shows
+the same 4 pre-existing problems (3 errors, 1 warning) that exist on the committed baseline
+*before* this change too (confirmed by stashing and re-running) — none of them are in
+`BillingSection` or introduced by this edit. `cargo check` / `cargo test` re-run and still
+clean/99-99 (Rust side untouched this half, just re-confirmed).
+
+**NOT verified — reasoned about, not observed:** nobody has run the actual Tauri desktop app and
+clicked Sign Up / Log In / Check Status. The email/password form, the account-email display, the
+logout flow, and "Check Status" showing a real active/inactive result on screen are all new code
+paths that have only been typechecked, never exercised end-to-end in the real webview. That
+click-through is the next concrete step before this can be called fully done — see `vera`.
+
 ## Update (2026-08-10): T13 — subscription protocol rewrite, Rust side only
 
 `docs/TASKS.md` T13: the deployed Cloudflare Worker moved to an account + bearer-token

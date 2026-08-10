@@ -848,7 +848,10 @@ export async function fetchCollectionTraits(collectionSlug: string, totalSupply 
   return invoke<CollectionTrait[]>('fetch_collection_traits', { collectionSlug, totalSupply });
 }
 
-// Subscription
+// Subscription — account + bearer-token protocol (T13). No wallet argument
+// anywhere here: identity is the logged-in account (email/password), not a
+// wallet address. Call subscriptionSignup/subscriptionLogin first; then
+// checkSubscription() refreshes/verifies the license for whoever is logged in.
 export interface SubscriptionCheckResult {
   active: boolean;
   plan: string | null;
@@ -860,8 +863,33 @@ export async function openExternalUrl(url: string): Promise<void> {
   return invoke('open_external_url', { url });
 }
 
-export async function checkSubscription(walletAddress: string): Promise<SubscriptionCheckResult> {
-  return invoke<SubscriptionCheckResult>('check_subscription', { walletAddress });
+/** Refresh/verify the subscription for the currently logged-in account.
+ * If no account is logged in, resolves with `active: false` and an `error`
+ * explaining that — it does not throw for "not logged in". */
+export async function checkSubscription(): Promise<SubscriptionCheckResult> {
+  return invoke<SubscriptionCheckResult>('check_subscription');
+}
+
+/** Create a new account and log in. Throws with a user-readable message on
+ * failure (e.g. email already registered, weak password, network error). */
+export async function subscriptionSignup(email: string, password: string): Promise<SubscriptionCheckResult> {
+  return invoke<SubscriptionCheckResult>('subscription_signup', { email, password });
+}
+
+/** Log in to an existing account. Throws with a user-readable message on
+ * failure (e.g. wrong password, network error). */
+export async function subscriptionLogin(email: string, password: string): Promise<SubscriptionCheckResult> {
+  return invoke<SubscriptionCheckResult>('subscription_login', { email, password });
+}
+
+/** Forget the current session and its cached license. */
+export async function subscriptionLogout(): Promise<void> {
+  return invoke('subscription_logout');
+}
+
+/** Email of the currently logged-in account, or null if no session is stored. */
+export async function subscriptionCurrentAccount(): Promise<string | null> {
+  return invoke<string | null>('subscription_current_account');
 }
 
 // Stream API

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { loadWallets, addWallet, removeWallet } from '@/lib/walletStore';
-import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription } from '@/lib/tauri';
+import { loadAlchemyKey, saveAlchemyKey, deleteAlchemyKey, loadOpenSeaKey, saveOpenSeaKey, deleteOpenSeaKey, loadEtherscanKey, saveEtherscanKey, deleteEtherscanKey, importWallet, checkSubscription, subscriptionSignup, subscriptionLogin, subscriptionLogout, subscriptionCurrentAccount, type SubscriptionCheckResult } from '@/lib/tauri';
 import { loadSubscription, saveSubscription, isSubscriptionActive, planLabel, isCacheStale, DEFAULT_SUBSCRIPTION, type SubscriptionState } from '@/lib/subscriptionStore';
 import { loadNotificationPrefs, saveNotificationPrefs } from '@/lib/notificationPrefsStore';
 import { deriveAddress } from '@/lib/walletImport';
@@ -961,45 +961,107 @@ function BillingSection() {
   const [checkError, setCheckError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => { setSub(loadSubscription()); }, []);
+  // Account identity — subscription is tied to an email/password account,
+  // never to a wallet address (T13). `account` is the logged-in account's
+  // email, or null if nobody is logged in yet on this machine.
+  const [account, setAccount] = useState<string | null>(null);
+  const [accountLoaded, setAccountLoaded] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    setSub(loadSubscription());
+    if (!isTauri) { setAccountLoaded(true); return; }
+    subscriptionCurrentAccount()
+      .then(email => setAccount(email))
+      .catch(() => setAccount(null))
+      .finally(() => setAccountLoaded(true));
+  }, []);
 
   const active = sub ? isSubscriptionActive(sub) : false;
+
+  const applyResult = (result: SubscriptionCheckResult) => {
+    const newState: SubscriptionState = {
+      plan: result.active ? (result.plan as 'monthly' | 'annual') : 'free',
+      activatedAt: result.active ? new Date().toISOString() : null,
+      expiresAt: result.expires_at ?? null,
+      lastChecked: new Date().toISOString(),
+    };
+    saveSubscription(newState);
+    setSub(newState);
+    return result;
+  };
 
   const handleCheckStatus = async () => {
     setChecking(true);
     setCheckError('');
     setCheckMsg('');
     try {
-      const wallets = loadWallets();
-      const addr = wallets[0]?.address ?? '';
-      if (!addr) {
-        setCheckError('No wallet added. Add a wallet first.');
+      if (!isTauri) {
+        // Browser / dev mode — mock inactive, no real backend call is possible here.
+        applyResult({ active: false, plan: null, expires_at: null });
+        setCheckMsg('Dev mode — not connected to the desktop app.');
         return;
       }
-
-      let result;
-      if (isTauri) {
-        result = await checkSubscription(addr);
-      } else {
-        // Browser / dev mode — mock inactive
-        result = { active: false, plan: null, expires_at: null };
+      if (!account) {
+        setCheckError('No account logged in. Sign up or log in below first.');
+        return;
       }
-
-      const newState: SubscriptionState = {
-        plan: result.active ? (result.plan as 'monthly' | 'annual') : 'free',
-        activatedAt: result.active ? new Date().toISOString() : null,
-        expiresAt: result.expires_at ?? null,
-        lastChecked: new Date().toISOString(),
-      };
-      saveSubscription(newState);
-      setSub(newState);
-      setCheckMsg(result.active ? 'Subscription confirmed!' : 'No active subscription found for this wallet.');
+      const result = await checkSubscription();
+      applyResult(result);
+      if (result.error) {
+        setCheckError(result.error);
+      } else {
+        setCheckMsg(result.active ? 'Subscription confirmed!' : 'No active subscription on this account.');
+      }
     } catch (e) {
       setCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setChecking(false);
       setTimeout(() => { setCheckMsg(''); setCheckError(''); }, 5000);
     }
+  };
+
+  const handleAuth = async () => {
+    setAuthError('');
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError('Email and password are required.');
+      return;
+    }
+    if (!isTauri) {
+      setAuthError('Account sign-up/login requires the desktop app.');
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const result = authMode === 'signup'
+        ? await subscriptionSignup(authEmail.trim(), authPassword)
+        : await subscriptionLogin(authEmail.trim(), authPassword);
+      applyResult(result);
+      setAccount(await subscriptionCurrentAccount());
+      setAuthPassword('');
+      setCheckMsg(authMode === 'signup' ? 'Account created and logged in.' : 'Logged in.');
+      setTimeout(() => setCheckMsg(''), 5000);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (isTauri) {
+      try { await subscriptionLogout(); } catch (e) {
+        setCheckError(e instanceof Error ? e.message : String(e));
+      }
+    }
+    setAccount(null);
+    const freeState: SubscriptionState = { plan: 'free', activatedAt: null, expiresAt: null, lastChecked: null };
+    saveSubscription(freeState);
+    setSub(freeState);
   };
 
   const handleReset = () => {
@@ -1043,6 +1105,64 @@ function BillingSection() {
           style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--wr-accent-text)', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '5px 12px', cursor: checking ? 'not-allowed' : 'pointer', opacity: checking ? 0.6 : 1 }}>
           {checking ? 'CHECKING…' : 'CHECK STATUS'}
         </button>
+      </div>
+
+      {/* Account block — subscription is tied to an email/password account,
+          never to a wallet address. Plain form, no styling polish needed. */}
+      <div style={{ border: '1px solid var(--wr-border)', overflow: 'hidden', marginBottom: '16px' }}>
+        <div style={blockHeaderStyle}>
+          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--wr-text-3)' }}>Account</span>
+        </div>
+        {!accountLoaded ? (
+          <div style={{ padding: '12px 16px', fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Loading…</div>
+        ) : account ? (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Logged in as</span>
+            <span style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)' }}>{account}</span>
+            <button onClick={handleLogout}
+              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', padding: '4px 10px', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--wr-danger)', border: '1px solid var(--wr-border)', flexShrink: 0 }}>
+              Log out
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {!isTauri && (
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>
+                Dev mode — sign up / log in requires the desktop app.
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="email"
+                placeholder="email@example.com"
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', padding: '6px 8px', backgroundColor: 'var(--wr-surface)', color: 'var(--wr-text)', border: '1px solid var(--wr-border)' }}
+              />
+              <input
+                type="password"
+                placeholder="password"
+                value={authPassword}
+                onChange={e => setAuthPassword(e.target.value)}
+                style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', padding: '6px 8px', backgroundColor: 'var(--wr-surface)', color: 'var(--wr-text)', border: '1px solid var(--wr-border)' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button onClick={handleAuth} disabled={authBusy || !isTauri}
+                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', color: 'var(--wr-accent-text)', backgroundColor: 'var(--wr-accent)', border: 'none', padding: '6px 14px', cursor: (authBusy || !isTauri) ? 'not-allowed' : 'pointer', opacity: (authBusy || !isTauri) ? 0.6 : 1 }}>
+                {authBusy ? 'WORKING…' : authMode === 'signup' ? 'SIGN UP' : 'LOG IN'}
+              </button>
+              <button
+                onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setAuthError(''); }}
+                style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                {authMode === 'signup' ? 'Already have an account? Log in' : 'Need an account? Sign up'}
+              </button>
+            </div>
+            {authError && (
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-danger)' }}>{authError}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Current Plan block */}

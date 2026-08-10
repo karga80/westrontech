@@ -26,11 +26,15 @@ All 5 secrets are set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY
   signature verified against the embedded public key — see
   `probes/subscription-worker-account-protocol-t13.md`. Test account created and deleted from
   the live D1 database after the probe.
-  **Not yet real:** the frontend (`src/lib/tauri.ts` `checkSubscription` wrapper still expects
-  the old `wallet_address` argument that no longer exists on the Rust side, and
-  `src/app/settings/page.tsx`'s Billing section has no signup/login form) has not been updated
-  in this session — the app will not build/run against the new Rust commands until that's done.
-  Tracked as the immediate next step in `docs/TASKS.md` T13.
+  **Frontend updated (T13, same day):** `src/lib/tauri.ts`'s `checkSubscription` is now a
+  zero-arg call matching the Rust command, plus new `subscriptionSignup`/`subscriptionLogin`/
+  `subscriptionLogout`/`subscriptionCurrentAccount` wrappers. `src/app/settings/page.tsx`'s
+  Billing section has a plain email/password sign-up/log-in/log-out form (unstyled is fine, per
+  task scope) and no longer reads a wallet address for the check. `npx tsc --noEmit` is clean.
+  **Not yet verified:** this frontend wiring has only been typechecked, not clicked through in
+  the actual running desktop app — nobody has signed up, logged in, or seen "Check Status" show
+  a real active/inactive result on screen yet. That real-UI pass is still owed before this is
+  called fully done end-to-end.
 - API-key proxy (`/proxy/alchemy/*`, `/proxy/opensea/*`, `/proxy/etherscan/*`): **real**, each
   provider verified with a live authenticated request returning real data (real block number,
   real ETH supply, real BAYC collection data). See `probes/subscription-worker-proxy.md`.
