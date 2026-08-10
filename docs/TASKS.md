@@ -763,3 +763,60 @@ Vera'nın kararı bağlayıcıdır. DOĞRULANAMADI raporlanmış bir iş "bitti"
 
 Yapılanların listesi, açık kalanlar ve `DECISIONS-PENDING.md`'ye eklenen her karar,
 Emir döndüğünde tek ekranda görülecek şekilde özetlenir.
+
+---
+
+## T11 — Distribute Funds gerçekte çalışmıyor  🆕 10.08.2026, Emir gerçek kullanımda buldu, ÖNCELİKLİ
+
+Emir'in kendi sözleri (uygulamayı gerçekten kullanarak test etti — vera'nın "kod temiz"
+demesi yetmedi, çünkü hiçbir ajan gerçek tıklama yapamadı):
+
+> "distribute funds olmuyor. confirm & send cta üzerine gelince mouse altında yasak
+> ikonu çıkıyor. Burada dynamic bir check sistemi olmalı, ben type ettiğim anda hata
+> varsa uyarmalı kırmızı bir yazı ile specific bir alanda. Bu componentta amount per
+> wallet kutusu da hatalı. Büyük alanın hiçbir fonksiyonu yok ve user sanki buraya
+> amount yazmaya yönlendiriyor. Burayı globalde fixle. En son olarak walletlara tek
+> tek farklı amount gönderebiliyor olmam lazım."
+
+**Madde a — Confirm & Send tıklanamıyor:** Düğmenin üzerine gelince "yasak" (not-allowed)
+imleci çıkıyor, yani düğme `disabled` durumda kalıyor ve kullanıcı hiçbir zaman ilerleyemiyor.
+`canSend`/`step1Valid`/envelope-onay mantığında bir yerde hep `false` dönen bir kontrol var.
+Bu, T9c'de bulk/distribute'a bağlanan gerçek gönderim yolunda (`src/app/bulk/distribute/page.tsx`)
+ve/veya paylaşılan `src/components/DistributeModal.tsx`'te olabilir — Emir hangi ekranda
+olduğunu netleştirmedi, **her ikisi de kontrol edilmeli**.
+
+**Madde b — Statik değil, dinamik/canlı validasyon eksik:** Şu an muhtemelen sadece
+düğme disabled kalıyor, kullanıcıya NEDEN ilerleyemediği hiçbir yerde yazmıyor (bu tam
+olarak CLAUDE.md'nin "sessiz başarısızlık yasak" kuralının ihlali — T6a'da wallet detail
+için çözülen sorunun aynısı burada da var). İstenen: kullanıcı bir alana yazarken
+(örn. tutar, adres) o alanın validasyonu **anlık** çalışmalı, hata varsa **o spesifik
+alanın altında/yanında kırmızı bir metin** olarak gösterilmeli — genel bir "gönderilemez"
+durumu değil, hangi alanın neden geçersiz olduğu.
+
+**Madde c — "Amount per wallet" kutusu kırık/yanıltıcı:** Bu component içinde büyük bir
+alan var, hiçbir işlevi yok ama kullanıcıyı buraya tutar yazması gerekiyormuş gibi
+yönlendiriyor (muhtemelen bir placeholder/label var ama gerçek bir input'a bağlı değil,
+ya da yanlış input'a bağlı). **Global fixle** — yani bu kutu nerede tekrar ediyorsa
+(paylaşılan `DistributeModal` + `bulk/distribute` + varsa başka yer) hepsinde düzelt,
+tek bir yerde yamamayla bırakma.
+
+**Madde d — Cüzdan başına farklı tutar gönderimi çalışmıyor/eksik:** Emir'in asıl
+ihtiyacı: birden fazla cüzdana **tek bir eşit tutar** değil, **her cüzdana ayrı ayrı
+farklı bir tutar** girebilmek. Kodda `amountMode`/`customAmounts` diye bir state zaten
+var gibi görünüyor (önceki turlarda görüldü) ama Emir'in deneyiminde bu ya çalışmıyor
+ya da UI'da bulunamıyor/görünmüyor. Bu ekranda uçtan uca gerçekten çalıştığını (her
+cüzdana farklı bir sayı yazılabildiğini, bu sayıların önizleme/gönderim adımına doğru
+yansıdığını) kanıtlamak lazım — "kod var" yetmez, Emir'in tarif ettiği deneyimle eşleşmeli.
+
+**Ajanlar:** → `forge` (root cause bul + düzelt, hem `bulk/distribute/page.tsx` hem
+`DistributeModal.tsx`'i kontrol et) → `vera` (bu sefer gerçekten tıklayarak doğrula,
+Emir'in tarif ettiği 4 maddenin hepsini tek tek test et — özellikle "type ettiğim anda
+kırmızı hata" ve "cüzdan başına farklı tutar" senaryolarını).
+
+**Bitti sayılır:** Confirm & Send gerçek geçerli girdiyle tıklanabilir hale geliyor
+(gerçek gönderim yine Emir onayı bekler, T9c'deki kural değişmedi); alan bazlı canlı
+kırmızı hata mesajları çalışıyor; amount-per-wallet kutusu ya kaldırılıyor ya da gerçek
+bir işleve bağlanıyor (hangisi olduğu net yazılıyor); cüzdan başına farklı tutar girme
+uçtan uca (gerçek tıklamayla) doğrulanıyor. Bunların hepsi `vera` tarafından gerçek
+tıklamayla teyit edilmeden "bitti" sayılmaz — bu T11 zaten "vera kod okuyup doğru
+görünüyor dedi ama gerçekte çalışmıyordu" örneği olduğu için ekstra dikkatli doğrulanacak.
