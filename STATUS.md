@@ -3,6 +3,35 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-11): T13 — Log In flakiness (vera's click-through), fix + open question
+
+vera clicked through the whole flow for real: Sign Up, Check Status, Log Out, D1 cleanup all
+verified correctly. **Log In was inconsistent**: the first attempt with the same email/password
+came back with a real server `401 invalid_credentials` ("Incorrect email or password."); clearing
+the fields (Cmd+A + delete) and retyping the same-looking credentials then succeeded. Not marked
+done; not pushed.
+
+**Root cause NOT proven** — this session has no click/GUI-automation tool, only file read/edit and
+shell, so the flow could not be reproduced by clicking. From code review, the strongest suspect:
+neither `src/app/settings/page.tsx`'s `handleAuth` nor `subscription-worker/src/index.ts` trimmed
+the **password** (only the email was `.trim().toLowerCase()`'d). A password pasted from a notes
+app/password manager commonly carries an invisible trailing newline/space; the worker hashes the
+password byte-for-byte, so that produces a different hash than the same text typed by hand —
+matching the observed "looks identical, server says wrong" symptom. Human typo on the first
+attempt is an equally plausible, unfalsifiable alternative explanation.
+
+**Fix applied (frontend only — the worker is already deployed; changing its password handling
+risks invalidating already-hashed accounts, out of scope for this pass):** `handleAuth` now
+`.trim()`s both email and password symmetrically for both signup and login, so whatever looks
+like "the same password" to the user is sent byte-identical both times. `handleLogout` now also
+resets `authEmail`/`authPassword`/`authError` so no stale form state survives a logout.
+
+**Verified:** `cargo check`, `cargo test --lib subscription::` (9/9 pass), `npx tsc --noEmit` —
+all clean. **NOT verified:** whether this actually fixes the Log In flake — nobody has clicked
+through it since this change. Next `vera` pass should retry Log In several times, including once
+via pasting the password (not just typing), to confirm or rule this out. If it still reproduces,
+the root cause is elsewhere and this note should be updated rather than re-guessed.
+
 ## Update (2026-08-10): T13 — frontend now wired to the new account protocol
 
 Second half of T13 (the Rust-side rewrite below was already committed and verified live).

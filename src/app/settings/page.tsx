@@ -1027,7 +1027,19 @@ function BillingSection() {
 
   const handleAuth = async () => {
     setAuthError('');
-    if (!authEmail.trim() || !authPassword) {
+    // Trim leading/trailing whitespace on both fields — not just the email.
+    // A password copy-pasted from a notes app or password manager frequently
+    // carries an invisible trailing newline/space. The worker hashes the
+    // password byte-for-byte with no trimming (`subscription-worker/src/
+    // index.ts`), so a stray character here silently produces a different
+    // hash than the one typed by hand, and the server correctly reports
+    // "Incorrect email or password" even though the visible text looks
+    // identical. Trimming here — the same way for signup and login — keeps
+    // both submissions byte-identical for anything the user perceives as
+    // "the same password".
+    const cleanEmail = authEmail.trim();
+    const cleanPassword = authPassword.trim();
+    if (!cleanEmail || !cleanPassword) {
       setAuthError('Email and password are required.');
       return;
     }
@@ -1038,8 +1050,8 @@ function BillingSection() {
     setAuthBusy(true);
     try {
       const result = authMode === 'signup'
-        ? await subscriptionSignup(authEmail.trim(), authPassword)
-        : await subscriptionLogin(authEmail.trim(), authPassword);
+        ? await subscriptionSignup(cleanEmail, cleanPassword)
+        : await subscriptionLogin(cleanEmail, cleanPassword);
       applyResult(result);
       setAccount(await subscriptionCurrentAccount());
       setAuthPassword('');
@@ -1062,6 +1074,12 @@ function BillingSection() {
     const freeState: SubscriptionState = { plan: 'free', activatedAt: null, expiresAt: null, lastChecked: null };
     saveSubscription(freeState);
     setSub(freeState);
+    // Clear the auth form so the next sign-in starts from a known-empty
+    // state instead of carrying over whatever was left in these fields from
+    // the previous account/session.
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthError('');
   };
 
   const handleReset = () => {

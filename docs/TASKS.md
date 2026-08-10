@@ -1068,6 +1068,38 @@ turu için hazır zemin:**
   Tek turda bitirilemeyebilir — gerekirse alt adımlara bölünüp ayrı vault turlarında
   ilerlenmeli (örn. önce sadece Rust tarafı, sonra frontend).
 
+**11.08.2026 — Log In tutarsızlığı (vera'nın gerçek tıklama raporundan):** Sign Up, Check
+Status, Log Out, D1 temizliği doğrulandı; ancak Log In adımında aynı email/parola ile ilk
+denemede sunucudan gerçek bir `401 invalid_credentials` ("Incorrect email or password.")
+döndü, alanlar Cmd+A + silinip elle yeniden yazılınca ikinci denemede giriş başarılı oldu.
+
+Kök neden **kesin olarak kanıtlanamadı** — bu oturumda uygulamayı tıklayarak yeniden üretecek
+bir araç yoktu (yalnızca dosya okuma/düzenleme + shell var, GUI otomasyonu yok), bu yüzden
+"düzeltildi, doğrulandı" denemez. Kod incelemesinden bulunan en olası şüpheli: hem
+`src/app/settings/page.tsx`'teki `handleAuth` hem de `subscription-worker/src/index.ts`
+parolayı **hiç trim etmiyordu** (email `.trim().toLowerCase()` ile normalize ediliyordu, parola
+değil). Panoya kopyalanan bir parolanın sonunda görünmez bir satır sonu/boşluk olması —notlar
+uygulamasından kopyalanan metinlerde yaygın— görünürde "aynı" ama byte olarak farklı bir string
+üretir; sunucu parolayı olduğu gibi hash'lediği için bu fark login'i sessizce başarısız kılar,
+elle yeniden yazmak bu görünmez karakteri ortadan kaldırır. Bu senaryo gözlemlenen davranışla
+(sunucudan gerçek 401, sadece client-side "alanlar boş" hatası değil) tutarlı, ama tek olası
+açıklama değil — insan hatası (yazım yanlışı) da dışlanamaz.
+
+Uygulanan düzeltme (yalnızca frontend, worker'a dokunulmadı — worker zaten deploy edilmiş,
+mevcut hesapların hash'lerini bozma riski var): `handleAuth` artık hem email hem parolayı
+`.trim()` ile gönderiyor, signup ve login için simetrik şekilde — böylece aynı görünen giriş
+her iki akışta da byte-bybyte aynı stringi worker'a taşır. Ayrıca `handleLogout` artık
+`authEmail`/`authPassword`/`authError`'ı sıfırlıyor (önceki oturumdan kalan form state'i bir
+sonraki girişe sızmasın diye — ayrı, daha küçük bir hijyen düzeltmesi).
+
+**Doğrulanan:** `cargo check`, `cargo test --lib subscription::` (9/9 geçti), `npx tsc --noEmit`
+— hepsi temiz.
+**Doğrulanmayan (açıkça belirtiliyor):** Bu değişikliğin gerçek Log In tutarsızlığını çözüp
+çözmediği gerçek uygulamada tıklanarak denenmedi. Bir sonraki `vera` turu login akışını birkaç
+kez art arda (özellikle parolayı panodan yapıştırarak ve elle yazarak) deneyip: (a) hâlâ
+tekrarlanıyorsa kök nedenin başka yerde olduğunu, (b) tekrarlanmıyorsa bu düzeltmenin işe
+yaradığını doğrulamalı.
+
 ## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor 🆕 10.08.2026, `API.md`'den
 
 Worker'ın Alchemy REST proxy'si üç ailede yanlış rota kuruyor (canlı test kanıtı `API.md`
