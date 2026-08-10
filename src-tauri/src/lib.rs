@@ -1,5 +1,6 @@
 mod alerts;
 mod analytics;
+mod autonomy;
 mod control;
 mod data;
 mod envelope;
@@ -15,6 +16,7 @@ mod subscription;
 mod pnl;
 mod persist;
 
+use autonomy::engine::AutonomyEngine;
 use envelope::engine::EnvelopeEngine;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -575,6 +577,87 @@ async fn find_sister_wallets(address: String) -> Result<sister::types::SisterRep
 
 // ── Marketplace commands ──────────────────────────────────────────────────────
 
+/// Envelope + autonomy gate shared by all three marketplace signing paths
+/// below. Mirrors `signing::send_eth`/`signing::transfer_nft` exactly:
+/// envelope's `check_and_authorize` runs first and is never replaced, the
+/// autonomy check is strictly additive and runs only after it succeeds, and
+/// a failure at either stage rolls back whatever the envelope just
+/// committed. `value_wei` for the envelope's own request is always `0` here
+/// — none of these three calls move any ETH themselves, they only produce or
+/// cancel an off-chain-signed order — so there is nothing to roll back
+/// numerically, but the audit trail and scope/kill-switch/expiry guards
+/// still apply exactly as they do for a real transfer.
+///
+/// `action_value_wei` is a *separate* number from the envelope's `value_wei`
+/// on purpose: it's the price exposure a listing/bid puts at risk (used to
+/// evaluate an autonomy rule's `per_tx_cap_wei`/`total_budget_cap_wei`), not
+/// ETH actually leaving the wallet on this call. Converting `price_eth: f64`
+/// into that number happens once, via `marketplace::seaport::eth_to_wei` —
+/// never inline here or anywhere else — before it ever reaches the proposal.
+/// Either the envelope+autonomy gate cleared and the caller may perform the
+/// marketplace call now (carrying the envelope reservation so the caller can
+/// still roll it back if the call itself fails), or the action was queued
+/// for approval and the caller must not perform it.
+enum MarketplaceAuthorization {
+    Proceed(envelope::types::TransactionRequest),
+    Queued { proposal_id: String, reason: String },
+}
+
+async fn authorize_marketplace_action(
+    envelope_engine: &EnvelopeEngine,
+    autonomy_engine: &AutonomyEngine,
+    wallet_address: &str,
+    envelope_to: &str,
+    action_type: autonomy::types::ActionType,
+    target_contract: Option<String>,
+    action_value_wei: u128,
+    payload: autonomy::pending::PendingActionPayload,
+) -> Result<MarketplaceAuthorization, String> {
+    let tx_req_envelope = envelope::types::TransactionRequest {
+        to: envelope_to.to_string(),
+        value_wei: 0,
+        calldata: String::new(),
+    };
+    envelope_engine
+        .check_and_authorize(&tx_req_envelope)
+        .map_err(|e| format!("Envelope rejected: {e:?}"))?;
+
+    let kill_switch_active =
+        envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let proposal = autonomy::types::ActionProposal {
+        action_type,
+        wallet_address: wallet_address.to_string(),
+        target_contract,
+        calldata: None,
+        value_wei: action_value_wei,
+        chain_id: signing::CHAIN_ID,
+    };
+    match signing::authorize_or_queue(autonomy_engine, &proposal, kill_switch_active, payload) {
+        Ok(signing::AuthorizationOutcome::Proceed) => Ok(MarketplaceAuthorization::Proceed(tx_req_envelope)),
+        Ok(signing::AuthorizationOutcome::Queued { proposal_id, reason }) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            Ok(MarketplaceAuthorization::Queued { proposal_id, reason })
+        }
+        Err(e) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            Err(e)
+        }
+    }
+}
+
+/// Parse a marketplace name coming from the frontend (or from a stored
+/// `PendingActionPayload`) into `marketplace::Marketplace`. Shared by every
+/// command that accepts a marketplace name — including
+/// `execute_pending_payload` — so this mapping (unrecognized names quietly
+/// default to OpenSea) exists in exactly one place rather than being
+/// retyped at each call site.
+fn parse_marketplace_name(name: &str) -> marketplace::Marketplace {
+    match name.to_lowercase().as_str() {
+        "blur" => marketplace::Marketplace::Blur,
+        _ => marketplace::Marketplace::Opensea,
+    }
+}
+
 #[tauri::command]
 async fn marketplace_list_nft(
     wallet_address: String,
@@ -584,15 +667,48 @@ async fn marketplace_list_nft(
     marketplace: String,
     expiry_hours: u64,
     api_key: String,
-) -> Result<marketplace::OrderResult, String> {
+    envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
+    autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
+) -> Result<marketplace::MarketplaceActionOutcome, String> {
     let opensea_key = wallet::keychain::fetch_opensea_key()
         .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
-    let mp = match marketplace.to_lowercase().as_str() {
-        "blur" => marketplace::Marketplace::Blur,
-        _ => marketplace::Marketplace::Opensea,
+    let mp = parse_marketplace_name(&marketplace);
+
+    let payload = autonomy::pending::PendingActionPayload::MarketplaceList {
+        contract_address: contract_address.clone(),
+        token_id: token_id.clone(),
+        price_eth,
+        marketplace: marketplace.clone(),
+        expiry_hours,
     };
+    // Envelope scope reuses the same allowlist semantics `transfer_nft`
+    // established: `to` is the real-world target this action concerns, here
+    // the NFT's own contract — the envelope must explicitly permit acting on
+    // it, exactly like it must permit a transfer recipient.
+    let authorization = authorize_marketplace_action(
+        &envelope_engine,
+        &autonomy_engine,
+        &wallet_address,
+        &contract_address,
+        autonomy::types::ActionType::MarketplaceList,
+        Some(contract_address.clone()),
+        marketplace::seaport::eth_to_wei(price_eth),
+        payload,
+    )
+    .await?;
+    let tx_req_envelope = match authorization {
+        MarketplaceAuthorization::Queued { proposal_id, reason } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        }
+        MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
+    };
+
     let input = marketplace::ListingInput { wallet_address, contract_address, token_id, price_eth, marketplace: mp, expiry_hours };
-    marketplace::list_nft(&input, &api_key, &opensea_key).await
+    let result = marketplace::list_nft(&input, &api_key, &opensea_key).await;
+    if result.is_err() {
+        envelope_engine.rollback_authorization(&tx_req_envelope);
+    }
+    result.map(|result| marketplace::MarketplaceActionOutcome::Completed { result })
 }
 
 #[tauri::command]
@@ -604,15 +720,44 @@ async fn marketplace_place_bid(
     marketplace: String,
     expiry_hours: u64,
     api_key: String,
-) -> Result<marketplace::OrderResult, String> {
+    envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
+    autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
+) -> Result<marketplace::MarketplaceActionOutcome, String> {
     let opensea_key = wallet::keychain::fetch_opensea_key()
         .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
-    let mp = match marketplace.to_lowercase().as_str() {
-        "blur" => marketplace::Marketplace::Blur,
-        _ => marketplace::Marketplace::Opensea,
+    let mp = parse_marketplace_name(&marketplace);
+
+    let payload = autonomy::pending::PendingActionPayload::MarketplaceBid {
+        contract_address: contract_address.clone(),
+        price_eth,
+        quantity,
+        marketplace: marketplace.clone(),
+        expiry_hours,
     };
+    let authorization = authorize_marketplace_action(
+        &envelope_engine,
+        &autonomy_engine,
+        &wallet_address,
+        &contract_address,
+        autonomy::types::ActionType::MarketplaceBidOrOffer,
+        Some(contract_address.clone()),
+        marketplace::seaport::eth_to_wei(price_eth),
+        payload,
+    )
+    .await?;
+    let tx_req_envelope = match authorization {
+        MarketplaceAuthorization::Queued { proposal_id, reason } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        }
+        MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
+    };
+
     let input = marketplace::BidInput { wallet_address, contract_address, price_eth, quantity, marketplace: mp, expiry_hours };
-    marketplace::place_bid(&input, &api_key, &opensea_key).await
+    let result = marketplace::place_bid(&input, &api_key, &opensea_key).await;
+    if result.is_err() {
+        envelope_engine.rollback_authorization(&tx_req_envelope);
+    }
+    result.map(|result| marketplace::MarketplaceActionOutcome::Completed { result })
 }
 
 #[tauri::command]
@@ -621,16 +766,706 @@ async fn marketplace_cancel_order(
     wallet_address: String,
     marketplace: String,
     api_key: String,
-) -> Result<marketplace::OrderResult, String> {
+    envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
+    autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
+) -> Result<marketplace::MarketplaceActionOutcome, String> {
     let opensea_key = wallet::keychain::fetch_opensea_key()
         .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
-    let mp = match marketplace.to_lowercase().as_str() {
-        "blur" => marketplace::Marketplace::Blur,
-        _ => marketplace::Marketplace::Opensea,
+    let mp = parse_marketplace_name(&marketplace);
+
+    let payload = autonomy::pending::PendingActionPayload::MarketplaceCancel {
+        order_hash: order_hash.clone(),
+        marketplace: marketplace.clone(),
     };
+    // A cancel has no contract/recipient of its own — `CancelInput` carries
+    // only an order hash. There is no natural "to" for the envelope's scope
+    // check here, so this uses the wallet's own address: the envelope must
+    // have that wallet in scope for any cancel to go through. This is a
+    // deliberate repurposing of a scope list that was designed for transfer
+    // recipients, not a perfect semantic fit — flagged explicitly rather
+    // than silently reusing it as if it were obviously correct.
+    let authorization = authorize_marketplace_action(
+        &envelope_engine,
+        &autonomy_engine,
+        &wallet_address,
+        &wallet_address,
+        autonomy::types::ActionType::MarketplaceCancel,
+        None,
+        0,
+        payload,
+    )
+    .await?;
+    let tx_req_envelope = match authorization {
+        MarketplaceAuthorization::Queued { proposal_id, reason } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        }
+        MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
+    };
+
     let input = marketplace::CancelInput { order_hash, wallet_address, marketplace: mp };
-    marketplace::cancel_order(&input, &api_key, &opensea_key).await
+    let result = marketplace::cancel_order(&input, &api_key, &opensea_key).await;
+    if result.is_err() {
+        envelope_engine.rollback_authorization(&tx_req_envelope);
+    }
+    result.map(|result| marketplace::MarketplaceActionOutcome::Completed { result })
 }
+
+// ── Wallet autonomy policy commands ─────────────────────────────────────────
+//
+// Phase (d): the minimal command layer that lets the policy engine and
+// hash-chained audit log built in earlier phases actually be configured and
+// inspected from the frontend. Every mutation here validates and persists
+// in Rust (`autonomy::store::save`) before it ever reports success, and
+// every mutation also updates the resident `AutonomyEngine` so the change
+// takes effect immediately — a policy edit that only touched disk and left
+// the signing paths still running the old in-memory policy would be worse
+// than no UI at all.
+//
+// `list_pending_action_proposals` / `approve_action_proposal` /
+// `reject_action_proposal` close the loop `signing::authorize_or_queue`
+// opened: a `RequiresApproval` decision now persists an
+// `autonomy::pending::PendingActionProposal` instead of just erroring out.
+// Two design decisions worth stating explicitly, since they are not visible
+// from the command signatures alone:
+//
+// 1. Approving does not re-run the autonomy policy and check for `Allow`.
+//    It cannot: Manual/Assisted mode always returns `RequiresApproval`, and
+//    Autonomous mode never turns a hard-banned action type into `Allow` (see
+//    `engine.rs`) — re-checking the policy would deterministically produce
+//    `RequiresApproval` again, forever. The human clicking "approve" *is*
+//    the authorization for this one proposal; there is no rule to match, so
+//    approving never touches any `AutonomyRule`'s budget/rate-limit counter.
+//    What IS re-checked at approval time: the kill switch and the wallet's
+//    policy `enabled` flag, because either could have changed in the time
+//    between queuing and approval, and an approval must never bypass a kill
+//    switch or pause activated after the proposal was queued.
+// 2. Approving re-runs the envelope's own `check_and_authorize` fresh, at
+//    approval time — the original call already rolled its reservation back
+//    when it queued instead of executing (see `authorize_or_queue`'s doc
+//    comment), so nothing is reserved until approval actually happens. This
+//    also means nonce and gas price are read live by `LocalSigner`/
+//    `marketplace::*` exactly as they would be for an immediate send —
+//    `PendingActionPayload` deliberately never stores either, so an approval
+//    landing hours after the proposal was queued can never broadcast against
+//    a stale nonce or gas price.
+
+/// A wallet address must parse as a real EVM address before it is ever
+/// handed to `store::save` / `AutonomyEngine::set_wallet_policy` — an
+/// invalid address would otherwise silently become a policy file no lookup
+/// could ever find again correctly.
+fn validate_wallet_policy(policy: &autonomy::types::WalletPolicy) -> Result<(), String> {
+    policy
+        .wallet_address
+        .parse::<alloy::primitives::Address>()
+        .map_err(|_| format!("Invalid wallet address: {}", policy.wallet_address))?;
+    // v1 is Ethereum mainnet only. `AutonomyEngine::evaluate` already refuses
+    // any other chain unconditionally; rejecting it here too means a bad
+    // policy is never even persisted, instead of being saved and then
+    // silently doing nothing whenever it's consulted.
+    if policy.chain_id != 1 {
+        return Err(format!(
+            "Unsupported chain_id {} — this build only supports Ethereum mainnet (1).",
+            policy.chain_id
+        ));
+    }
+    Ok(())
+}
+
+/// Diff `before` → `after` and append one audit record per thing that
+/// actually changed, instead of one opaque "policy replaced" record — so a
+/// viewer of `list_autonomy_audit` can see exactly what a mutation changed.
+/// Best-effort: an audit write failure is logged, never allowed to fail the
+/// policy write itself (mirrors `signing::authorize_via_autonomy`'s own
+/// audit-write tradeoff).
+fn audit_policy_diff(
+    wallet_address: &str,
+    before: &autonomy::types::WalletPolicy,
+    after: &autonomy::types::WalletPolicy,
+    now: i64,
+) {
+    use autonomy::audit::{append, AuditRecordKind, PolicyChangeKind};
+
+    let mut log_change = |kind: PolicyChangeKind| {
+        if let Err(e) = append(wallet_address, AuditRecordKind::PolicyChanged { change: kind }, now) {
+            log::error!(
+                "could not append autonomy policy-change audit record for {wallet_address}: {e}"
+            );
+        }
+    };
+
+    if before.mode != after.mode {
+        log_change(PolicyChangeKind::ModeChanged { from: before.mode, to: after.mode });
+    }
+    if before.enabled != after.enabled {
+        log_change(if after.enabled { PolicyChangeKind::Enabled } else { PolicyChangeKind::Disabled });
+    }
+    for idx in 0..after.rules.len().max(before.rules.len()) {
+        match (before.rules.get(idx), after.rules.get(idx)) {
+            (None, Some(_)) => log_change(PolicyChangeKind::RuleCreated { rule_index: idx }),
+            (Some(_), None) => log_change(PolicyChangeKind::RuleDeleted { rule_index: idx }),
+            (Some(b), Some(a)) if b != a => log_change(PolicyChangeKind::RuleUpdated { rule_index: idx }),
+            _ => {}
+        }
+    }
+}
+
+#[tauri::command]
+fn get_wallet_policy(wallet_address: String) -> autonomy::types::WalletPolicy {
+    autonomy::store::load_or_default(&wallet_address)
+}
+
+#[tauri::command]
+fn list_wallet_policies() -> Result<Vec<autonomy::types::WalletPolicy>, String> {
+    autonomy::store::list_all()
+}
+
+#[tauri::command]
+fn create_or_update_wallet_policy(
+    mut policy: autonomy::types::WalletPolicy,
+    autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
+) -> Result<autonomy::types::WalletPolicy, String> {
+    validate_wallet_policy(&policy)?;
+    policy.wallet_address = policy.wallet_address.to_lowercase();
+
+    let before = autonomy::store::load_or_default(&policy.wallet_address);
+    autonomy::store::save(&policy)?;
+    autonomy_engine.set_wallet_policy(policy.clone());
+
+    let now = chrono::Utc::now().timestamp();
+    audit_policy_diff(&policy.wallet_address, &before, &policy, now);
+
+    Ok(policy)
+}
+
+/// Load-mutate-save-resync, shared by every small policy mutation below so
+/// each one is a one-line closure instead of a fourth copy of
+/// "load, snapshot, save, push into the engine, diff for audit."
+fn apply_policy_update(
+    wallet_address: &str,
+    autonomy_engine: &AutonomyEngine,
+    mutate: impl FnOnce(&mut autonomy::types::WalletPolicy),
+) -> Result<autonomy::types::WalletPolicy, String> {
+    let mut policy = autonomy::store::load_or_default(wallet_address);
+    let before = policy.clone();
+    mutate(&mut policy);
+    autonomy::store::save(&policy)?;
+    autonomy_engine.set_wallet_policy(policy.clone());
+
+    let now = chrono::Utc::now().timestamp();
+    audit_policy_diff(wallet_address, &before, &policy, now);
+
+    Ok(policy)
+}
+
+#[tauri::command]
+fn set_wallet_autonomy_mode(
+    wallet_address: String,
+    mode: autonomy::types::AutonomyMode,
+    autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
+) -> Result<autonomy::types::WalletPolicy, String> {
+    apply_policy_update(&wallet_address, &autonomy_engine, |p| p.mode = mode)
+}
+
+#[tauri::command]
+fn set_wallet_policy_enabled(
+    wallet_address: String,
+    enabled: bool,
+    autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
+) -> Result<autonomy::types::WalletPolicy, String> {
+    apply_policy_update(&wallet_address, &autonomy_engine, |p| p.enabled = enabled)
+}
+
+/// Wallet-scoped pause: disables this wallet's autonomy policy so every
+/// action for it routes to manual approval (or deny, if it wasn't even in
+/// autonomous mode) regardless of what its rules say. Distinct from — and
+/// does not touch — the existing global kill switch (`activate_kill_switch`
+/// / `EnvelopeEngine`), which already stops every wallet's envelope-guarded
+/// signing outright. This does not duplicate that: it reuses the
+/// already-wired, already-tested per-policy `enabled` gate
+/// (`AutonomyEngine::evaluate` step 2) instead of inventing a second "stop
+/// everything" concept the engine would also have to learn about.
+#[tauri::command]
+fn pause_wallet_autonomy(
+    wallet_address: String,
+    autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
+) -> Result<autonomy::types::WalletPolicy, String> {
+    apply_policy_update(&wallet_address, &autonomy_engine, |p| p.enabled = false)
+}
+
+/// Side-effect-free: runs the exact same guard chain a real
+/// `send_eth`/`transfer_nft`/marketplace call would, via
+/// `AutonomyEngine::preview_proposal`, and reports the verdict without
+/// touching any budget/rate-limit counter or writing an audit record — a
+/// "what would happen" check the frontend can call as often as it likes
+/// before a user commits to anything.
+#[tauri::command]
+fn evaluate_action_proposal(
+    proposal: autonomy::types::ActionProposal,
+    envelope_engine: tauri::State<Arc<EnvelopeEngine>>,
+    autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
+) -> autonomy::types::AutonomyDecision {
+    autonomy_engine.ensure_policy_loaded(&proposal.wallet_address);
+    let kill_switch_active = envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let now = chrono::Utc::now().timestamp();
+    autonomy_engine.preview_proposal(&proposal, kill_switch_active, /* watch_only */ false, now)
+}
+
+#[tauri::command]
+fn list_autonomy_audit(wallet_address: String) -> Result<autonomy::audit::AuditLogView, String> {
+    autonomy::audit::wallet_audit_view(&wallet_address)
+}
+
+// ── Pending action proposals (approve/reject a queued `RequiresApproval`) ──
+//
+// Two design decisions worth stating explicitly, since neither is visible
+// just from reading the individual functions below:
+//
+// 1. Approval never re-runs `AutonomyEngine::evaluate` looking for `Allow`.
+//    It structurally cannot: Manual/Assisted mode always returns
+//    `RequiresApproval`, and Autonomous mode only ever lets `Mint` reach
+//    `Allow` — every proposal that reaches this module got here precisely
+//    because the engine will say `RequiresApproval` again, forever, no
+//    matter how many times it is asked. A human's click on "approve" *is*
+//    the authorization here — a separate, out-of-band act, not a second
+//    attempt at the same deterministic decision. What approval *does* still
+//    re-check is whatever could have legitimately changed since the
+//    proposal was queued: the global kill switch, and this wallet's policy
+//    `enabled` flag (`pause_wallet_autonomy` may have fired after the
+//    proposal was created).
+// 2. Approval re-runs the envelope's `check_and_authorize` fresh, exactly
+//    like the original call did — the original reservation was rolled back
+//    the moment the action was queued (see `authorize_or_queue` and
+//    `authorize_marketplace_action`), so nothing is double-spent, but the
+//    spend cap must still hold at approval time, which may be hours later.
+//    Nonce and gas are never stored in the pending payload at all (see
+//    `PendingActionPayload`'s doc comment) — they are always read live by
+//    the same signing code an immediate send already uses.
+
+#[tauri::command]
+fn list_pending_action_proposals(
+    wallet_address: String,
+) -> Result<Vec<autonomy::pending::PendingActionProposal>, String> {
+    autonomy::pending::list(&wallet_address)
+}
+
+#[tauri::command]
+fn reject_action_proposal(
+    id: String,
+) -> Result<autonomy::pending::PendingActionProposal, String> {
+    let now = chrono::Utc::now().timestamp();
+    let resolved = autonomy::pending::resolve(&id, autonomy::pending::PendingStatus::Rejected, now)?;
+    if let Err(e) = autonomy::audit::append(
+        &resolved.wallet_address,
+        autonomy::audit::AuditRecordKind::Denied {
+            reason: format!("proposal {id} rejected by user: {}", resolved.reason),
+        },
+        now,
+    ) {
+        log::error!("could not append rejection audit record for {}: {e}", resolved.wallet_address);
+    }
+    Ok(resolved)
+}
+
+/// Actually perform the action a pending proposal describes, dispatching on
+/// its payload variant. Reused by nothing else — this is the one place an
+/// approved proposal's stored data turns into a real signed/broadcast
+/// action or a real marketplace order, always by calling the exact same
+/// lower-level functions (`LocalSigner::sign_and_send`,
+/// `signing::build_and_send_nft_transfer`, `marketplace::list_nft` /
+/// `place_bid` / `cancel_order`) the immediate (non-queued) commands above
+/// call, so an approved action is built through the identical code path an
+/// immediate one would have used — never a second, hand-rolled copy.
+///
+/// Credentials are fetched fresh from the Keychain here rather than taken
+/// from the frontend caller (unlike the immediate commands, which receive
+/// `api_key` as a parameter): approval only ever carries an `id`, so there
+/// is no frontend-supplied key to forward.
+async fn execute_pending_payload(
+    wallet_address: &str,
+    payload: &autonomy::pending::PendingActionPayload,
+) -> Result<autonomy::pending::ApprovalResult, String> {
+    use autonomy::pending::{ApprovalResult, PendingActionPayload};
+
+    let alchemy_key = wallet::keychain::fetch_alchemy_key().map_err(|e| {
+        format!("Could not read Alchemy key (Keychain error: {e}) — try saving again in Settings")
+    })?;
+
+    match payload {
+        PendingActionPayload::SendEth { to, value_wei } => {
+            let request = signing::TxRequest {
+                to: to.clone(),
+                value_wei: value_wei.clone(),
+                data: None,
+                gas_limit: None,
+            };
+            signing::LocalSigner::sign_and_send(wallet_address, request, &alchemy_key)
+                .await
+                .map(|tx_hash| ApprovalResult::TxSent { tx_hash })
+        }
+        PendingActionPayload::TransferNft { contract_address, token_id, to, token_standard, amount } => {
+            signing::build_and_send_nft_transfer(
+                wallet_address,
+                contract_address,
+                token_id,
+                to,
+                *token_standard,
+                amount.as_deref(),
+                &alchemy_key,
+            )
+            .await
+            .map(|tx_hash| ApprovalResult::TxSent { tx_hash })
+        }
+        PendingActionPayload::MarketplaceList { contract_address, token_id, price_eth, marketplace, expiry_hours } => {
+            let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+                format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+            })?;
+            let input = marketplace::ListingInput {
+                wallet_address: wallet_address.to_string(),
+                contract_address: contract_address.clone(),
+                token_id: token_id.clone(),
+                price_eth: *price_eth,
+                marketplace: parse_marketplace_name(marketplace),
+                expiry_hours: *expiry_hours,
+            };
+            marketplace::list_nft(&input, &alchemy_key, &opensea_key)
+                .await
+                .map(|result| ApprovalResult::OrderCompleted { result })
+        }
+        PendingActionPayload::MarketplaceBid { contract_address, price_eth, quantity, marketplace, expiry_hours } => {
+            let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+                format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+            })?;
+            let input = marketplace::BidInput {
+                wallet_address: wallet_address.to_string(),
+                contract_address: contract_address.clone(),
+                price_eth: *price_eth,
+                quantity: *quantity,
+                marketplace: parse_marketplace_name(marketplace),
+                expiry_hours: *expiry_hours,
+            };
+            marketplace::place_bid(&input, &alchemy_key, &opensea_key)
+                .await
+                .map(|result| ApprovalResult::OrderCompleted { result })
+        }
+        PendingActionPayload::MarketplaceCancel { order_hash, marketplace } => {
+            let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+                format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+            })?;
+            let input = marketplace::CancelInput {
+                order_hash: order_hash.clone(),
+                wallet_address: wallet_address.to_string(),
+                marketplace: parse_marketplace_name(marketplace),
+            };
+            marketplace::cancel_order(&input, &alchemy_key, &opensea_key)
+                .await
+                .map(|result| ApprovalResult::OrderCompleted { result })
+        }
+    }
+}
+
+// ── Atomic claim for `approve_action_proposal` ──────────────────────────
+//
+// Bug this closes: the file-backed `PendingStatus` only moves from
+// `Pending` to `Approved` *after* `execute_pending_payload` returns —
+// deliberately, so a transient execution failure leaves the proposal
+// retryable (see the doc comment on `approve_action_proposal_in` below).
+// That means two concurrent calls for the same `id` (double-click, a
+// retried IPC call after a slow response) both pass the `effective_status
+// == Pending` check before either one calls `resolve`, so both go on to
+// sign/broadcast or place an order — a real double-send or double-submit.
+//
+// Fix: an in-memory set of proposal ids currently "in flight", guarded by a
+// `Mutex` and claimed (insert-if-absent) before anything else happens. This
+// is process-local state, which is sufficient here — Westron is a
+// single-process desktop app, so there is only ever one such set, and it
+// does not need to survive a restart (a proposal that was mid-approval when
+// the app was killed is not "in flight" anymore; nothing is running to
+// finish it).
+fn approval_in_flight() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static IN_FLIGHT: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    IN_FLIGHT.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+/// Holds `id`'s claim until dropped. Every return path out of
+/// `approve_action_proposal_in` — success, an early `?`, an explicit early
+/// `return Err` — drops this and frees the id for a future retry. This is
+/// what turns "preserve existing retry semantics" from the doc comment
+/// below into something actually true after a failed approval: the pending
+/// proposal itself is unchanged (still `Pending` on disk), and now nothing
+/// in memory blocks approving it again either.
+struct ApprovalClaim(String);
+
+impl Drop for ApprovalClaim {
+    fn drop(&mut self) {
+        if let Ok(mut set) = approval_in_flight().lock() {
+            set.remove(&self.0);
+        }
+    }
+}
+
+/// Claim exclusive execution rights for `id`. `Err` — without touching the
+/// pending-proposal file, the envelope, or anything else — if some other
+/// in-flight call already holds this exact id's claim.
+fn claim_for_approval(id: &str) -> Result<ApprovalClaim, String> {
+    let mut set = approval_in_flight()
+        .lock()
+        .map_err(|_| "internal error: approval claim lock was poisoned".to_string())?;
+    if !set.insert(id.to_string()) {
+        return Err(format!(
+            "Pending action proposal {id} is already being approved by another request"
+        ));
+    }
+    Ok(ApprovalClaim(id.to_string()))
+}
+
+/// Approve a queued `RequiresApproval` proposal: re-check what could have
+/// changed since it was queued (kill switch, this wallet's policy
+/// `enabled` flag), re-authorize fresh against the envelope, then actually
+/// perform the action.
+///
+/// On execution failure, the envelope reservation taken here is rolled
+/// back and the proposal is deliberately left `Pending` rather than marked
+/// `Approved` — a transient failure (RPC hiccup, momentarily stale gas
+/// estimate) should be retryable by approving again, not a dead end that
+/// silently drops the user's request. Only a genuine execution success
+/// resolves the proposal to `Approved`.
+///
+/// `dir` is the pending-proposal store's directory — injected so tests can
+/// point it at an isolated tmp dir instead of the real app-data location,
+/// same convention every other `_in` function in `autonomy::` already uses.
+/// The command wrapper below always passes the real directory.
+async fn approve_action_proposal_in(
+    dir: &std::path::Path,
+    id: &str,
+    envelope_engine: &EnvelopeEngine,
+) -> Result<autonomy::pending::ApprovalResult, String> {
+    use autonomy::pending::PendingStatus;
+
+    // Claim first, before anything else — including the `Pending` check
+    // below. That check reads a file whose write only happens at the very
+    // end of this function, so by itself it cannot serialize two concurrent
+    // calls; this claim is what actually does.
+    let _claim = claim_for_approval(id)?;
+
+    let now = chrono::Utc::now().timestamp();
+
+    let found = autonomy::pending::find_by_id_in(dir, id)?
+        .ok_or_else(|| format!("No pending action proposal found with id {id}"))?;
+    let effective = found.effective_status(now);
+    if effective != PendingStatus::Pending {
+        return Err(format!(
+            "Pending action proposal {id} is {effective:?} and cannot be approved"
+        ));
+    }
+
+    if envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false) {
+        return Err("Cannot approve: the kill switch is active.".to_string());
+    }
+    let current_policy = autonomy::store::load_or_default(&found.wallet_address);
+    if !current_policy.enabled {
+        return Err(
+            "Cannot approve: this wallet's autonomy policy is currently disabled or paused."
+                .to_string(),
+        );
+    }
+
+    let tx_req_envelope = envelope::types::TransactionRequest {
+        to: found
+            .proposal
+            .target_contract
+            .clone()
+            .unwrap_or_else(|| found.wallet_address.clone()),
+        value_wei: found.proposal.value_wei,
+        calldata: String::new(),
+    };
+    envelope_engine
+        .check_and_authorize(&tx_req_envelope)
+        .map_err(|e| format!("Envelope rejected: {e:?}"))?;
+
+    let execution = execute_pending_payload(&found.wallet_address, &found.payload).await;
+    let execution = match execution {
+        Ok(result) => result,
+        Err(e) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            return Err(e);
+        }
+    };
+
+    // Execution succeeded — resolve the proposal and audit it. Both are
+    // best-effort from here on: the real send/order already went through
+    // and cannot be undone, so a bookkeeping failure at this point must
+    // never be reported back as an error (that would falsely tell the user
+    // their action failed when money has already moved or an order is
+    // already live). Failures are logged loudly instead of swallowed.
+    if let Err(e) = autonomy::pending::resolve_in(dir, id, PendingStatus::Approved, now) {
+        log::error!(
+            "action for proposal {id} executed successfully but could not be marked Approved: {e}"
+        );
+    }
+    if let Err(e) = autonomy::audit::append(
+        &found.wallet_address,
+        autonomy::audit::AuditRecordKind::Approved { note: Some(format!("proposal {id}")) },
+        now,
+    ) {
+        log::error!("could not append approval audit record for {}: {e}", found.wallet_address);
+    }
+
+    Ok(execution)
+}
+
+#[tauri::command]
+async fn approve_action_proposal(
+    id: String,
+    envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
+) -> Result<autonomy::pending::ApprovalResult, String> {
+    let dir = autonomy::pending::default_dir()?;
+    approve_action_proposal_in(&dir, &id, &envelope_engine).await
+}
+
+#[cfg(test)]
+mod approve_action_proposal_tests {
+    use super::*;
+    use autonomy::pending::{self, PendingActionPayload, PendingActionProposal, PendingStatus};
+    use autonomy::types::{ActionProposal, ActionType};
+    use std::sync::Barrier;
+
+    fn tmp_pending_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join(format!("westron-approve-test-{tag}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    const WALLET: &str = "0x000000000000000000000000000000000000dead";
+
+    fn sample_proposal(id: &str) -> PendingActionProposal {
+        PendingActionProposal {
+            id: id.to_string(),
+            wallet_address: WALLET.to_string(),
+            proposal: ActionProposal {
+                action_type: ActionType::TransferNative,
+                wallet_address: WALLET.to_string(),
+                target_contract: Some("0x00000000000000000000000000000000000beef".to_string()),
+                calldata: None,
+                value_wei: 1_000_000_000_000_000_000,
+                chain_id: 1,
+            },
+            reason: "manual mode always requires approval".to_string(),
+            payload: PendingActionPayload::SendEth {
+                to: "0x00000000000000000000000000000000000beef".to_string(),
+                value_wei: "1000000000000000000".to_string(),
+            },
+            created_at: chrono::Utc::now().timestamp(),
+            status: PendingStatus::Pending,
+        }
+    }
+
+    /// The primitive itself: two threads racing to claim the same id — only
+    /// one wins, the other is rejected with a clear reason, and once the
+    /// winner's guard is dropped the id becomes claimable again (retry
+    /// semantics preserved). This is the exact mechanism that closes
+    /// CRITICAL #2 (double-execution of the same pending approval).
+    #[test]
+    fn claim_for_approval_lets_only_one_of_two_concurrent_claimants_through() {
+        let id = format!("claim-race-{}", uuid::Uuid::new_v4());
+        let barrier = Arc::new(Barrier::new(2));
+
+        let (id_a, barrier_a) = (id.clone(), barrier.clone());
+        let handle_a = std::thread::spawn(move || {
+            barrier_a.wait();
+            claim_for_approval(&id_a)
+        });
+
+        let (id_b, barrier_b) = (id.clone(), barrier.clone());
+        let handle_b = std::thread::spawn(move || {
+            barrier_b.wait();
+            claim_for_approval(&id_b)
+        });
+
+        let result_a = handle_a.join().unwrap();
+        let result_b = handle_b.join().unwrap();
+
+        let ok_count = [&result_a, &result_b].iter().filter(|r| r.is_ok()).count();
+        assert_eq!(ok_count, 1, "exactly one of two concurrent claims must succeed");
+        let err = result_a
+            .as_ref()
+            .err()
+            .or(result_b.as_ref().err())
+            .expect("the losing claim must be an Err");
+        assert!(err.contains("already being approved"), "got: {err}");
+
+        // Drop both results (releasing whichever guard was held) before
+        // asserting the id is claimable again.
+        drop(result_a);
+        drop(result_b);
+        assert!(
+            claim_for_approval(&id).is_ok(),
+            "id must be claimable again once the previous claim was released"
+        );
+    }
+
+    /// Wired into the real command: two concurrent approvals of the same
+    /// pending proposal id. Only one may ever get past the claim to reach
+    /// the proposal's business logic (kill switch / policy / envelope /
+    /// execution) — the other must be rejected by the claim itself, before
+    /// touching the pending-proposal file, the envelope, or anything else.
+    /// This is the exact double-send / double-submit bug CRITICAL #2
+    /// describes: before this fix, both calls reached `execute_pending_payload`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rejects_second_concurrent_approval_reusing_the_same_proposal_id() {
+        let dir = tmp_pending_dir("concurrent-approve");
+        let id = format!("prop-{}", uuid::Uuid::new_v4());
+        pending::add_in(&dir, sample_proposal(&id)).unwrap();
+
+        let engine = Arc::new(EnvelopeEngine::new());
+        let barrier = Arc::new(Barrier::new(2));
+
+        let (dir_a, id_a, engine_a, barrier_a) = (dir.clone(), id.clone(), engine.clone(), barrier.clone());
+        let task_a = tokio::spawn(async move {
+            barrier_a.wait();
+            approve_action_proposal_in(&dir_a, &id_a, &engine_a).await
+        });
+
+        let (dir_b, id_b, engine_b, barrier_b) = (dir.clone(), id.clone(), engine.clone(), barrier.clone());
+        let task_b = tokio::spawn(async move {
+            barrier_b.wait();
+            approve_action_proposal_in(&dir_b, &id_b, &engine_b).await
+        });
+
+        let result_a = task_a.await.unwrap();
+        let result_b = task_b.await.unwrap();
+
+        let errors: Vec<String> = [&result_a, &result_b]
+            .iter()
+            .filter_map(|r| r.as_ref().err().cloned())
+            .collect();
+
+        // This test wallet has no autonomy policy configured, so whichever
+        // call wins the claim still fails — just for a *different* reason
+        // (policy disabled), proving it actually reached real business
+        // logic rather than also being rejected by the claim.
+        assert_eq!(errors.len(), 2, "both calls should fail in this test, got: {errors:?}");
+        let claim_rejections =
+            errors.iter().filter(|e| e.contains("already being approved")).count();
+        assert_eq!(
+            claim_rejections, 1,
+            "exactly one of the two concurrent calls must be rejected by the claim, got: {errors:?}"
+        );
+        let other_error = errors
+            .iter()
+            .find(|e| !e.contains("already being approved"))
+            .expect("the call that passed the claim must fail for a different reason");
+        assert!(
+            other_error.contains("disabled or paused"),
+            "the call that passed the claim should fail on the disabled-policy check, got: {other_error}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+// ── Marketplace metadata commands ───────────────────────────────────────────
 
 #[tauri::command]
 async fn fetch_collection_nfts(collection_slug: String, limit: u32) -> Result<Vec<marketplace::NftAsset>, String> {
@@ -782,6 +1617,12 @@ pub fn run() {
   // Persisted: spend cap, accumulated spend and kill switch all survive a
   // restart. An expired envelope is not restored as active.
   let engine = Arc::new(EnvelopeEngine::load_or_new());
+  // In-memory only: no disk-backed `load_or_new` counterpart exists for
+  // autonomy policies. Each wallet's policy is populated lazily on first use
+  // (`AutonomyEngine::ensure_policy_loaded`, called from the signing entry
+  // points) via `autonomy::store::load_or_default`, mirroring the envelope
+  // engine's persistence without inventing a second bootstrapping path.
+  let autonomy_engine = Arc::new(AutonomyEngine::new());
   let stream_manager = Arc::new(stream::StreamManager::new());
   // Realtime manager is built lazily by `realtime_init` — store an empty slot
   // so the Tauri command handler can fill it in once we have the API key.
@@ -794,6 +1635,7 @@ pub fn run() {
 
   tauri::Builder::default()
     .manage(engine)
+    .manage(autonomy_engine)
     .manage(stream_manager)
     .manage(realtime_slot)
     .setup(move |app| {
@@ -862,6 +1704,17 @@ pub fn run() {
         marketplace_list_nft,
         marketplace_place_bid,
         marketplace_cancel_order,
+        get_wallet_policy,
+        list_wallet_policies,
+        create_or_update_wallet_policy,
+        set_wallet_autonomy_mode,
+        set_wallet_policy_enabled,
+        pause_wallet_autonomy,
+        evaluate_action_proposal,
+        list_autonomy_audit,
+        list_pending_action_proposals,
+        approve_action_proposal,
+        reject_action_proposal,
         fetch_collection_nfts,
         fetch_nfts_by_collection,
         fetch_collection_by_contract,

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod u128_as_string {
+// `pub(crate)`: reused as-is by `autonomy/types.rs` for the same wei-as-string
+// representation. Do not duplicate these — a second copy is exactly the kind
+// of ayrışma (drift) this repo's conventions forbid.
+pub(crate) mod u128_as_string {
     use serde::{Deserialize, Deserializer, Serializer};
     pub fn serialize<S: Serializer>(v: &u128, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(&v.to_string())
@@ -12,7 +15,7 @@ mod u128_as_string {
     }
 }
 
-mod option_u128_as_string {
+pub(crate) mod option_u128_as_string {
     use serde::{Deserialize, Deserializer, Serializer};
     pub fn serialize<S: Serializer>(v: &Option<u128>, s: S) -> Result<S::Ok, S::Error> {
         match v {

@@ -69,6 +69,18 @@ pub enum OrderStatus {
     Failed,
 }
 
+/// What a marketplace command actually did: it completed the order right
+/// away, or the autonomy policy queued it for a human to approve — the same
+/// distinction `signing::SigningOutcome` draws for `send_eth`/`transfer_nft`,
+/// mirrored here rather than reused directly since the "executed" shape is
+/// an `OrderResult`, not a bare tx hash.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum MarketplaceActionOutcome {
+    Completed { result: OrderResult },
+    PendingApproval { proposal_id: String, reason: String },
+}
+
 /// A single trait on an NFT
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftTrait {

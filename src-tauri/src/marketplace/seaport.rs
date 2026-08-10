@@ -395,7 +395,12 @@ fn unix_now() -> Result<u64, String> {
         .map_err(|e| e.to_string())
 }
 
-fn eth_to_wei(eth: f64) -> u128 {
+// `pub(crate)`: this is the one place ETH-as-f64 becomes wei-as-u128 for
+// order construction. `marketplace/client.rs`'s new envelope/autonomy gates
+// need the exact same conversion before a listing/bid price enters an
+// `ActionProposal` — reusing this function instead of writing a second
+// `eth * 1e18` keeps that arithmetic in exactly one place.
+pub(crate) fn eth_to_wei(eth: f64) -> u128 {
     (eth * 1e18) as u128
 }
 

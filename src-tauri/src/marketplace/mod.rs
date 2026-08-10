@@ -2,7 +2,7 @@ pub mod client;
 pub mod seaport;
 pub mod types;
 
-pub use types::{BidInput, CancelInput, CollectionEvent, CollectionHolder, CollectionInfo, CollectionOffer, CollectionStats, CollectionTrait, ListingInput, Marketplace, NftAsset, NftDetail, NftPage, NftTrait, OrderResult, TraitValue};
+pub use types::{BidInput, CancelInput, CollectionEvent, CollectionHolder, CollectionInfo, CollectionOffer, CollectionStats, CollectionTrait, ListingInput, Marketplace, MarketplaceActionOutcome, NftAsset, NftDetail, NftPage, NftTrait, OrderResult, TraitValue};
 
 use client::MarketplaceClient;
 

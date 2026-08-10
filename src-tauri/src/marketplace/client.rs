@@ -4,7 +4,10 @@
 /// Blur support is stubbed — different protocol, planned for v2.
 use super::seaport::{self, ListingParams, OfferParams};
 use super::types::{BidInput, CancelInput, CollectionEvent, CollectionHolder, CollectionInfo, CollectionOffer, CollectionStats, CollectionTrait, ListingInput, Marketplace, NftAsset, NftDetail, NftPage, NftTrait, OrderResult, OrderStatus, TraitValue};
-use crate::wallet::keychain::fetch_key;
+// `fetch_and_verify_key` lives in `wallet::keychain` — shared with
+// `signing::LocalSigner`, which needs the identical caller-address-vs-key
+// check. See that function's doc comment for the rationale.
+use crate::wallet::keychain::fetch_and_verify_key;
 
 const OPENSEA_API_BASE: &str = "https://api.opensea.io/api/v2";
 /// Alchemy mainnet RPC base (append api key)
@@ -45,8 +48,7 @@ impl MarketplaceClient {
             Marketplace::Opensea => {}
         }
 
-        let private_key = fetch_key(&input.wallet_address)
-            .map_err(|e| format!("wallet key unavailable: {}", e))?;
+        let private_key = fetch_and_verify_key(&input.wallet_address)?;
 
         let counter = self
             .get_seaport_counter(&input.wallet_address)
@@ -130,8 +132,7 @@ impl MarketplaceClient {
             return Err("Blur bidding not yet supported — use OpenSea for Phase 3".to_string());
         }
 
-        let private_key = fetch_key(&input.wallet_address)
-            .map_err(|e| format!("wallet key unavailable: {}", e))?;
+        let private_key = fetch_and_verify_key(&input.wallet_address)?;
 
         let counter = self
             .get_seaport_counter(&input.wallet_address)
@@ -211,8 +212,7 @@ impl MarketplaceClient {
 
         // OpenSea off-chain cancel: DELETE /v2/orders/{chain}/{protocol}/{order_hash}
         // Requires the order creator's signature over the cancellation message.
-        let private_key = fetch_key(&input.wallet_address)
-            .map_err(|e| format!("wallet key unavailable: {}", e))?;
+        let private_key = fetch_and_verify_key(&input.wallet_address)?;
 
         // Build a minimal cancellation signature: sign the order hash directly
         use alloy::primitives::B256;

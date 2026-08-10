@@ -382,17 +382,24 @@ export async function startBackgroundPolling(walletAddresses: string[], apiKey: 
 }
 
 // Signing
-export async function getPrivateKey(walletAddress: string): Promise<string> {
-  return invoke<string>('get_private_key', { walletAddress });
-}
+//
+// `SigningOutcome` mirrors Rust's `signing::SigningOutcome`: either the
+// transaction was actually signed and broadcast (`Sent`), or the wallet's
+// autonomy policy could not decide on its own and queued it for a human to
+// approve (`PendingApproval`) — see `listPendingActionProposals` /
+// `approveActionProposal` / `rejectActionProposal` below. Callers must
+// branch on `outcome` rather than assuming a tx hash always comes back.
+export type SigningOutcome =
+  | { outcome: 'sent'; tx_hash: string }
+  | { outcome: 'pending_approval'; proposal_id: string; reason: string };
 
 export async function sendEth(
   walletAddress: string,
   to: string,
   valueWei: string,
   apiKey: string
-): Promise<string> {
-  return invoke<string>('send_eth', {
+): Promise<SigningOutcome> {
+  return invoke<SigningOutcome>('send_eth', {
     walletAddress,
     to,
     valueWei,
@@ -420,8 +427,8 @@ export async function transferNft(
   tokenStandard: NftTokenStandard,
   apiKey: string,
   amount?: string
-): Promise<string> {
-  return invoke<string>('transfer_nft', {
+): Promise<SigningOutcome> {
+  return invoke<SigningOutcome>('transfer_nft', {
     walletAddress,
     contractAddress,
     tokenId,
@@ -664,6 +671,14 @@ export interface OrderResult {
   error?: string;
 }
 
+/** Mirrors Rust's `marketplace::MarketplaceActionOutcome` — same "executed
+ *  now vs. queued for approval" split `SigningOutcome` draws above, just
+ *  carrying an `OrderResult` instead of a bare tx hash for the executed
+ *  case, since a marketplace order does not reduce to one hash. */
+export type MarketplaceActionOutcome =
+  | { outcome: 'completed'; result: OrderResult }
+  | { outcome: 'pending_approval'; proposal_id: string; reason: string };
+
 export async function marketplaceListNft(params: {
   walletAddress: string;
   contractAddress: string;
@@ -672,8 +687,8 @@ export async function marketplaceListNft(params: {
   marketplace: MarketplaceName;
   expiryHours: number;
   apiKey: string;
-}): Promise<OrderResult> {
-  return invoke<OrderResult>('marketplace_list_nft', {
+}): Promise<MarketplaceActionOutcome> {
+  return invoke<MarketplaceActionOutcome>('marketplace_list_nft', {
     walletAddress: params.walletAddress,
     contractAddress: params.contractAddress,
     tokenId: params.tokenId,
@@ -692,8 +707,8 @@ export async function marketplacePlaceBid(params: {
   marketplace: MarketplaceName;
   expiryHours: number;
   apiKey: string;
-}): Promise<OrderResult> {
-  return invoke<OrderResult>('marketplace_place_bid', {
+}): Promise<MarketplaceActionOutcome> {
+  return invoke<MarketplaceActionOutcome>('marketplace_place_bid', {
     walletAddress: params.walletAddress,
     contractAddress: params.contractAddress,
     priceEth: params.priceEth,
@@ -709,8 +724,8 @@ export async function marketplaceCancelOrder(params: {
   walletAddress: string;
   marketplace: MarketplaceName;
   apiKey: string;
-}): Promise<OrderResult> {
-  return invoke<OrderResult>('marketplace_cancel_order', {
+}): Promise<MarketplaceActionOutcome> {
+  return invoke<MarketplaceActionOutcome>('marketplace_cancel_order', {
     orderHash: params.orderHash,
     walletAddress: params.walletAddress,
     marketplace: params.marketplace,
@@ -932,4 +947,239 @@ export async function stopStream(): Promise<void> {
 
 export async function getStreamStatus(): Promise<{ running: boolean; subscribed_collections: string[] }> {
   return invoke('get_stream_status');
+}
+
+// ── Wallet autonomy policy ──────────────────────────────────────────────
+//
+// Mirrors `autonomy::types` / `autonomy::audit` on the Rust side field for
+// field. These types are for display and transport only — every
+// authorization decision is made in Rust (`AutonomyEngine::evaluate`); the
+// frontend never re-implements or second-guesses it.
+
+export type AutonomyMode = 'manual' | 'assisted' | 'autonomous';
+
+export type AutonomyActionType =
+  | 'read_only'
+  | 'mint'
+  | 'transfer_native'
+  | 'transfer_erc20'
+  | 'transfer_erc721'
+  | 'transfer_erc1155'
+  | 'marketplace_list'
+  | 'marketplace_bid_or_offer'
+  | 'marketplace_cancel'
+  | 'contract_call_known'
+  | 'contract_call_unknown'
+  | 'erc20_approve'
+  | 'set_approval_for_all'
+  | 'permit_or_permit2'
+  | 'typed_data_sign'
+  | 'personal_message_sign'
+  | 'wallet_management'
+  | 'policy_management';
+
+export type RuleEffect = 'allow' | 'deny';
+
+export interface AutonomyRule {
+  enabled: boolean;
+  effect: RuleEffect;
+  action_type: AutonomyActionType;
+  /** wei, decimal string — u128 does not survive a JS number round trip. */
+  per_tx_cap_wei: string;
+  total_budget_cap_wei: string;
+  /** Unix seconds UTC, or null if the rule never expires by itself. */
+  expires_at: number | null;
+  allowed_contracts: string[];
+  rate_limit_max_executions: number | null;
+  rate_limit_window_seconds: number | null;
+}
+
+export interface WalletPolicy {
+  wallet_address: string;
+  mode: AutonomyMode;
+  enabled: boolean;
+  /** Ethereum mainnet only in v1 — always 1. */
+  chain_id: number;
+  rules: AutonomyRule[];
+}
+
+export interface ActionProposal {
+  action_type: AutonomyActionType;
+  wallet_address: string;
+  target_contract?: string | null;
+  calldata?: string | null;
+  value_wei: string;
+  chain_id: number;
+}
+
+/** Tagged on `decision`: `'allow' | 'deny' | 'requires_approval'`, every
+ *  branch always carries a human-readable `reason`. */
+export type AutonomyDecision =
+  | { decision: 'allow'; reason: string }
+  | { decision: 'deny'; reason: string }
+  | { decision: 'requires_approval'; reason: string };
+
+export type PolicyChangeKind =
+  | { change: 'mode_changed'; from: AutonomyMode; to: AutonomyMode }
+  | { change: 'enabled' }
+  | { change: 'disabled' }
+  | { change: 'rule_created'; rule_index: number }
+  | { change: 'rule_updated'; rule_index: number }
+  | { change: 'rule_deleted'; rule_index: number }
+  | { change: 'kill_switch_paused' }
+  | { change: 'kill_switch_resumed' };
+
+/** Tagged on `event`. Mirrors `autonomy::audit::AuditRecordKind` — never
+ *  carries raw calldata, private keys, or full signed transactions. */
+export type AuditRecordKind =
+  | { event: 'proposal_created'; action_type: AutonomyActionType; target_contract?: string | null; value_wei: string; chain_id: number }
+  | { event: 'decision'; outcome: AutonomyDecision; matched_rule_index: number | null }
+  | { event: 'lease_created'; lease_id: string; expires_at: number }
+  | { event: 'approved'; note?: string | null }
+  | { event: 'denied'; reason: string }
+  | { event: 'signed'; calldata_hash?: string | null }
+  | { event: 'broadcast'; tx_hash: string }
+  | { event: 'replaced'; old_tx_hash: string; new_tx_hash: string; reason: string }
+  | { event: 'finalized'; tx_hash: string; confirmations: number }
+  | { event: 'policy_changed'; change: PolicyChangeKind };
+
+export interface AuditRecord {
+  wallet_address: string;
+  sequence: number;
+  timestamp: number;
+  kind: AuditRecordKind;
+  prev_hash: string;
+  hash: string;
+}
+
+export interface AuditLogView {
+  records: AuditRecord[];
+  chain_valid: boolean;
+  chain_error?: string | null;
+}
+
+/** Reads a wallet's current policy, defaulting to `manual`/disabled if none
+ *  has ever been configured. Never throws for "not configured yet" —
+ *  the safe default is a valid, real `WalletPolicy`, not an error. */
+export async function getWalletPolicy(walletAddress: string): Promise<WalletPolicy> {
+  return invoke<WalletPolicy>('get_wallet_policy', { walletAddress });
+}
+
+export async function listWalletPolicies(): Promise<WalletPolicy[]> {
+  return invoke<WalletPolicy[]>('list_wallet_policies');
+}
+
+/** Validates and persists in Rust before returning — the resolved policy on
+ *  disk, not just an echo of what was sent. */
+export async function createOrUpdateWalletPolicy(policy: WalletPolicy): Promise<WalletPolicy> {
+  return invoke<WalletPolicy>('create_or_update_wallet_policy', { policy });
+}
+
+export async function setWalletAutonomyMode(walletAddress: string, mode: AutonomyMode): Promise<WalletPolicy> {
+  return invoke<WalletPolicy>('set_wallet_autonomy_mode', { walletAddress, mode });
+}
+
+export async function setWalletPolicyEnabled(walletAddress: string, enabled: boolean): Promise<WalletPolicy> {
+  return invoke<WalletPolicy>('set_wallet_policy_enabled', { walletAddress, enabled });
+}
+
+/** Wallet-scoped pause: disables this wallet's autonomy policy so every
+ *  action for it requires manual approval (or is denied outright). Distinct
+ *  from the global kill switch (`activateKillSwitch`/`deactivateKillSwitch`),
+ *  which stops every wallet's envelope-guarded signing, not just this one. */
+export async function pauseWalletAutonomy(walletAddress: string): Promise<WalletPolicy> {
+  return invoke<WalletPolicy>('pause_wallet_autonomy', { walletAddress });
+}
+
+/** Side-effect-free: shows what the policy engine WOULD decide, without
+ *  consuming any budget/rate-limit counter or writing an audit record. */
+export async function evaluateActionProposal(proposal: ActionProposal): Promise<AutonomyDecision> {
+  return invoke<AutonomyDecision>('evaluate_action_proposal', { proposal });
+}
+
+export async function listAutonomyAudit(walletAddress: string): Promise<AuditLogView> {
+  return invoke<AuditLogView>('list_autonomy_audit', { walletAddress });
+}
+
+// ── Pending action proposals ────────────────────────────────────────────
+//
+// A `RequiresApproval` decision from the autonomy engine (Manual/Assisted
+// mode, or an Autonomous-mode action type that can never auto-execute) is
+// never a dead end: `send_eth`/`transfer_nft`/the marketplace commands
+// above queue it here instead of just erroring, and return its `proposal_id`
+// as part of a `SigningOutcome`/`MarketplaceActionOutcome`. These types
+// mirror `autonomy::pending` on the Rust side field for field.
+
+export type PendingStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+/** Tagged on `kind`. Mirrors `autonomy::pending::PendingActionPayload` —
+ *  everything needed to actually perform the original action later.
+ *  Deliberately carries no API key or private key: those are re-fetched
+ *  fresh from the Keychain in Rust when a proposal is approved, exactly
+ *  like the original immediate call would have fetched them. */
+export type PendingActionPayload =
+  | { kind: 'send_eth'; to: string; value_wei: string }
+  | {
+      kind: 'transfer_nft';
+      contract_address: string;
+      token_id: string;
+      to: string;
+      token_standard: NftTokenStandard;
+      amount?: string | null;
+    }
+  | {
+      kind: 'marketplace_list';
+      contract_address: string;
+      token_id: string;
+      price_eth: number;
+      marketplace: string;
+      expiry_hours: number;
+    }
+  | {
+      kind: 'marketplace_bid';
+      contract_address: string;
+      price_eth: number;
+      quantity: number;
+      marketplace: string;
+      expiry_hours: number;
+    }
+  | { kind: 'marketplace_cancel'; order_hash: string; marketplace: string };
+
+export interface PendingActionProposal {
+  id: string;
+  wallet_address: string;
+  proposal: ActionProposal;
+  /** Why the policy engine could not decide this by itself. */
+  reason: string;
+  payload: PendingActionPayload;
+  /** Unix seconds UTC. */
+  created_at: number;
+  status: PendingStatus;
+}
+
+/** Tagged on `kind`. Mirrors `autonomy::pending::ApprovalResult` — what
+ *  executing an approved proposal actually produced. */
+export type ApprovalResult =
+  | { kind: 'tx_sent'; tx_hash: string }
+  | { kind: 'order_completed'; result: OrderResult };
+
+/** A wallet's queued proposals, oldest first. An empty array means none are
+ *  pending — never an error. */
+export async function listPendingActionProposals(walletAddress: string): Promise<PendingActionProposal[]> {
+  return invoke<PendingActionProposal[]>('list_pending_action_proposals', { walletAddress });
+}
+
+/** Re-checks the kill switch and this wallet's current policy `enabled`
+ *  flag (either may have changed since the proposal was queued), then
+ *  actually performs the action and resolves the proposal to `approved`.
+ *  Throws with a message naming the reason if the proposal is not (still)
+ *  `pending` — already resolved, or expired past `PENDING_TTL_SECONDS`. */
+export async function approveActionProposal(id: string): Promise<ApprovalResult> {
+  return invoke<ApprovalResult>('approve_action_proposal', { id });
+}
+
+/** Marks a queued proposal `rejected` and audits the rejection. Never
+ *  executes anything. */
+export async function rejectActionProposal(id: string): Promise<PendingActionProposal> {
+  return invoke<PendingActionProposal>('reject_action_proposal', { id });
 }

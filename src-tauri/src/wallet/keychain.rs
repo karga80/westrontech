@@ -385,6 +385,47 @@ pub fn fetch_key(address: &str) -> Result<String, String> {
     }
 }
 
+/// Fetch the Keychain-stored key for `wallet_address` and verify it actually
+/// belongs to that address before letting any caller sign with it.
+///
+/// Same pattern `import_wallet` (`lib.rs`) already uses at write time — derive
+/// the address from the key itself via `PrivateKeySigner`, never trust the
+/// caller-supplied string — applied here at the point of use instead of only
+/// at storage time. Keychain is keyed correctly by construction as long as
+/// every entry went through `import_wallet`, but this is defense in depth:
+/// it costs one signer construction and closes the gap for any entry that
+/// predates that guarantee (e.g. a legacy account under the pre-3ffe580
+/// scheme, still reachable via `fetch_key`'s `legacy_key_account` fallback)
+/// or that reaches a signing path through something other than
+/// `import_wallet` later.
+///
+/// Single implementation shared by every caller that is about to sign
+/// something (`marketplace::client`, `signing::LocalSigner`) — this check
+/// existing in only one of those paths and not the other is exactly the kind
+/// of divergence this project's rules exist to make structurally impossible.
+///
+/// Returns the raw private key hex (no `0x` prefix) on success — never logs
+/// it, never includes it in any error.
+pub fn fetch_and_verify_key(wallet_address: &str) -> Result<String, String> {
+    use alloy::signers::local::PrivateKeySigner;
+
+    let pk_hex = fetch_key(wallet_address).map_err(|e| format!("wallet key unavailable: {}", e))?;
+    let pk_hex = pk_hex.trim().strip_prefix("0x").unwrap_or(pk_hex.trim()).to_string();
+
+    let signer: PrivateKeySigner = pk_hex
+        .parse()
+        .map_err(|e| format!("stored key for this wallet is invalid: {e}"))?;
+    let derived = signer.address().to_checksum(None);
+
+    if !derived.eq_ignore_ascii_case(wallet_address.trim()) {
+        return Err(format!(
+            "Address mismatch: the stored key for {wallet_address} actually belongs to {derived}. Refusing to sign."
+        ));
+    }
+
+    Ok(pk_hex)
+}
+
 #[allow(dead_code)]
 pub fn delete_key(address: &str) -> Result<(), String> {
     let primary = delete_secret(&key_account(address));

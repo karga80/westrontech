@@ -7,9 +7,15 @@ use alloy::primitives::{Address, Bytes, TxKind, U256};
 use alloy::signers::local::PrivateKeySigner;
 use serde::{Deserialize, Serialize};
 
+use crate::autonomy::audit::AuditRecordKind;
+use crate::autonomy::engine::AutonomyEngine;
+use crate::autonomy::pending::{PendingActionPayload, PendingActionProposal, PendingStatus};
+use crate::autonomy::types::{ActionProposal, ActionType, AutonomyDecision};
 use crate::rpc::types::{RpcRequest, RpcResponse};
 
-const CHAIN_ID: u64 = 1; // Ethereum Mainnet
+// `pub(crate)`: `marketplace`'s new envelope/autonomy gates (`lib.rs`) build
+// `ActionProposal`s for the same chain and must not hardcode a second `1`.
+pub(crate) const CHAIN_ID: u64 = 1; // Ethereum Mainnet
 
 /// İstemciden gelen transaction parametreleri.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,8 +102,13 @@ impl LocalSigner {
         tx_request: TxRequest,
         api_key: &str,
     ) -> Result<String, String> {
-        // 1. Private key'i Keychain'den al
-        let pk_hex = crate::wallet::keychain::fetch_key(wallet_address)?;
+        // 1. Private key'i Keychain'den al — ve çağıranın verdiği adresin
+        //    gerçekten bu key'e ait olduğunu doğrula. `marketplace::client`
+        //    ile paylaşılan aynı kontrol: adres asla çağırandan güvenilmez,
+        //    key'den türetilip karşılaştırılır. Bu satır olmadan, Keychain'de
+        //    yanlış adres altında duran (veya legacy şema altında bulunan) bir
+        //    key sessizce başka bir cüzdan adına imza atabilirdi.
+        let pk_hex = crate::wallet::keychain::fetch_and_verify_key(wallet_address)?;
         let pk_hex = pk_hex.trim_start_matches("0x");
 
         // 2. alloy PrivateKeySigner oluştur
@@ -301,7 +312,116 @@ pub async fn estimate_gas_inner(
     Ok((gas as f64 * 1.2) as u64)
 }
 
-/// Tauri command: ETH gönder (Envelope kontrolü dahil)
+/// Result of [`authorize_or_queue`]: either the caller may sign and send
+/// right now, or the action was queued and someone must call
+/// `approve_action_proposal`/`reject_action_proposal` (`lib.rs`) later.
+pub(crate) enum AuthorizationOutcome {
+    Proceed,
+    Queued { proposal_id: String, reason: String },
+}
+
+/// Run `proposal` through this wallet's autonomy policy, record the outcome
+/// in the hash-chained audit log — every decision, not only an `Allow`,
+/// mirroring how `EnvelopeEngine::check_and_authorize` audits both its
+/// accept and reject paths rather than only the successful one — and, on
+/// `RequiresApproval`, persist a [`PendingActionProposal`] so the request is
+/// never simply lost.
+///
+/// This is an *additional* gate layered on top of whatever envelope check
+/// the caller already ran; it never replaces it, and it never runs before
+/// the envelope check. `Ok(Proceed)` means the caller may sign now.
+/// `Ok(Queued { .. })` means it must not sign now — the caller is
+/// responsible for rolling back whatever the envelope check just reserved,
+/// exactly like it already does for `Err`. `Err` is a hard `Deny`, or a
+/// failure to even persist the queued proposal (see the note on
+/// `pending::add` — that failure is never silently swallowed, because a
+/// "queued" proposal that in fact was not saved would be exactly the kind of
+/// fake success this project's rules forbid).
+///
+/// `ensure_policy_loaded` populates the engine from
+/// `autonomy::store::load_or_default` on first access for this wallet, per
+/// the standing bootstrapping convention — it is a no-op for a wallet
+/// already resident in memory, so it never resets that wallet's spend/rate
+/// counters on a call that isn't the first.
+pub(crate) fn authorize_or_queue(
+    autonomy_engine: &AutonomyEngine,
+    proposal: &ActionProposal,
+    kill_switch_active: bool,
+    payload: PendingActionPayload,
+) -> Result<AuthorizationOutcome, String> {
+    autonomy_engine.ensure_policy_loaded(&proposal.wallet_address);
+
+    let now = chrono::Utc::now().timestamp();
+    let decision = autonomy_engine
+        .check_and_authorize(proposal, kill_switch_active, /* watch_only */ false, now)
+        .map_err(|e| format!("Autonomy policy check failed: {e:?}"))?;
+
+    // Best-effort, loud on failure — same tradeoff `EnvelopeEngine::persist`
+    // makes for its own disk writes: losing the audit line must not block a
+    // transaction the policy engine already decided on, but it must never be
+    // swallowed silently either.
+    if let Err(e) = crate::autonomy::audit::append(
+        &proposal.wallet_address,
+        AuditRecordKind::Decision { outcome: decision.clone(), matched_rule_index: None },
+        now,
+    ) {
+        log::error!(
+            "could not append autonomy audit record for {}: {e}",
+            proposal.wallet_address
+        );
+    }
+
+    match decision {
+        AutonomyDecision::Allow { .. } => Ok(AuthorizationOutcome::Proceed),
+        AutonomyDecision::Deny { reason } => {
+            Err(format!("Autonomy policy denied this action: {reason}"))
+        }
+        AutonomyDecision::RequiresApproval { reason } => {
+            let id = uuid::Uuid::new_v4().to_string();
+            let item = PendingActionProposal {
+                id: id.clone(),
+                wallet_address: proposal.wallet_address.clone(),
+                proposal: proposal.clone(),
+                reason: reason.clone(),
+                payload,
+                created_at: now,
+                status: PendingStatus::Pending,
+            };
+            // Not best-effort: if this can't be saved, the request must not
+            // be reported as queued — see the doc comment above.
+            crate::autonomy::pending::add(item)?;
+
+            if let Err(e) = crate::autonomy::audit::append(
+                &proposal.wallet_address,
+                AuditRecordKind::LeaseCreated {
+                    lease_id: id.clone(),
+                    expires_at: now + crate::autonomy::pending::PENDING_TTL_SECONDS,
+                },
+                now,
+            ) {
+                log::error!(
+                    "could not append autonomy lease-created audit record for {}: {e}",
+                    proposal.wallet_address
+                );
+            }
+
+            Ok(AuthorizationOutcome::Queued { proposal_id: id, reason })
+        }
+    }
+}
+
+/// What a signing command actually did: either it sent and got a real tx
+/// hash back, or the autonomy policy queued it for a human to approve later
+/// — never a bare error for the second case, since "queued" is not a
+/// failure, and never a fabricated tx hash either.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum SigningOutcome {
+    Sent { tx_hash: String },
+    PendingApproval { proposal_id: String, reason: String },
+}
+
+/// Tauri command: ETH gönder (Envelope + autonomy kontrolü dahil)
 #[tauri::command]
 pub async fn send_eth(
     wallet_address: String,
@@ -309,7 +429,8 @@ pub async fn send_eth(
     value_wei: String,
     api_key: String,
     envelope_engine: tauri::State<'_, std::sync::Arc<crate::envelope::engine::EnvelopeEngine>>,
-) -> Result<String, String> {
+    autonomy_engine: tauri::State<'_, std::sync::Arc<AutonomyEngine>>,
+) -> Result<SigningOutcome, String> {
     // Envelope kontrolü
     let calldata = String::new();
     let value_u128: u128 = value_wei
@@ -325,6 +446,35 @@ pub async fn send_eth(
         .check_and_authorize(&tx_req_envelope)
         .map_err(|e| format!("Envelope rejected: {e:?}"))?;
 
+    // Autonomy kontrolü — envelope'un üzerine eklenen ikinci bir kapı, onun
+    // yerine geçmez. Aynı kill switch'i paylaşır: envelope ve autonomy farklı
+    // "her şeyi durdur" anlamına gelmemeli.
+    let kill_switch_active =
+        envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let proposal = ActionProposal {
+        action_type: ActionType::TransferNative,
+        wallet_address: wallet_address.clone(),
+        target_contract: Some(to.clone()),
+        calldata: None,
+        value_wei: value_u128,
+        chain_id: CHAIN_ID,
+    };
+    let payload = PendingActionPayload::SendEth { to: to.clone(), value_wei: value_wei.clone() };
+    match authorize_or_queue(&autonomy_engine, &proposal, kill_switch_active, payload) {
+        Ok(AuthorizationOutcome::Queued { proposal_id, reason }) => {
+            // Not executing now — the envelope reservation above must be
+            // reversed exactly like every other path that doesn't end in a
+            // real broadcast.
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            return Ok(SigningOutcome::PendingApproval { proposal_id, reason });
+        }
+        Err(e) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            return Err(e);
+        }
+        Ok(AuthorizationOutcome::Proceed) => {}
+    }
+
     // İmzala ve gönder. `check_and_authorize` already consumed the spend cap
     // above — it has to run before signing, so an unauthorised transaction is
     // never even built. But that means a failure anywhere below (signing,
@@ -339,7 +489,7 @@ pub async fn send_eth(
         gas_limit: None,
     };
     match LocalSigner::sign_and_send(&wallet_address, request, &api_key).await {
-        Ok(tx_hash) => Ok(tx_hash),
+        Ok(tx_hash) => Ok(SigningOutcome::Sent { tx_hash }),
         Err(e) => {
             envelope_engine.rollback_authorization(&tx_req_envelope);
             Err(e)
@@ -370,7 +520,8 @@ pub async fn transfer_nft(
     amount: Option<String>,
     api_key: String,
     envelope_engine: tauri::State<'_, std::sync::Arc<crate::envelope::engine::EnvelopeEngine>>,
-) -> Result<String, String> {
+    autonomy_engine: tauri::State<'_, std::sync::Arc<AutonomyEngine>>,
+) -> Result<SigningOutcome, String> {
     // Envelope kontrolü: value_wei = 0, `to` = NFT'nin gideceği adres (kontrat
     // adresi değil) — zarfın scope listesi alıcıyı, yani gerçek insan
     // hedefini kontrol eder.
@@ -383,9 +534,44 @@ pub async fn transfer_nft(
         .check_and_authorize(&tx_req_envelope)
         .map_err(|e| format!("Envelope rejected: {e:?}"))?;
 
-    // Envelope kabul etti; artık başarısız her adım (adres/parse hatası,
-    // imzalama, yayın) `send_eth` ile aynı sebepten geri alınmalı — aksi
-    // halde yayınlanmamış bir NFT transferi için harcama kaydı kalıcı olur.
+    // Autonomy kontrolü — envelope'un üzerine eklenen ikinci kapı.
+    let kill_switch_active =
+        envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let action_type = match token_standard {
+        crate::nft::TokenStandard::Erc721 => ActionType::TransferErc721,
+        crate::nft::TokenStandard::Erc1155 => ActionType::TransferErc1155,
+    };
+    let proposal = ActionProposal {
+        action_type,
+        wallet_address: wallet_address.clone(),
+        target_contract: Some(contract_address.clone()),
+        calldata: None,
+        value_wei: 0,
+        chain_id: CHAIN_ID,
+    };
+    let payload = PendingActionPayload::TransferNft {
+        contract_address: contract_address.clone(),
+        token_id: token_id.clone(),
+        to: to.clone(),
+        token_standard,
+        amount: amount.clone(),
+    };
+    match authorize_or_queue(&autonomy_engine, &proposal, kill_switch_active, payload) {
+        Ok(AuthorizationOutcome::Queued { proposal_id, reason }) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            return Ok(SigningOutcome::PendingApproval { proposal_id, reason });
+        }
+        Err(e) => {
+            envelope_engine.rollback_authorization(&tx_req_envelope);
+            return Err(e);
+        }
+        Ok(AuthorizationOutcome::Proceed) => {}
+    }
+
+    // Envelope + autonomy kabul etti; artık başarısız her adım (adres/parse
+    // hatası, imzalama, yayın) `send_eth` ile aynı sebepten geri alınmalı —
+    // aksi halde yayınlanmamış bir NFT transferi için harcama kaydı kalıcı
+    // olur.
     let result = build_and_send_nft_transfer(
         &wallet_address,
         &contract_address,
@@ -400,12 +586,16 @@ pub async fn transfer_nft(
     if result.is_err() {
         envelope_engine.rollback_authorization(&tx_req_envelope);
     }
-    result
+    result.map(|tx_hash| SigningOutcome::Sent { tx_hash })
 }
 
 /// `transfer_nft`'in imzalama/yayın kısmı — envelope kontrolünden bağımsız,
-/// böylece rollback her hata yolunu tek bir yerden kapsar.
-async fn build_and_send_nft_transfer(
+/// böylece rollback her hata yolunu tek bir yerden kapsar. `pub(crate)`:
+/// `approve_action_proposal` (`lib.rs`) reuses this exact function to execute
+/// a `TransferNft` payload later, so an approved NFT transfer builds its
+/// calldata through the identical path an immediate one does — never a
+/// second, hand-rolled copy.
+pub(crate) async fn build_and_send_nft_transfer(
     wallet_address: &str,
     contract_address: &str,
     token_id: &str,
