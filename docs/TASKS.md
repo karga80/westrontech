@@ -1156,3 +1156,77 @@ denmez.
 
 **Ajanlar:** → Emir'e sor (staging ortamı/test cüzdanı kurulumu onun hesap açması gerektiren bir
 adım olabilir — CLAUDE.md madde 6) → sonra `vault`/`vera`.
+
+## T17 — Cüzdan bazlı otonomi politikaları (wallet autonomy policy sistemi) 🆕 10.08.2026, Emir'in brief'inden — HENÜZ BAŞLANMADI, sadece kayıt
+
+Emir'in verdiği tam brief **`docs/WALLET_AUTONOMY_POLICY_BRIEF.md`** dosyasına taşındı — bu
+görevin tek doğru kaynağı odur, aşağıdaki madde sadece özettir. Uygulamaya başlamadan önce o
+dosya baştan sona tekrar okunmalı (dosyanın kendi "Claude Code working instructions" bölümü,
+sıralı bir uygulama planı zaten içeriyor). Güvenlik kritik bir özellik, **deny-by-default**
+ilkesiyle.
+
+**Amaç:** Her cüzdan için bağımsız olarak "hangi işlemler otomatik yapılabilir, hangileri her
+zaman elle onay ister" kararını kullanıcı versin. Örnek: bir mint cüzdanı sadece onaylı
+kontratlardan, sıkı ETH/gas/süre/sıklık limitleri içinde otomatik mint edebilir; bir vault cüzdanı
+izleme/işlem hazırlama yapabilir ama her imzalanabilir işlem elle onay ister.
+
+**Ürün çıktısı (7 madde):**
+1. Her yönetilen cüzdan `manual` / `assisted` / `autonomous` olarak işaretlenebilir.
+2. `manual` cüzdan taze kullanıcı onayı olmadan asla state-değiştiren bir işlemi imzalayamaz/
+   yayınlayamaz.
+3. `assisted` cüzdan izleyebilir, fırsat keşfedebilir, decode edilmiş işlem hazırlayabilir,
+   simüle edebilir — ama imzalamadan önce işleme özel tek bir onay bekler.
+4. `autonomous` cüzdan SADECE aktif, süresi dolmamış, açık bir politika kuralına uyan VE tüm
+   global guard'ları geçen işlemleri yürütebilir.
+5. Otonomi cüzdan bazında kapsanır — bir mint cüzdanına otonomi vermek vault/trading/watch-only
+   cüzdanları asla etkilemez.
+6. Global kill switch her cüzdan politikasını anında geçersiz kılar.
+7. Her teklif, karar, onay, red, yayın, replacement, sonlandırma ve politika değişikliği yerel,
+   denetlenebilir bir log'a yazılır.
+
+Cüzdan ekleme, private key import, kural oluşturma veya app güncellemesi **yan etki olarak
+otonom gönderimi asla açmamalı**.
+
+**Değiştirilemez güvenlik kuralları (kod seviyesinde, sadece UI kontrolü değil):**
+1. Default deny — tam eşleşen aktif kural yoksa işlem reddedilir.
+2. Global override — kill switch açıksa: hem teklif oluşturmada hem imzadan hemen önce kontrol
+   edilir, tüm otonom yürütmeyi durdurur.
+3. Cüzdan izolasyonu — bir politika tam olarak bir normalize edilmiş cüzdan adresine aittir,
+   başka bir cüzdanı yetkilendiremez.
+4. Chain izolasyonu — politika sadece yapılandırılmış chain id'de geçerli (şu an sadece Ethereum
+   mainnet, `1`); uyuşmazlıkta reddedilir.
+5. Genel otonom imza yasak — bir otonom politika sınırsız `eth_sendTransaction`, keyfi kontrat
+   çağrısı, ham calldata, keyfi EIP-712 typed-data imzası veya `personal_sign` isteğine izin
+   veremez.
+6. **Sınırsız onay yasak (Emir'in ek talebiyle görev listesine eklendi):** ERC-20 `approve`,
+   ERC-721/1155 `setApprovalForAll`, Permit/Permit2, delegation, ownership transfer, proxy
+   upgrade, safe/module yönetimi, account-abstraction authorization — v1'de bunların HEPSİ
+   sadece elle onaylanabilir, otonom modda asla yapılamaz.
+
+**UI/tasarım (Emir açıkça unutulmamasını istedi):** cüzdan başına mod seçimi (manual/assisted/
+autonomous), politika kuralı oluşturma/düzenleme ekranı, onay bekleyen işlem kuyruğu (assisted
+mod için), audit log görünümü, kill switch'in her yerden erişilebilir olması — bunların hepsi
+yeni ekranlar/bileşenler gerektirir, sadece backend değil.
+
+**Repo bağlamı / mevcut entegrasyon noktaları (Emir'in brief'inden):**
+`src-tauri/src/envelope/` (spend cap, whitelist, expiry, kill switch, audit),
+`src-tauri/src/signing/` (imza, gönderim yolu, gas tahmini, nonce), `src-tauri/src/wallet/`
+(cüzdan kimliği/key erişimi), `src-tauri/src/control/` (loopback control API, scheduler),
+`src-tauri/src/sniping/` (otomatik fırsat kaynağı), `src-tauri/src/lib.rs` (komut kaydı),
+`src/lib/tauri.ts` (tipli frontend köprüsü), `src/app/settings/` ve cüzdan-detay UI (politika
+yapılandırma + geçmiş). Mevcut güvenlik modeli korunmalı (key hiçbir zaman cihaz dışına
+çıkmaz), sadece Ethereum mainnet kapsamı korunmalı, subscription Worker/API-key mimarisine
+gerekmedikçe dokunulmamalı.
+
+**Bitti sayılır:** Bu madde TEK TURDA bitmez — CLAUDE.md madde 3/7 gereği (iskelet önce, 1
+sayfalık faz planı, spec canavarı yasak) önce bir faz planı çıkarılmalı: mevcut envelope/signing/
+nonce/keychain/sniping mimarisi incelenmeden hiçbir kod yazılmamalı. Gerçek "bitti" için: her 7
+ürün çıktısı ve 6 güvenlik kuralı kod seviyesinde test edilmiş olmalı (özellikle kill switch'in
+hem teklif hem imza anında kontrol edildiği, sınırsız approve/setApprovalForAll'ın gerçekten
+reddedildiği), UI gerçek tıklamayla doğrulanmalı (vera), ve tüm bunlar `security-reviewer`'dan
+geçmeli (finansal/imza kodu).
+
+**Ajanlar:** → `architect`/`planner` (önce 1 sayfalık faz planı + mevcut mimari incelemesi) →
+`forge`+`vault` (UI ve backend birlikte, CLAUDE.md'nin "aynı adresten gönderim sıralı" kuralı
+gereği eş zamanlı dosya çakışmasına dikkat) → `security-reviewer` → `vera` (gerçek tıklama,
+kill switch dahil).
