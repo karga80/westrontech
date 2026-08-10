@@ -1294,3 +1294,225 @@ olayı (private key'in adres alanına yazılıp düz metin localStorage'a gitmes
 şekle benziyor — rastgele/gündelik bir gözle geçmemeli, ilk iş olarak açılıp ne olduğu,
 neye bağlı olduğu ve nereye gittiği (localStorage? state? bir komuta mı gidiyor?) satır satır
 izlenmeli.
+
+## T18 — Custody sertleştirme, Faz 0: Keşif ve Doğrulama ✅ TAMAMLANDI 11.08.2026
+
+Tam plan: `docs/CUSTODY-HARDENING-PLAN.md` (Emir'in verdiği doküman, bu repoya taşındı —
+önceden sadece Desktop'taydı, git dışıydı). Bu 5 maddelik T18-T22 bloğu o planın FAZ 0-4'üne
+birebir karşılık geliyor; alt görev ID'leri (`W-0.1` vb.) plan dosyasıyla aynı kalıyor ki iki
+doküman birbirinden sapmasın. Bağımlılık zinciri plandaki gibi katı: **1 → 2 → 3 → 4**
+(T19 → T20 → T21 → T22), T18 (Faz 0) hepsinin önkoşulu.
+
+**Ne:** kod değişikliği YOK — sadece keşif. Anahtar dokunulan her nokta (`fs::write`, `.key`,
+`private_key`, `secret` — `src-tauri/src/` taraması), tüm imza yolları (Seaport list/bid/cancel,
+tx imzalama, sniping engine, control server), IPC sınırında anahtar/mnemonic döndüren/alan her
+`#[tauri::command]`, `security-framework` crate'inin Secure Enclave yeteneklerinin docs.rs'ten
+doğrulanması, mevcut SQLite şemalarının envanteri, ve Seaport 1.6/conduit adreslerinin resmî
+kaynaktan doğrulanması. Alt görevler: W-0.1 (anahtar dokunuş envanteri), W-0.2 (imza yolları
+haritası — subscription'ın Ed25519 lisans anahtarı bu kapsamın DIŞINDA, karıştırılmayacak),
+W-0.3 (IPC sınır denetimi), W-0.4 (crate yetenek doğrulaması — bu task'ın çıktısı T19'un teknik
+seçimini belirler, varsayılmayacak), W-0.5 (DB envanteri), W-0.6 (Seaport/conduit adres
+doğrulaması, resmî dokümantasyondan).
+
+**Bitti sayılır:** Bir keşif raporu (dosya:satır seviyesinde) — kod değişikliği yok. W-0.1 sıfır
+bulgu döndürürse arama deseni yanlıştır (plaintext dosyaların var olduğu zaten biliniyor),
+tekrar taranır.
+
+**Ajanlar:** → `scout` (W-0.1, W-0.2, W-0.3 — kod taraması, salt okunur) paralel çalışabilir
+`vault` (W-0.4 — crate/docs.rs doğrulaması) ile; W-0.5 (`scout` veya `vault`) ve W-0.6 (resmî
+kaynak doğrulaması, herhangi bir ajan) bağımsız, aynı anda koşabilir. Kesin atama: bkz. aşağıdaki
+orion ATAMA KARARI.
+
+**Sonuç (11.08.2026, iki turda tamamlandı):** Yedi ajan (ilk tur 3, boşluk kapatma turu 4), tam
+rapor `docs/T18-DISCOVERY-REPORT.md`'de. **Tüm alt görevler (W-0.1 — W-0.6) artık tamamen
+kapalı, "kısmi"/"bakılmadı" madde kalmadı.** Özet:
+- W-0.1 ✅ — **plan varsayımı güncel değildi**: `wallet/keychain.rs` zaten gerçek macOS Keychain
+  kullanıyor, düz-metin `.key` dosyası birincil yol değil. T19'un kapsamı buna göre daraltıldı.
+- W-0.2 ✅ — sniping engine ve control server'ın imza çağrı zincirleri tam izlendi: ikisi de
+  envelope gate'inden geçiyor (atlama yok), ama sniping hâlâ hiçbir gerçek signer'a ulaşmıyor,
+  `0xSIMULATED_` hash üretiyor (MOCKS.md ile tutarlı, artık kod seviyesinde doğrulandı).
+- W-0.3 ✅ — 87 Tauri komutunun tamamı sınıflandırıldı. Anahtar malzemesi alan/döndüren tek
+  komut `import_wallet` (key içeri girer, sadece adres dışarı çıkar) — IPC sınırında sızıntı
+  yok.
+- W-0.4 ✅ — `security-framework` v3.7.0 planın 4 gereksinimini de (ACL, SE key gen, ECIES,
+  biyometri bayrakları) native API'de karşılıyor, FFI fallback gerekmiyor. Risk notu:
+  `create_with_flags` vs `create_with_protection` seçimi T19 Faz 1'in ilk alt görevi olarak
+  gerçek bir probe scriptiyle doğrulanmalı.
+- W-0.5 ✅ — `sniping/db.rs`: tek tablo, 12 kolon, hiçbir kolon private key/mnemonic tutmuyor.
+  DB dosyası plaintext SQLite (SQLCipher değil) ama içerik hassas değil.
+- W-0.6 ✅ — Seaport 1.6 adresi kodda doğru; **OpenSea Conduit'in gerçek 20-byte adresi kodda
+  hiçbir yerde yok** (sadece 32-byte conduit key var) — T19/T20 allowlist seed'ine eklenmeli.
+- **Plan dışı bulgu, kapatıldı:** private-key→adres türetme mantığı frontend'de üç ayrı yerde
+  kopyalı (`src/lib/walletImport.ts`, `src/app/page.tsx:484-487`, `src/app/login/page.tsx:137-
+  139`) — CLAUDE.md'nin "tek doğruluk kaynağı" kuralını ihlal ediyor, ama **ham key sızıntısı
+  yok** (uçtan uca izlendi, SAFE); backend `import_wallet` her zaman key'den yeniden türetip
+  uyuşmazlıkta reddediyor. Artık "acil güvenlik açığı" değil, "teknik borç" — T19'da
+  konsolide edilmeli.
+
+T18 tamamen kapalı. T19'a kalan tek gerçek boşluk implementasyon adımı (probe script,
+`create_with_flags` vs `create_with_protection`) — keşifle değil kodla kapatılacak, T19 Faz
+1'in ilk alt görevi. Tam detay `docs/T18-DISCOVERY-REPORT.md`.
+
+## T19 — Custody sertleştirme, Faz 1: Keychain Taşıması (LAUNCH-BLOCKER) 🆕 11.08.2026
+
+Plan bölümü: FAZ 1, `docs/CUSTODY-HARDENING-PLAN.md`. **Bağımlı: T18 bitmeden başlamaz**
+(W-0.4'ün crate doğrulaması olmadan Faz 1'in teknik seçimi belirsiz).
+
+**Ne:** diskte hiçbir anahtar düz metin kalmasın; kök anahtar erişimi Touch ID'ye bağlansın;
+anahtar asla webview'a geçmesin. Yeni `src-tauri/src/keystore/` modülü (macOS Keychain +
+Secure Enclave sarmalayıcı — **SE'de secp256k1 imzalanmaz, sadece P-256; desen: SE ile şifrele,
+bellekte imzala, zeroize et**), Touch ID→parola→yalnız-Keychain fallback zinciri, mevcut
+`~/Library/Application Support/Westron/keys/*.key` dosyalarının doğrula-sonra-sil migrasyonu
+(doğrulama geçmeden asla silme kuralı), API anahtarlarının (Alchemy/OpenSea/Etherscan/Discord/
+Telegram) aynı keystore'a **biyometrisiz** taşınması, `zeroize` ile bellek hijyeni, ve IPC
+kuralının kalıcılaştırılması (anahtar malzemesi yalnızca import yönünde IPC sınırını geçer).
+Alt görevler: W-1.1 – W-1.8 (plan dosyasında tam liste).
+
+**Bu, projenin private-key/Keychain güvenlik modelinin köküne dokunan bir değişiklik —
+CLAUDE.md'nin "Hard stop" maddeleri kapsamına giriyor. Kod yazımı başlamadan önce Emir'in
+açık onayı gerekir.**
+
+**✅ Emir'in onayı alındı (11.08.2026, "go-ahead").** İmplementasyon başlıyor. Kapsam W-0.1
+bulgusuna göre daraltıldı — sıfırdan Keychain taşıması değil, mevcut Keychain yolunun Secure
+Enclave ile sertleştirilmesi (bkz. `docs/T18-DISCOVERY-REPORT.md`, "T19'a etkisi" bölümü).
+İlk adım: `create_with_flags` vs `create_with_protection` probe scripti (CLAUDE.md "probe
+before build" kuralı) — kod yazmadan önce gerçek makinede doğrulanacak.
+
+**Bitti sayılır (plandaki faz kabul kriteri):** `~/Library/Application Support/Westron/keys/`
+migrasyondan sonra boş; `rg "fs::write"` key path'lerinde sıfır sonuç; mevcut testler (bu
+oturum itibarıyla 164) + yeni testler geçiyor; Emir'in Mac'inde Touch ID prompt'u gerçek imzada
+tetikleniyor (gerçek tıklamayla doğrulanmadan "bitti" sayılmaz).
+
+**Ajanlar:** kesin atama aşağıdaki orion ATAMA KARARI'nda.
+
+**⚠️ Durum (2026-08-11, devam):** Probe tamamlandı + W-1.1→W-1.4 yazıldı ama **commit edilmedi**.
+Security review 1 CRITICAL (veri kaybı riski, `keystore/mac.rs` store() sırası) + 1 HIGH
+(unzeroized fallback) + 1 MEDIUM (flaky test) buldu — hiçbiri düzeltilmeden bu commit/cutover
+edilmemeli. `keystore` modülü `wallet/keychain.rs`'in yerine geçmiyor, paralel duruyor, cutover
+kararı bekliyor. Tam detay: `STATUS.md` "Update (2026-08-11): T19 Faz 1" bölümü.
+
+## T20 — Custody sertleştirme, Faz 2: Envelope Sertleştirme 🆕 11.08.2026
+
+Plan bölümü: FAZ 2. **Bağımlı: T19 bitmeden başlamaz.**
+
+**Ne:** envelope tek boyutlu tutar limitinden kalıcı, çok boyutlu bir politika motoruna
+(W-2.1, mevcut "envelope persistence" borcuyla aynı iş). Yeni `security.db` (envelope
+kalıcılığı + kill switch state), tek zorunlu imza kapısı (`src-tauri/src/keystore/gateway.rs`
+— politika kontrolü UI'da veya çağıran modülde DEĞİL, sadece burada; W-0.2'deki tüm imza
+yolları bu kapıya yönlendirilir, bypass eden fonksiyon `pub` olmaktan çıkarılır), kontrat/alıcı
+allowlist'leri (seed: T18/W-0.6'daki doğrulanmış adresler), rolling 24 saatlik çıkış limiti,
+eşik üstü işlemler için Touch ID zorunluluğu (agent yolu dahil), kontrol sunucusu + MCP
+yüzeyinin yeni alanları yansıtması. Alt görevler: W-2.1 – W-2.7.
+
+**Bitti sayılır:** App restart → envelope + kill switch + harcanan tutar aynen duruyor;
+allowlist dışı kontrata imza isteği gateway'de reddediliyor ve audit log'a düşüyor; her
+guardrail için geçen/reddedilen/bypass-denemesi testleri var.
+
+**Ajanlar:** kesin atama aşağıdaki orion ATAMA KARARI'nda.
+
+## T21 — Custody sertleştirme, Faz 3: Vault/Agent Ayrımı 🆕 11.08.2026
+
+Plan bölümü: FAZ 3. **Bağımlı: T20 bitmeden başlamaz. Sniping feature flag'i bu faz bitmeden
+AÇILMAZ (planın kendi kısıtı).**
+
+**Ne:** otomasyon kök anahtarla değil, izole/limitli bir "agent" çalışma cüzdanıyla imzalar;
+kök anahtar ("vault") yalnız Touch ID'li oturumlarda kullanılır. Cüzdan kaydına `role` alanı
+(`vault`/`agent`/`watch`), agent cüzdan üretimi (biyometrisiz ama envelope'a zorunlu bağlı),
+vault→agent fonlama akışı (Touch ID'li), gateway'de rol zorlaması (vault anahtarıyla otomasyon
+imzası kod seviyesinde imkânsız — config değil, fonksiyon imzası ayrımı: `sign_as_agent` vs
+`sign_as_vault_session`), vault batch imza oturumu (tek Touch ID → süreli/adetli unlock →
+bulk list/cancel → zeroize), agent yedekleme akışı, MCP shim güncellemesi (vault'a asla
+erişemez). Alt görevler: W-3.1 – W-3.8.
+
+**Bitti sayılır:** Sniping simülasyonu yalnız agent cüzdanıyla tetikleniyor; vault imzası
+yalnız Touch ID oturumunda mümkün; MCP'den vault'a dokunan hiçbir yol yok.
+
+**Ajanlar:** kesin atama aşağıdaki orion ATAMA KARARI'nda.
+
+## T22 — Custody sertleştirme, Faz 4: Uçtan Uca Doğrulama + Audit Hazırlığı 🆕 11.08.2026
+
+Plan bölümü: FAZ 4. **Bağımlı: T21 bitmeden başlamaz.**
+
+**Ne:** "malware testi" otomasyonu (app data dizininde test anahtarının ham/hex/base64 hali
+hiçbir dosyada — localStorage, SQLite, log dahil — geçmediğini doğrulayan, CI'da her PR'da
+koşan test), tam regresyon (cargo test + npm build + MCP smoke testi), threat model dokümanı
+(3 senaryo: bugün / T19 sonrası / T21 sonrası — audit firmasına verilecek kapsam brief'i buradan
+çıkar), `TESTING.md` + Emir'in Mac'inde koşacağı manuel Touch ID QA listesi. Alt görevler:
+W-4.1 – W-4.4.
+
+**Bitti sayılır:** Malware testi CI'da geçiyor; tam regresyon temiz; threat model dokümanı var;
+Emir gerçek Mac'inde manuel Touch ID akışlarını (import, migrasyon, batch listing, agent
+oluşturma/fonlama, kill switch, eşik üstü onay, fallback modu) koşup doğruladı.
+
+**Emir'in işleri (kod dışı, plan dosyasından):** her faz sonunda commit; T19/T22'nin manuel
+Touch ID testleri gerçek Mac'te; audit firması seçimi ve T22/W-4.3 brief'iyle anlaşma; launch
+öncesi audit bulgularının kapatılması.
+
+**Ajanlar:** kesin atama aşağıdaki orion ATAMA KARARI'nda.
+
+### Anti-pattern korumaları (planın kendi listesi, T18-T22'nin tüm yürütücüleri için geçerli)
+
+SE'de secp256k1 imzalamaya çalışma · `security-framework` API'sini varsayma (W-0.4 doğrulamadan
+T19'a başlama) · Kontrat adresini hafızadan yazma (yalnız W-0.6'nın resmî kaynağı) · Migrasyonda
+doğrulamadan silme · `kSecAttrSynchronizable` açma (iCloud senkronu yasak) · Politika kontrolünü
+gateway dışına yazma · Agent'a biyometri ACL koyma · API key'lere biyometri ACL koyma ·
+Subscription'ın Ed25519 anahtarını bu kapsama katma · Sniping flag'ini T21'den önce açma.
+
+### orion ATAMA KARARI — 11.08.2026
+
+Kapsam: yalnızca atama/paralelleştirme kararı, hiçbir kod yazılmadı. **T19'dan itibaren
+(Keychain/Secure Enclave, gerçek private key taşıma) tek satır implementasyon kodu bile
+Emir'in açık onayı olmadan yazılmayacak** — aşağıdaki tablo sadece onay geldiğinde "kim,
+hangi sırayla" sorusunu cevaplıyor.
+
+**T18 — Faz 0 (hemen başlanabilir, kod değişikliği yok)**
+
+| Alt görev | Ajan | Gerekçe |
+|---|---|---|
+| W-0.1, W-0.2, W-0.3, W-0.5, W-0.6 | `scout` | Salt okunur kod taraması / resmî doküman doğrulaması, beşi de birbirinden bağımsız — hepsi aynı anda paralel koşar |
+| W-0.4 (security-framework crate / Secure Enclave doğrulaması) | `architect` | Bu bir tarama değil karar noktası — sonucu (native SE API mı, FFI fallback mi) T19'un tüm teknik yaklaşımını belirliyor; mimari seçim, scout'un salt-okunur tarama kapsamının dışında |
+
+Tümü paralel. T18 tek çıktısı: bir keşif raporu. T19 bu rapor bitmeden başlamaz.
+
+**T19 — Faz 1, LAUNCH-BLOCKER (implementasyon Emir'in onayını bekliyor — atama sadece hazırlık)**
+
+| Alt görev | Ajan | Paralel mi |
+|---|---|---|
+| W-1.1 → W-1.4 (keystore çekirdek, SE sarmalayıcı, fallback zinciri, migrasyon) | `vault` | Sıralı — aynı modülü artan şekilde inşa ediyorlar |
+| W-1.5 (API key'leri Keychain'e) | `vault` | Ayrı service namespace, W-1.1-1.4 ile paralel koşabilir yalnızca ayrı dosyaya bölünürse; aksi halde aynı vault iş parçacığı sıraya alır |
+| W-1.6 (bellek hijyeni / zeroize) | `vault` | W-1.1-1.2 bitmeden başlamaz |
+| W-1.7 (IPC kapatma) | `vault` → `forge` | vault command'ları kapatır, forge `src/lib/tauri.ts` köprüsünü buna göre günceller — forge vault'u bekler |
+| Settings'te fallback modu göstergesi (W-1.3'ün UI ayağı) | `forge` | vault modu döndüren komutu bitirmeden ekran yazılmaz (CLAUDE.md madde 3) |
+| W-1.8 (testler) | `vault` yazar → `vera` doğrular | Gerçek Touch ID adımı yalnız Emir'in kendi Mac'inde tetiklenir; vera bunu çağıramaz, yalnız mock/CI kısmını ve manuel checklist'i hazırlar |
+
+**T20 — Faz 2 (T19 bitmeden başlamaz)**
+
+| Alt görev | Ajan | Paralel mi |
+|---|---|---|
+| W-2.1 (security.db persistence) | `vault` | İlk adım |
+| W-2.2 (gateway iskeleti) | `vault` | W-2.1'den sonra |
+| W-2.3, W-2.4, W-2.5 (allowlist, rolling limit, eşik Touch ID) | `vault` | Mantıken bağımsız ama üçü de tek `gateway.rs` dosyasına yazıyor — dosya çakışma riski nedeniyle tek vault iş parçacığında sıralı tutulmalı, ayrı ajanlara bölünmemeli |
+| W-2.6 (control server + MCP yüzeyi) | `vault` | Ayrı dosyalar (`control/`, `tools/westron-mcp`) — W-2.3-2.5 ile paralel koşabilir |
+| W-2.7 (testler, bypass denemesi dahil) | `vault` yazar + `vera` doğrular | vera bypass'ı bilerek dener (mutsuz yol) — vault'un ana işinden bağımsız, paralel |
+
+**T21 — Faz 3 (T20 bitmeden başlamaz; sniping flag bu faz bitmeden açılmaz)**
+
+| Alt görev | Ajan | Paralel mi |
+|---|---|---|
+| W-3.1, W-3.2, W-3.4 (şema, agent üretimi, gateway rol zorlaması) | `vault` | Sıralı, çekirdek güvenlik mantığı |
+| W-3.3 (fonlama UI), W-3.5 (batch imza UI), W-3.6 (agent export UI) | `vault` (backend önce) → `forge` (UI sonra) | Her seferinde forge, vault'un ilgili komutunun bitmesini bekler — "veri kaynağı olmayan ekran yazılmaz" (CLAUDE.md madde 3) |
+| W-3.7 (MCP shim güncellemesi) | `vault` | Ayrı dosya/araç, diğerleriyle paralel koşabilir |
+| W-3.8 (testler) | `vault` + `vera` | W-3.1-3.7 tamamlanınca |
+
+**T22 — Faz 4 (T21 bitmeden başlamaz)**
+
+| Alt görev | Ajan | Paralel mi |
+|---|---|---|
+| W-4.1 (malware testi otomasyonu) | `vault` yazar + `vera` doğrular | CI'da yeşil olduğunu ve gerçekten sızıntı yakaladığını (adversarial) teyit eder — W-4.2/4.3 ile paralel |
+| W-4.2 (tam regresyon) | `vera` | Paralel |
+| W-4.3 (threat model dokümanı) | `architect` | Kod değil risk/mimari dokümanı — paralel |
+| W-4.4 (TESTING.md + manuel QA listesi) | `vera` yazar | W-4.1-4.3 sonuçlarına göre son adım; gerçek koşum Emir'in kendi Mac'inde |
+
+**Emir'in onayı gereken nokta:** T18'in keşif raporu teslim edildikten hemen sonra, T19'un ilk
+kod satırı yazılmadan önce — bu, gerçek private key custody modelinin kökten değiştiği an,
+CLAUDE.md'nin hard-stop maddesi kapsamına giriyor, onay olmadan implementasyon başlamaz.

@@ -15,6 +15,11 @@ mod sister;
 mod subscription;
 mod pnl;
 mod persist;
+// T19 Faz 1 (W-1.1 – W-1.4): Secure Enclave-wrapped keystore, built on top of
+// (not yet wired into) `wallet::keychain`. Not called from any signing path
+// in this task — see `keystore/mod.rs` module doc for scope and the
+// wallet::keychain / keystore relationship.
+pub mod keystore;
 
 use autonomy::engine::AutonomyEngine;
 use envelope::engine::EnvelopeEngine;

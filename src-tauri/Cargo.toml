@@ -41,4 +41,11 @@ futures-util = "0.3"
 async-trait = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "3"
+security-framework = { version = "3", features = ["OSX_10_15"] }
+security-framework-sys = { version = "2.17", default-features = false }
+core-foundation = "0.10"
+
+[features]
+# In-memory keystore backend for tests and non-interactive environments —
+# never selected at runtime for a real app build. See src/keystore/mock.rs.
+mock-keystore = []
