@@ -454,3 +454,24 @@ kullanıcıya etkisi yok — düzeltme ileride proxy mimarisi devreye alınırsa
 **Sıradaki açık maddeler (öncelik sırası değil):**
 - T15 — MCP smoke test path hatası (task #14, `tools/westron-mcp/index.js`).
 - T16 — Emir'in staging ortamı kararını bekliyor (task #15).
+
+## BAŞLANMADI (2026-08-10, context limiti nedeniyle): T18 — Custody sertleştirme planı
+
+Emir bir plan dosyası verdi: `/Users/byronic/Desktop/westron-custody-uygulama-plani.md` (proje
+klasörünün DIŞINDA, henüz git'te değil). 5 fazlı (Faz 0 Keşif → Faz 1 Keychain/Secure Enclave
+taşıması [launch-blocker] → Faz 2 Envelope sertleştirme → Faz 3 Vault/Agent ayrımı → Faz 4 Uçtan
+uca doğrulama), ~33 alt görev (W-0.1...W-4.4), bağımlılık zinciri 1→2→3→4.
+
+**İstenen ve HENÜZ YAPILMAYAN:**
+1. Bu planı `docs/TASKS.md`'ye (bu projenin T-numaralı görev defteri konvansiyonuna uyarak,
+   muhtemelen T18-T22 olarak, her faz kendi W-ID'leriyle) task task işle. Plan dosyasını da
+   muhtemelen `docs/` altına kopyalamak (kalıcılık için, şu an sadece Desktop'ta) gerekiyor.
+2. `orion` agent'ını (bu projenin gerçek, tanımlı subagent tipi — ürün/deneyim perspektifi)
+   göreve sokup planı ona verip, hangi task'ların paralel koşabileceğine ve (vault/forge/vera/
+   scout/atlas gibi mevcut agent rollerinden) kimin hangi task'ı üstleneceğine karar vermesini
+   iste. Bu bir ATAMA KARARI çıktısı olmalı — henüz gerçek kod/implementasyon başlatılmadı,
+   güvenlik-kritik (private key/Keychain/Secure Enclave) olduğu için Emir'e onaylatmadan
+   implementasyon fazlarını gerçekten başlatma.
+
+Hiçbir kod değişikliği yapılmadı bu madde için. Yeni oturum plan dosyasını okuyup buradan devam
+edebilir — dosya yolu ve adım adım ne yapılacağı yukarıda.
