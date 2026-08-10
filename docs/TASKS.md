@@ -1005,3 +1005,84 @@ ayrışmaya sebep oldu.
 Silmeden önce `grep -rn "bulk/distribute" src/` tekrar çalıştırıldı, silinen dosya dışında hiçbir
 referans çıkmadı. `npx tsc --noEmit` silme sonrası temiz. Artık uygulamada tek bir Distribute
 Funds implementasyonu var: `src/components/DistributeModal.tsx`. ✅ Tamamlandı.
+
+## T13 — Abonelik protokolü uyuşmazlığı: gerçek abonelik masaüstünde yenilenemiyor 🆕 10.08.2026, `API.md` canlı testinden, EN ÖNCELİKLİ
+
+`API.md`'deki canlı Worker testinde bulundu (dosya köke commit edilmemiş haldeydi, şimdi
+commit edildi — bkz. altta). Cloudflare Worker (`https://westron-subscription.ebaltepe.workers.dev`)
+artık bearer-token + hesap tabanlı bir license akışı kullanıyor (`POST /license` → Yes auth,
+`{access, license:{payload, sig}}` döner, payload `account_id`/`email`/`active`/`plan`/`expires_at`
+içerir). Masaüstündeki Rust abonelik istemcisi hâlâ eski protokolü konuşuyor: bearer token
+göndermeden `{wallet}` postluyor, üst seviye `payload`/`sig` alanlarının bir wallet payload'ı
+taşımasını bekliyor. Worker bu isteğe `401` döner, masaüstü de eski/bayat cache'e düşer.
+**Sonuç: gerçek, aktif bir abonelik şu an masaüstü uygulamasında yenilenemiyor.**
+
+**Bitti sayılır:**
+- Rust abonelik istemcisi (muhtemelen `src-tauri/src/subscription/` veya benzeri — konumu
+  scout ile doğrulanmalı) Worker'ın gerçek hesap/token akışına göre yeniden yazılır: signup/login
+  ile bearer token alınır, `POST /license` bu token'la çağrılır, dönen `license.payload`
+  **imzası doğrulanmadan asla** okunmaz (Ed25519 `sig` kontrolü şart).
+- Eski wallet-payload beklentisi tamamen kaldırılır, geriye dönük uyumluluk şeysi eklenmez.
+- Worker'ın `westron-subscription` deploy'una karşı gerçek bir signup/login/license döngüsü
+  ile denenir (deneme hesabı, sonra temizlenir — `probes/` altına kayıt).
+- `MOCKS.md` ve `STATUS.md` güncellenir: abonelik artık gerçek mi, hâlâ mock/bozuk mu net yazılır.
+
+**Ajanlar:** → `scout` (Rust abonelik istemcisinin tam yolu ve mevcut akışı) → `vault` (protokolü
+Worker'a uydur) → `vera` (gerçek signup/login/license döngüsüyle doğrula, kod okuyarak değil).
+
+## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor 🆕 10.08.2026, `API.md`'den
+
+Worker'ın Alchemy REST proxy'si üç ailede yanlış rota kuruyor (canlı test kanıtı `API.md`
+bölüm "Live test summary"nde):
+- **Prices:** proxy `/v1` segmentini atlıyor → canlı `404`.
+- **NFT:** proxy API key'i `v3`'ten önce koyuyor (yanlış sıra) → canlı `401`.
+- **Portfolio Data:** proxy `/v1/{key}` segmentini atlıyor → canlı `400`
+  (`APIs not enabled on specified network: [NETWORK_AGNOSTIC]`).
+
+Doğru formatlar `src-tauri/src/data/alchemy/client.rs`'te zaten doğru: `nft/v3/{key}`,
+`data/v1/{key}`, `prices/v1` (Bearer header). Not: masaüstü uygulaması şu an bu proxy'yi hiç
+kullanmıyor, doğrudan kendi Alchemy anahtarıyla konuşuyor — yani bu proxy hatası bugün canlı bir
+kullanıcıyı etkilemiyor, ama Worker proxy'si gelecekte devreye alınırsa (T15'te tartışılan mimari
+karar) kırık olarak devreye girer.
+
+**Bitti sayılır:** Worker'ın proxy route inşası her aile için (RPC/NFT/Prices/Data) ayrı,
+açık handler'lara bölünür; her biri zararsız, bilinen bir adres/istekle canlı denenir
+(`probes/` altına kayıt). Proxy, tüm aileler canlı geçmeden "alternatif istemci yolu" olarak
+tanıtılmaz.
+
+**Ajanlar:** → `vault` (Worker route düzeltmesi — bu proje reposunda değilse hangi repoda
+olduğu önce bulunmalı, Worker ayrı bir deploy).
+
+## T15 — MCP smoke testi bu proje yolunda başlamıyor (klasör adında boşluk) 🆕 10.08.2026, `API.md`'den
+
+`tools/westron-mcp/index.js`, doğrudan mı yoksa import olarak mı çalıştığını anlamak için
+`process.argv[1]`'i `new URL(import.meta.url).pathname` ile karşılaştırıyor. Bu workspace'in
+yolu boşluk içeriyor (`Cowork Projects`), `pathname` bunu `%20` olarak encode ediyor, karşılaştırma
+hep `false` dönüyor, çocuk süreç hemen kapanıyor. `node tools/westron-mcp/smoke.mjs` bu yüzden
+bu makinede hiç geçemiyor.
+
+**Bitti sayılır:** `index.js`'te karşılaştırma `fileURLToPath(import.meta.url)` kullanacak
+şekilde düzeltilir (path encode sorunu ortadan kalkar), `node tools/westron-mcp/smoke.mjs`
+gerçekten çalıştırılıp 15 MCP tool'un ve Rust route-table çapraz kontrolünün gerçekten
+geçtiği gözlemlenir (çıktı buraya yapıştırılır).
+
+**Ajanlar:** → `vault` (tek satırlık düzeltme + gerçek test çalıştırma).
+
+## T16 — Kapsanmayan canlı uçlar: WebSocket, işlem geçmişi, para hareketi eden her şey 🆕 10.08.2026, `API.md`'den
+
+`API.md`'deki canlı test tek bir güvenli okuma/aile doğruladı (`eth_chainId`, OpenSea koleksiyon
+metadata'sı, Etherscan `ethsupply`). Şunlar hiç canlı denenmedi: WebSocket abonelikleri
+(mined tx / collection transfer / new heads), Etherscan `txlist` ile gerçek işlem geçmişi okuma
+(Sister Wallet Finder bunu kullanıyor), T14 düzeltildikten sonra Alchemy NFT/Prices/Data
+authenticated okumaları, ve her para/NFT hareketi eden uç (`send_eth`, `transfer_nft`,
+marketplace list/bid/cancel, key import/deletion — bunlar bilinçli olarak otomatik problanmadı,
+gerçek kullanıcı onayı gerektiriyor).
+
+**Bitti sayılır:** Bu madde tek seferde "bitti" olmaz — T13/T14 düzeltildikten sonra, ayrı bir
+staging/test ortamı (production olmayan API anahtarları + izlenen test cüzdanı) kurulup
+`API.md`'nin "Recommended regression checks" bölümündeki 4 maddelik liste gerçekten çalıştırılır.
+Şimdilik `MOCKS.md`'de "canlı doğrulanmadı" olarak açıkça listelenir — sessizce "çalışıyor"
+denmez.
+
+**Ajanlar:** → Emir'e sor (staging ortamı/test cüzdanı kurulumu onun hesap açması gerektiren bir
+adım olabilir — CLAUDE.md madde 6) → sonra `vault`/`vera`.
