@@ -1111,7 +1111,7 @@ kayıt bulunmadığından silinecek bir şey yoktu.
 signup/login/logout/check-status akışı canlı Worker'a karşı gerçek tıklamayla doğrulandı.
 Commit'ler (`3c69033`, `036f7f0`, `05a8b60`) push edildi.
 
-## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor 🆕 10.08.2026, `API.md`'den
+## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor ✅ TAMAMLANDI 10.08.2026
 
 Worker'ın Alchemy REST proxy'si üç ailede yanlış rota kuruyor (canlı test kanıtı `API.md`
 bölüm "Live test summary"nde):
@@ -1133,6 +1133,16 @@ tanıtılmaz.
 
 **Ajanlar:** → `vault` (Worker route düzeltmesi — bu proje reposunda değilse hangi repoda
 olduğu önce bulunmalı, Worker ayrı bir deploy).
+
+**Sonuç: T14 tamamlandı.** `subscription-worker/src/index.ts`'teki `handleProxy()` üç aile için
+de (`nft/v3/{key}`, `data/v1/{key}`, `prices/v1` + Bearer) `client.rs`'teki doğru formata
+yeniden yazıldı. `npx tsc --noEmit` temiz. Emir'in onayıyla production Worker'a deploy edildi
+(`wrangler deploy`, version `caf9a5b9`), gerçek bir test hesabıyla üç rota da canlı Alchemy
+API'sine karşı denendi — üçü de HTTP 200 ve gerçek veri döndü (WETH contract metadata, gerçek
+ETH/USD fiyatı, vitalik.eth'in gerçek token bakiyeleri). Kanıt: `probes/subscription-worker-
+alchemy-proxy-routes-t14.md`. Test hesabı canlı D1'den silindi. Masaüstü uygulaması bu proxy'yi
+hâlâ kullanmıyor (kendi Alchemy anahtarıyla konuşuyor) — bu düzeltme bugün canlı kullanıcıyı
+etkilemiyor, ama proxy mimarisi ileride devreye alınırsa artık doğru çalışacak.
 
 ## T15 — MCP smoke testi bu proje yolunda başlamıyor (klasör adında boşluk) 🆕 10.08.2026, `API.md`'den
 

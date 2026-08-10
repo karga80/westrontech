@@ -42,6 +42,12 @@ All 5 secrets are set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY
 - API-key proxy (`/proxy/alchemy/*`, `/proxy/opensea/*`, `/proxy/etherscan/*`): **real**, each
   provider verified with a live authenticated request returning real data (real block number,
   real ETH supply, real BAYC collection data). See `probes/subscription-worker-proxy.md`.
+  **T14 (2026-08-10):** the Alchemy NFT/Prices/Portfolio-Data route families were building the
+  wrong upstream URL (missing `v3`/`v1` segments, wrong key placement) and failed live with
+  401/404/400. Fixed to match `src-tauri/src/data/alchemy/client.rs`'s verified shapes, deployed,
+  re-verified live for all three families — see `probes/subscription-worker-alchemy-proxy-routes-t14.md`.
+  Desktop app doesn't use this proxy today (talks to Alchemy directly), so this had no live-user
+  impact, but it's now correct if the proxy path is adopted later.
 - Payment webhook (`/webhook/alchemy`): secret is set and webhook is registered in the Alchemy
   dashboard, but **not yet proven with a real on-chain payment** — no test ETH has been sent
   through it. Treat as configured-but-unverified until a real (or testnet) payment round-trips.

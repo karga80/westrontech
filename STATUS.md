@@ -438,3 +438,19 @@ onaylanmış öncelik değil):**
 
 Bu oturum context limiti nedeniyle burada durdu; T17 ve maskeli alan sorusu tamamen
 kapalı, commit'lenmiş ve push'lanmış durumda. Yeni oturum temiz bir noktadan başlayabilir.
+
+## Update (2026-08-10): T14 — Alchemy proxy rotaları düzeltildi, canlı doğrulandı
+
+Worker'ın (`subscription-worker/src/index.ts`, `handleProxy()`) Alchemy NFT/Prices/Portfolio-Data
+proxy rotaları yanlış URL kuruyordu (`v3`/`v1` segmenti eksik, key yanlış yerde) — canlıda
+401/404/400. `src-tauri/src/data/alchemy/client.rs`'teki doğru formatlarla eşleştirildi.
+
+Emir'in onayıyla production Worker'a deploy edildi (`wrangler deploy`), gerçek bir test hesabıyla
+üç rota da canlı Alchemy API'sine karşı denendi — üçü de gerçek veriyle HTTP 200 döndü. Test
+hesabı canlı D1'den silindi. Kanıt: `probes/subscription-worker-alchemy-proxy-routes-t14.md`.
+`npx tsc --noEmit` temiz. Masaüstü uygulaması bu proxy'yi hâlâ kullanmıyor, yani bugün canlı
+kullanıcıya etkisi yok — düzeltme ileride proxy mimarisi devreye alınırsa iş görecek.
+
+**Sıradaki açık maddeler (öncelik sırası değil):**
+- T15 — MCP smoke test path hatası (task #14, `tools/westron-mcp/index.js`).
+- T16 — Emir'in staging ortamı kararını bekliyor (task #15).

@@ -310,17 +310,22 @@ async function handleProxy(request: Request, env: Env, url: URL): Promise<Respon
   const init: RequestInit = { method: request.method, headers };
 
   if (provider === 'alchemy') {
-    // /proxy/alchemy/rpc            → JSON-RPC (POST)   eth-mainnet.g.alchemy.com/v2/KEY
-    // /proxy/alchemy/nft/<path>     → api.g.alchemy.com/nft/<path>?…&  (key in path segment)
-    // /proxy/alchemy/prices/<path>  → api.g.alchemy.com/prices/v1/<path>  (Bearer KEY)
-    // /proxy/alchemy/data/<path>    → api.g.alchemy.com/data/<path>   (Bearer KEY)
+    // Route shapes must match src-tauri/src/data/alchemy/client.rs exactly — that file is the
+    // verified-against-live-API source of truth (see docs/TASKS.md T14).
+    // /proxy/alchemy/rpc            → eth-mainnet.g.alchemy.com/v2/KEY                    (key in path)
+    // /proxy/alchemy/nft/<path>     → eth-mainnet.g.alchemy.com/nft/v3/KEY/<path>?…&      (key in path)
+    // /proxy/alchemy/data/<path>    → api.g.alchemy.com/data/v1/KEY/<path>                (key in path)
+    // /proxy/alchemy/prices/<path>  → api.g.alchemy.com/prices/v1/<path>                  (Bearer KEY)
     if (rest === 'rpc' || rest === '') {
       upstream = `https://eth-mainnet.g.alchemy.com/v2/${env.ALCHEMY_KEY}`;
       init.body = request.body; headers['Content-Type'] = 'application/json';
     } else if (rest.startsWith('nft/')) {
-      upstream = `https://eth-mainnet.g.alchemy.com/nft/${env.ALCHEMY_KEY}/${rest.slice(4)}${search}`;
-    } else if (rest.startsWith('prices/') || rest.startsWith('data/')) {
-      upstream = `https://api.g.alchemy.com/${rest}${search}`;
+      upstream = `https://eth-mainnet.g.alchemy.com/nft/v3/${env.ALCHEMY_KEY}/${rest.slice(4)}${search}`;
+    } else if (rest.startsWith('data/')) {
+      upstream = `https://api.g.alchemy.com/data/v1/${env.ALCHEMY_KEY}/${rest.slice(5)}${search}`;
+      if (request.method === 'POST') { init.body = request.body; headers['Content-Type'] = 'application/json'; }
+    } else if (rest.startsWith('prices/')) {
+      upstream = `https://api.g.alchemy.com/prices/v1/${rest.slice(7)}${search}`;
       headers['Authorization'] = `Bearer ${env.ALCHEMY_KEY}`;
       if (request.method === 'POST') { init.body = request.body; headers['Content-Type'] = 'application/json'; }
     } else {
