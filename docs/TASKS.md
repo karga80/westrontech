@@ -999,3 +999,9 @@ CLAUDE.md'nin "aynı işi yapan iki üç ekran büyütme" kuralı gereği (b) ye
 ayrışmaya sebep oldu.
 
 **Ajanlar:** → Emir'e sor (silinsin mi, yoksa nav'a mı bağlansın) → `forge` (karara göre uygula).
+
+**Sonuç — 10.08.2026:** Emir seçeneği (a)'yı onayladı: sayfa silindi.
+`src/app/bulk/distribute/page.tsx` ve boşalan `src/app/bulk/distribute/` klasörü kaldırıldı.
+Silmeden önce `grep -rn "bulk/distribute" src/` tekrar çalıştırıldı, silinen dosya dışında hiçbir
+referans çıkmadı. `npx tsc --noEmit` silme sonrası temiz. Artık uygulamada tek bir Distribute
+Funds implementasyonu var: `src/components/DistributeModal.tsx`. ✅ Tamamlandı.
