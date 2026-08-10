@@ -808,6 +808,92 @@ ya da UI'da bulunamıyor/görünmüyor. Bu ekranda uçtan uca gerçekten çalı�
 cüzdana farklı bir sayı yazılabildiğini, bu sayıların önizleme/gönderim adımına doğru
 yansıdığını) kanıtlamak lazım — "kod var" yetmez, Emir'in tarif ettiği deneyimle eşleşmeli.
 
+### forge bulguları (10.08.2026)
+
+**Madde a — kök neden bulundu, iki ayrı hata:**
+1. `src/components/DistributeModal.tsx`'in Step 2 "Send Funds" sekmesinde
+   düğmenin neden pasif kaldığını gösteren **hiçbir** UI yoktu — aynı dosyanın
+   "Send NFT" sekmesinde ve `bulk/distribute/page.tsx`'in Step 2'sinde bu zaten
+   vardı (envelope durumu, distKey eksikliği, previewError, red edilen cüzdan
+   listesi). Yani düğme gerçekten kararlı bir mantıkla pasifti ama ekran bunu
+   hiç söylemiyordu — Emir'in gördüğü "yasak ikonu, sebep yok" deneyiminin
+   birebir kaynağı bu. Artık DistributeModal.tsx:929-957 arasında "Send Funds"
+   sekmesine de envelope durumu ("Checking…" / "Authorized" / "Not authorized"),
+   distKey eksikse uyarı, previewError ve red edilen her cüzdan için ayrı satır
+   eklendi (aynı desen "Send NFT" sekmesinde zaten vardı, bkz. satır 846-850).
+2. İkinci, daha sinsi bir hata: Step 1'in "ilerleyebilir miyim" kontrolü
+   `parseFloat(x) > 0` kullanıyordu, Step 2'nin gerçek preview/gönderim yolu ise
+   `parseEthToWei(x)` kullanıyor. İkisi bazı girdilerde (örn. `"1e-5"`)
+   anlaşmazlığa düşebiliyor: parseFloat kabul eder, parseEthToWei'nin
+   ondalık-only regex'i reddeder. Sonuç: Step 1 kullanıcıyı ilerletir ama Step 2
+   o cüzdanı `previews` map'inden sessizce düşürür (`wei == null` dalı `continue`
+   der) ve Confirm & Send sonsuza kadar pasif kalır, hiçbir açıklama olmadan.
+   Düzeltme: `src/lib/distribute.ts:79-82`'ye tek bir `isValidEthAmount()`
+   fonksiyonu eklendi, hem `DistributeModal.tsx:241-246`'daki `step1Valid` hem
+   `bulk/distribute/page.tsx:180-185`'teki `canReview` artık aynı bu fonksiyonu
+   kullanıyor — iki kontrol asla birbirinden ayrışamaz artık.
+
+**Madde b — dinamik/canlı validasyon eklendi:** Her iki dosyaya da
+`amountFieldError(raw)` yardımcı fonksiyonu eklendi (kutu boşken hata göstermez,
+kullanıcı bir şey yazdığı an geçersizse "Invalid amount — enter a number greater
+than 0" kırmızı metnini o alanın hemen altında gösterir). Uygulandığı yerler:
+- `DistributeModal.tsx`: equal-mode tek kutu (satır ~668-690 ve ~727-746),
+  custom-mode her cüzdan satırı (satır ~703-722 ve ~765-780).
+- `bulk/distribute/page.tsx`: equal-mode tek kutu (satır ~570-589), custom-mode
+  her cüzdan satırı (satır ~592-618) ve Address Book satırı (satır ~619-648).
+
+**Madde c — "Amount per wallet" kutusu: DistributeModal.tsx'te GERÇEKTEN kırık,
+bulk/distribute/page.tsx'te değil.** İki dosya ayrı ayrı incelendi:
+- `DistributeModal.tsx` (dashboard + wallets skin, equal mode): kutunun dış
+  çerçevesi (border+background) bir `<span>` etiketi ("Amount per wallet") ile
+  yan yana duran 60px genişliğinde küçük bir `<input>`'u sarıyordu — görsel
+  olarak bütün kutu tıklanabilir/yazılabilir görünüyordu ama sadece sağdaki
+  60px gerçekten işlevseldi. State bağlantısı (`value`/`onChange`) zaten
+  doğruydu, yani "çalışmayan handler" değil, saf bir CSS/UX yanıltmasıydı.
+  **Karar: kaldırılmadı, düzeltildi** — artık görünen kutunun tamamı tek bir
+  gerçek `flex:1` input (satır 668-690 equal/dashboard, 727-746 equal/wallets),
+  placeholder da "Amount per wallet (applies to all N selected)" olarak
+  netleştirildi ki kaç cüzdanı etkilediği belli olsun.
+- `bulk/distribute/page.tsx`: bu ekranda kutu zaten tek parça gerçek bir
+  `flex:1` input'tu (satır 570-584), "büyük ama işlevsiz alan" hatası burada
+  yoktu. Bu dosyada madde c için yapılan tek değişiklik placeholder metnini
+  DistributeModal.tsx ile tutarlı hale getirmek ("applies to all N selected")
+  ve madde b'nin inline hata metnini eklemekti — yapısal bir yeniden tasarım
+  gerekmedi çünkü kutu zaten doğruydu.
+- Global tarama: `grep -rn "Amount per wallet"` ile bu string'in geçtiği her
+  yer kontrol edildi, iki dosya dışında üçüncü bir tekrar bulunamadı.
+
+**Madde d — cüzdan başına farklı tutar: state/veri akışı kod seviyesinde
+zaten doğruydu, gerçek engel madde a'ydı.** `customAmounts`/`amountCustom`/
+`abAmounts` (Record<walletId, string>) her cüzdan için ayrı state tutuyor ve
+`SendRow[]`'a dönüşürken her satır kendi `valueWei`'sini alıyor
+(`runDistribution` bunları sırayla, paralel değil, işliyor —
+`src/lib/distribute.ts:101-128`). Yani "her cüzdana farklı tutar yazma" özelliği
+kodda gerçekten vardı; Emir'in "çalışmıyor" deneyimi muhtemelen madde a'nın AYNI
+kök nedeniydi (düğme hiçbir zaman aktifleşmiyordu — eşit ya da özel tutar fark
+etmeksizin), ayrı bir custom-amount hatası değil. **Bu iddia canlı tıklamayla
+doğrulanamadı** (bkz. aşağıdaki dürüstlük notu) — vera'nın öncelikli test
+senaryosu bu olmalı: birden fazla cüzdan seç, her birine FARKLI bir tutar yaz,
+Confirm & Send'e basmadan önce Step 2'deki her satırın kendi doğru tutarını
+gösterdiğini gözle doğrula.
+
+**Doğrulama — dürüstçe neyin yapılıp neyin yapılamadığı:**
+- ✅ `npx tsc --noEmit` temiz (0 hata).
+- ✅ `npx eslint` — değiştirilen üç dosyada 0 hata; 4 uyarı var ama hepsi bu
+  değişikliklerin dışındaki satırlarda (diff hunk'larının dışında,
+  `git diff` ile teyit edildi), yani bu turda eklenmedi.
+- ✅ `npx jest` — 2 suite, 24 test, hepsi geçti.
+- ❌ **Gerçek tıklamayla doğrulama YAPILMADI.** Bu ortamda (Claude Code/Bash
+  içinden) Playwright/Puppeteer/Cypress gibi bir browser-automation aracı
+  bulunamadı (`node_modules/.bin` ve `package.json` kontrol edildi, script
+  yok). Yani "kullanıcı bir cüzdana yanlış tutar yazınca kırmızı metin gerçekten
+  ekranda beliriyor mu", "geçerli girdiyle Confirm & Send gerçekten tıklanabilir
+  hale geliyor mu", "her cüzdana farklı tutar yazınca Step 2'de gerçekten farklı
+  değerler görünüyor mu" — bunların hiçbiri canlı uygulamada gözle görülmedi.
+  Bu tam olarak T11'in var olma sebebi olan hatayı (vera'nın "kod temiz" deyip
+  gerçekte çalışmadığını) tekrarlamamak için: **bu iş vera'nın gerçek
+  tıklamayla doğrulaması olmadan "bitti" sayılamaz.**
+
 **Ajanlar:** → `forge` (root cause bul + düzelt, hem `bulk/distribute/page.tsx` hem
 `DistributeModal.tsx`'i kontrol et) → `vera` (bu sefer gerçekten tıklayarak doğrula,
 Emir'in tarif ettiği 4 maddenin hepsini tek tek test et — özellikle "type ettiğim anda

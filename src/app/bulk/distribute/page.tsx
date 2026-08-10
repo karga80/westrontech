@@ -8,6 +8,7 @@ import { loadWallets } from '@/lib/walletStore';
 import { loadAlchemyKey, getWalletTokens, estimateGas, openExternalUrl } from '@/lib/tauri';
 import {
   runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
+  isValidEthAmount,
   type SendRow, type TransactionPreview,
 } from '@/lib/distribute';
 
@@ -174,12 +175,25 @@ export default function DistributeFundsPage() {
       ]
     : [];
 
+  // Same check Step 2's preview effect and the real send use (`parseEthToWei`
+  // via `isValidEthAmount`) — `parseFloat(x) > 0` used to disagree with it on
+  // inputs like "1e-5" (parseFloat accepts, the decimal-only wei parser
+  // rejects), which let a "valid" Step 1 amount silently vanish out of the
+  // Step 2 preview map and leave Confirm & Send disabled with no reason.
   const canReview = !!source && totalSelected > 0 && (
     mode === 'equal'
-      ? !!amountEqual && parseFloat(amountEqual) > 0
-      : selectedList.every(w => !!amountCustom[w.id] && parseFloat(amountCustom[w.id]) > 0) &&
-        abSelectedList.every(e => !!abAmounts[e.id] && parseFloat(abAmounts[e.id]) > 0)
+      ? isValidEthAmount(amountEqual)
+      : selectedList.every(w => isValidEthAmount(amountCustom[w.id] ?? '')) &&
+        abSelectedList.every(e => isValidEthAmount(abAmounts[e.id] ?? ''))
   );
+
+  /** Per-field message for the amount inputs — only once the user has typed
+   *  something (an empty box before the user starts is not an error yet). */
+  const amountFieldError = (raw: string): string | null => {
+    const s = raw.trim();
+    if (s === '') return null;
+    return isValidEthAmount(s) ? null : 'Invalid amount — enter a number greater than 0';
+  };
 
   // ── Gas estimate (real eth_estimateGas, one call for the whole review) ──────
   // The Rust command returns GAS UNITS, not a fee: converting to ETH needs a
@@ -554,48 +568,64 @@ export default function DistributeFundsPage() {
                 </div>
 
                 {mode === 'equal' ? (
-                  <div style={{ display: 'flex', border: '1px solid var(--wr-border)' }}>
-                    <input
-                      type="number"
-                      placeholder="Amount per wallet"
-                      value={amountEqual}
-                      onChange={e => setAmountEqual(e.target.value)}
-                      min="0"
-                      step="0.01"
-                      style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: 'none', padding: '10px 12px', outline: 'none' }}
-                    />
-                    <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', padding: '10px 14px', borderLeft: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center' }}>
-                      ETH
+                  <div>
+                    <div style={{ display: 'flex', border: `1px solid ${amountFieldError(amountEqual) ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}` }}>
+                      <input
+                        type="number"
+                        placeholder={`Amount per wallet (applies to all ${totalSelected} selected)`}
+                        value={amountEqual}
+                        onChange={e => setAmountEqual(e.target.value)}
+                        min="0"
+                        step="0.01"
+                        style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: 'none', padding: '10px 12px', outline: 'none' }}
+                      />
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '12px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', padding: '10px 14px', borderLeft: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center' }}>
+                        ETH
+                      </div>
                     </div>
+                    {amountFieldError(amountEqual) && (
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>{amountFieldError(amountEqual)}</div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {selectedList.map(w => (
-                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', width: '90px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
-                        <div style={{ flex: 1, display: 'flex', border: '1px solid var(--wr-border)' }}>
-                          <input
-                            type="number"
-                            placeholder="0.00"
-                            value={amountCustom[w.id] ?? ''}
-                            onChange={e => setAmountCustom(prev => ({ ...prev, [w.id]: e.target.value }))}
-                            min="0"
-                            step="0.01"
-                            style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: 'none', padding: '8px 10px', outline: 'none' }}
-                          />
-                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', padding: '8px 10px', borderLeft: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center' }}>
-                            ETH
+                    {selectedList.map(w => {
+                      const err = amountFieldError(amountCustom[w.id] ?? '');
+                      return (
+                      <div key={w.id}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', width: '90px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
+                          <div style={{ flex: 1, display: 'flex', border: `1px solid ${err ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}` }}>
+                            <input
+                              type="number"
+                              placeholder="0.00"
+                              value={amountCustom[w.id] ?? ''}
+                              onChange={e => setAmountCustom(prev => ({ ...prev, [w.id]: e.target.value }))}
+                              min="0"
+                              step="0.01"
+                              style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', backgroundColor: 'var(--wr-bg)', border: 'none', padding: '8px 10px', outline: 'none' }}
+                            />
+                            <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', fontWeight: 600, color: 'var(--wr-text-3)', backgroundColor: 'var(--wr-surface-alt)', padding: '8px 10px', borderLeft: '1px solid var(--wr-border)', display: 'flex', alignItems: 'center' }}>
+                              ETH
+                            </div>
                           </div>
                         </div>
+                        {err && (
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '3px', marginLeft: '100px' }}>{err}</div>
+                        )}
                       </div>
-                    ))}
-                    {abSelectedList.map(ab => (
-                      <div key={ab.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      );
+                    })}
+                    {abSelectedList.map(ab => {
+                      const err = amountFieldError(abAmounts[ab.id] ?? '');
+                      return (
+                      <div key={ab.id}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '90px', flexShrink: 0, overflow: 'hidden' }}>
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ab.name}</span>
                           <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '9px', color: '#7c5cff', border: '1px solid rgba(190,255,0,0.4)', padding: '1px 5px', letterSpacing: '0.5px' }}>BOOK</span>
                         </div>
-                        <div style={{ flex: 1, display: 'flex', border: '1px solid var(--wr-border)' }}>
+                        <div style={{ flex: 1, display: 'flex', border: `1px solid ${err ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}` }}>
                           <input
                             type="number"
                             placeholder="0.00"
@@ -609,8 +639,13 @@ export default function DistributeFundsPage() {
                             ETH
                           </div>
                         </div>
+                        </div>
+                        {err && (
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '3px', marginLeft: '100px' }}>{err}</div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

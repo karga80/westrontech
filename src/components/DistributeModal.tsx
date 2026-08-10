@@ -22,7 +22,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   runDistribution, previewTransaction, parseEthToWei, formatWeiToEth, explainSendError,
-  ETH_ADDRESS_RE,
+  isValidEthAmount, ETH_ADDRESS_RE,
   type SendRow, type TransactionPreview,
 } from '@/lib/distribute';
 import { loadAlchemyKey, openExternalUrl, transferNft, type OwnedNft, type NftTokenStandard } from '@/lib/tauri';
@@ -236,12 +236,22 @@ export default function DistributeModal({
     return acc + (isNaN(v) ? 0 : v);
   }, 0);
 
+  // Same check `parseEthToWei`-based Step 2 preview and the real send use —
+  // see `isValidEthAmount`'s doc comment for why this must not be `parseFloat`.
   const step1Valid =
     !!sourceId &&
     selected.size > 0 &&
     (amountMode === 'equal'
-      ? parseFloat(equalAmount) > 0
-      : selectedList.every(w => parseFloat(customAmounts[w.id] ?? '') > 0));
+      ? isValidEthAmount(equalAmount)
+      : selectedList.every(w => isValidEthAmount(customAmounts[w.id] ?? '')));
+
+  /** Per-field message for the amount inputs — only once the user has typed
+   *  something (an empty box before the user starts is not an error yet). */
+  const amountFieldError = (raw: string): string | null => {
+    const s = raw.trim();
+    if (s === '') return null;
+    return isValidEthAmount(s) ? null : 'Invalid amount — enter a number greater than 0';
+  };
 
   // Belt-and-suspenders: the address-based filter above already keeps a
   // same-address entry out of `destWallets`, so this only fires in the edge
@@ -654,30 +664,48 @@ export default function DistributeModal({
                     </div>
 
                     {amountMode === 'equal' ? (
-                      <div className="flex items-center justify-between" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 12px' }}>
-                        <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
-                        <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
+                      <div>
+                        {/* The whole bordered box below IS the input (flex:1) — it used
+                            to be a label sitting next to a small 60px box, which made
+                            most of this area look typeable when it wasn't. */}
+                        <div className="flex items-center" style={{
+                          backgroundColor: 'var(--wr-surface-alt)',
+                          border: `1px solid ${amountFieldError(equalAmount) ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}`,
+                        }}>
                           <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                            placeholder="0.00" className={c.placeholderClass} style={AMOUNT_INPUT} />
-                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>
+                            placeholder={`Amount per wallet (applies to all ${selected.size} selected)`}
+                            className={c.placeholderClass}
+                            style={{ ...AMOUNT_INPUT, flex: 1, width: 'auto', textAlign: 'left' }} />
+                          <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px', flexShrink: 0 }}>
                             <UnitLabel skin={skin} />
                           </span>
                         </div>
+                        {amountFieldError(equalAmount) && (
+                          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>{amountFieldError(equalAmount)}</div>
+                        )}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {selectedList.map(w => (
-                          <div key={w.id} className="flex items-center justify-between" style={{ backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '6px 12px' }}>
-                            <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)' }}>{w.name}</span>
-                            <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
-                              <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                                placeholder="0.00" className={c.placeholderClass} style={{ ...AMOUNT_INPUT, width: '70px' }} />
-                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px' }}>
-                                <UnitLabel skin={skin} />
-                              </span>
+                        {selectedList.map(w => {
+                          const err = amountFieldError(customAmounts[w.id] ?? '');
+                          return (
+                            <div key={w.id}>
+                              <div className="flex items-center justify-between" style={{ backgroundColor: 'var(--wr-surface-alt)', border: `1px solid ${err ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}`, padding: '6px 12px' }}>
+                                <span style={{ fontFamily: 'var(--font-inter)', fontSize: '12px', color: 'var(--wr-text)' }}>{w.name}</span>
+                                <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
+                                  <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
+                                    placeholder="0.00" className={c.placeholderClass} style={{ ...AMOUNT_INPUT, width: '70px' }} />
+                                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px' }}>
+                                    <UnitLabel skin={skin} />
+                                  </span>
+                                </div>
+                              </div>
+                              {err && (
+                                <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '2px' }}>{w.name}: {err}</div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -699,23 +727,34 @@ export default function DistributeModal({
                 </div>
 
                 {amountMode === 'equal' && (
-                  <div className="flex items-center justify-between" style={{ marginBottom: '8px', backgroundColor: 'var(--wr-surface-alt)', border: '1px solid var(--wr-border)', padding: '8px 12px' }}>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Amount per wallet</span>
-                    <div className="flex items-center" style={{ border: '1px solid var(--wr-border)' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    {/* The whole bordered box below IS the input (flex:1) — it used
+                        to be a label sitting next to a small 60px box, which made
+                        most of this area look typeable when it wasn't. */}
+                    <div className="flex items-center" style={{
+                      backgroundColor: 'var(--wr-surface-alt)',
+                      border: `1px solid ${amountFieldError(equalAmount) ? 'rgba(248,113,113,0.6)' : 'var(--wr-border)'}`,
+                    }}>
                       <input type="text" inputMode="decimal" value={equalAmount} onChange={e => setEqualAmount(e.target.value)}
-                        placeholder="0.00" className={c.placeholderClass} style={AMOUNT_INPUT} />
-                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px' }}>ETH</span>
+                        placeholder={`Amount per wallet (applies to all ${selected.size} selected)`}
+                        className={c.placeholderClass}
+                        style={{ ...AMOUNT_INPUT, flex: 1, width: 'auto', textAlign: 'left' }} />
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', padding: '0 8px', borderLeft: '1px solid var(--wr-border)', lineHeight: '28px', flexShrink: 0 }}>ETH</span>
                     </div>
+                    {amountFieldError(equalAmount) && (
+                      <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>{amountFieldError(equalAmount)}</div>
+                    )}
                   </div>
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', opacity: !sourceId ? 0.4 : 1 }}>
                   {destWallets.map(w => {
                     const isChecked = selected.has(w.id);
+                    const err = amountMode === 'custom' && isChecked ? amountFieldError(customAmounts[w.id] ?? '') : null;
                     return (
                       <div key={w.id} onClick={() => sourceId && toggleDest(w.id)} style={{
                         backgroundColor: isChecked ? 'var(--wr-accent-dim)' : 'var(--wr-surface-alt)',
-                        border: `1px solid ${isChecked ? 'var(--wr-accent)' : 'var(--wr-border)'}`,
+                        border: `1px solid ${err ? 'rgba(248,113,113,0.6)' : isChecked ? 'var(--wr-accent)' : 'var(--wr-border)'}`,
                         padding: '8px 10px', cursor: sourceId ? 'pointer' : 'not-allowed',
                       }}>
                         <div className="flex items-center gap-2" style={{ marginBottom: '3px' }}>
@@ -724,11 +763,16 @@ export default function DistributeModal({
                         </div>
                         <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', marginLeft: '19px' }}>{shortAddr(w.address)}</div>
                         {amountMode === 'custom' && isChecked && (
-                          <div className="flex items-center" style={{ marginTop: '6px', border: '1px solid var(--wr-border)' }} onClick={e => e.stopPropagation()}>
-                            <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
-                              placeholder="0.00" className={c.placeholderClass} style={{ ...AMOUNT_INPUT, width: '100%', flex: 1 }} />
-                            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px', whiteSpace: 'nowrap' }}>ETH</span>
-                          </div>
+                          <>
+                            <div className="flex items-center" style={{ marginTop: '6px', border: '1px solid var(--wr-border)' }} onClick={e => e.stopPropagation()}>
+                              <input type="text" inputMode="decimal" value={customAmounts[w.id] ?? ''} onChange={e => setCustomAmounts(a => ({ ...a, [w.id]: e.target.value }))}
+                                placeholder="0.00" className={c.placeholderClass} style={{ ...AMOUNT_INPUT, width: '100%', flex: 1 }} />
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: 'var(--wr-text-3)', padding: '0 6px', borderLeft: '1px solid var(--wr-border)', lineHeight: '26px', whiteSpace: 'nowrap' }}>ETH</span>
+                            </div>
+                            {err && (
+                              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', marginTop: '4px' }}>{err}</div>
+                            )}
+                          </>
                         )}
                       </div>
                     );
@@ -802,6 +846,11 @@ export default function DistributeModal({
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 <UnitLabel skin={skin} /></span>
             </div>
 
+            {!distKey && (
+              <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                Add an Alchemy API key in Settings before sending.
+              </div>
+            )}
             {nftPreviewError && (
               <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(nftPreviewError)}</div>
             )}
@@ -879,6 +928,33 @@ export default function DistributeModal({
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Gas estimate</span>
               <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-2)' }}>~0.002 <UnitLabel skin={skin} /></span>
             </div>
+
+            {/* Envelope verdict — this, not the gas estimate above, is what
+                actually gates Confirm & Send. Previously nothing here told the
+                user why the button was disabled; it just sat grey. */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)' }}>Spending envelope</span>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: previewBusy ? 'var(--wr-text-4)' : canSend ? 'var(--wr-accent)' : '#ff8a96' }}>
+                {previewBusy ? 'Checking…' : canSend ? 'Authorized' : 'Not authorized'}
+              </span>
+            </div>
+            {!distKey && (
+              <div style={{ padding: '0 14px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                Add an Alchemy API key in Settings before sending.
+              </div>
+            )}
+            {previewError && (
+              <div style={{ padding: '0 14px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>{explainSendError(previewError)}</div>
+            )}
+            {!previewBusy && !previewError && selectedList
+              .filter(w => previews[w.id]?.authorized !== true)
+              .map(w => (
+                <div key={w.id} style={{ padding: '0 14px', fontFamily: 'var(--font-jetbrains)', fontSize: '10px', color: '#ff8a96', lineHeight: 1.6 }}>
+                  {w.name}: {previews[w.id]
+                    ? explainSendError(previews[w.id].reject_code ?? previews[w.id].reject_reason ?? 'The envelope did not authorize this transfer.')
+                    : 'Could not evaluate this destination against the envelope — check the amount entered in Step 1.'}
+                </div>
+              ))}
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <button onClick={() => setStep(1)} style={{

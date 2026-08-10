@@ -3,6 +3,28 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-10): T11 — Distribute Funds validation fixes (Emir'in gerçek bug raporu)
+
+Full findings per madde (a/b/c/d): `docs/TASKS.md` T11 → "forge bulguları" bölümü.
+Değişen dosyalar: `src/lib/distribute.ts`, `src/components/DistributeModal.tsx`,
+`src/app/bulk/distribute/page.tsx`. Kod-seviyesi doğrulama temiz (tsc/eslint/jest),
+**gerçek tıklamayla doğrulanmadı** — bu ortamda browser automation aracı yok, `vera`
+gerçek tıklamayla test etmeden bu iş "bitti" sayılamaz.
+
+Kısaca ne değişti:
+- Confirm & Send'in sebepsiz pasif kalması: `DistributeModal.tsx`'in "Send Funds"
+  sekmesine (Send NFT sekmesinde zaten olan) envelope durumu/red sebebi UI'ı eklendi;
+  ayrıca Step 1/Step 2 arasındaki tutar-geçerliliği kontrolü tekilleştirildi
+  (`isValidEthAmount`, `src/lib/distribute.ts`).
+- Her tutar kutusuna anlık kırmızı hata metni eklendi (`amountFieldError`).
+- `DistributeModal.tsx`'teki "Amount per wallet" kutusu — görsel olarak tamamı
+  tıklanabilir görünüp sadece küçük bir input'u işlevsel olan hata — tek gerçek
+  `flex:1` input olacak şekilde düzeltildi. `bulk/distribute/page.tsx`'teki aynı kutu
+  zaten doğruydu, sadece placeholder/hata metni eklendi.
+- Cüzdan başına farklı tutar (custom mode): state/veri akışı kod seviyesinde zaten
+  doğruydu; asıl engel muhtemelen aynı "düğme hiç aktifleşmiyor" hatasıydı. Ayrı
+  gerçek tıklamayla teyit gerekiyor.
+
 ## Update (2026-08-10): T6/T9/T10 batch — wallet-detail Distribute CTA, NFT transfer, bulk/distribute reconnect
 
 Full task list and per-item verification detail: `docs/TASKS.md`. Pushed to `cowork-merge` (`aa03590`).

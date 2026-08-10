@@ -64,6 +64,23 @@ export function parseEthToWei(input: string): bigint | null {
   return BigInt(whole || '0') * WEI_PER_ETH + BigInt((frac + '0'.repeat(18)).slice(0, 18) || '0');
 }
 
+/**
+ * True only for a string that will actually survive `parseEthToWei` and be
+ * greater than zero. Step 1's "can I proceed" checks used to run on
+ * `parseFloat(input) > 0` while Step 2's preview effect and the real send
+ * both run on `parseEthToWei`. The two disagree on inputs like `"1e-5"`
+ * (parseFloat accepts it, parseEthToWei's decimal-only regex rejects it):
+ * Step 1 would let the user through, Step 2 would silently drop that
+ * destination out of `previews` (the `wei == null` branch just `continue`s),
+ * and Confirm & Send would stay disabled forever with no visible reason.
+ * Every "is this amount OK" check in the UI should go through this one
+ * function so that can never happen again.
+ */
+export function isValidEthAmount(input: string): boolean {
+  const wei = parseEthToWei(input);
+  return wei != null && wei > BigInt(0);
+}
+
 export function formatWeiToEth(wei: bigint, dp = 6): string {
   const whole = wei / WEI_PER_ETH;
   const frac = (wei % WEI_PER_ETH).toString().padStart(18, '0').slice(0, dp).replace(/0+$/, '');
