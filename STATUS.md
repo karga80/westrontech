@@ -3,6 +3,59 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-10): T17 — Wallet-level autonomy policies, done, security-reviewed, real click-through
+
+**What it is:** a wallet-level autonomy gate in front of every real signing/marketplace path
+(ETH sends, NFT transfers, marketplace list/bid/cancel). Each wallet is `manual` / `assisted` /
+`autonomous`; `autonomous` mode only ever lets `Mint` auto-execute, and only within an active,
+unexpired rule (contract allowlist, per-tx cap, total budget cap, rate limit) — every other
+action type always requires manual approval, no matter the mode. Global kill switch overrides
+everything. Full spec: `docs/WALLET_AUTONOMY_POLICY_BRIEF.md`.
+
+**Real, not mock:** real Rust engine (`src-tauri/src/autonomy/engine.rs`, a pure `evaluate()`
+backing both the read-only preview and the budget-consuming `check_and_authorize`, same pattern
+as the envelope engine), real per-wallet JSON persistence (`autonomy/store.rs`), real
+hash-chained tamper-evident audit log (`autonomy/audit.rs`, keccak256-linked JSONL, verified by
+real tamper tests), real pending-approval queue (`autonomy/pending.rs` +
+`list/approve/reject_action_proposal` Tauri commands), real UI
+(`src/app/settings/AutonomySection.tsx`). Sniping stays simulation-mode — unchanged, out of
+scope for T17, already correctly documented in `MOCKS.md`.
+
+**Build order (5 phases):** (a) pure policy engine + rule precedence chain, (b) persistent
+per-wallet policy store, (c) hash-chained audit log, (d) wiring into the real signing/
+marketplace commands, (e) pending-approval queue + settings UI (mode selector, rule create/
+delete, audit log view, kill-switch link).
+
+**Security review found 2 CRITICAL + 1 MEDIUM, all fixed and tested this session:**
+1. **CRITICAL** — `LocalSigner::sign_and_send` never verified the caller-supplied
+   `wallet_address` against the key it actually signed with. Fixed by sharing
+   `wallet::keychain::fetch_and_verify_key` (derives the address from the key itself, rejects
+   on mismatch) between `marketplace/client.rs` and `signing/mod.rs` — one implementation, not
+   two that could drift apart.
+2. **CRITICAL** — `approve_action_proposal` had no atomic claim step: two concurrent calls for
+   the same pending proposal (double-click, retried IPC call) could both execute — a real
+   double-send or double-order-submit. Fixed with an in-memory `Mutex<HashSet<String>>` claim,
+   tested with genuinely concurrent OS threads and `tokio` tasks confirming only one execution
+   ever gets through.
+3. **MEDIUM** — the audit log's `verify_chain` existed and was tested but was never called
+   before allowing execution — a tampered/corrupted chain would not have stopped anything.
+   Now runs at the top of `check_and_authorize`; a broken chain fails closed (`Deny`) for that
+   wallet. Tested by corrupting a real audit file on disk and confirming the next check denies.
+
+**Verified:** `cargo check --lib` clean, `cargo test --lib` 164/164 (161 baseline + 3 new
+tests for the findings above — all actually run, not estimated). `npx tsc --noEmit` clean. UI
+click-verified against the real running app: mode selector, confirmation gate, rule create/
+delete, cross-wallet isolation, kill-switch link, audit log persistence.
+
+**Open item — FIRST thing next session should look at:** an unlabeled, masked input field was
+noticed next to the wallet-address input on the Sniping & Automation page during this final
+verification pass. Not yet investigated — what it is, what it's bound to, and where its value
+goes (localStorage? component state? a Tauri command payload?) is unknown. This needs to be
+treated with real care, not a quick glance: it visually matches the shape of the 09.08.2026
+incident already documented in this project's `CLAUDE.md` (a private key being written into an
+address-shaped field, going to plaintext `localStorage`, and being sent to Alchemy as an
+address parameter). Do not assume it's benign until traced end to end.
+
 ## Update (2026-08-10): T13 — Log In fix re-verified by real clicking, T13 done, pushed
 
 Two fresh `vera` re-verification dispatches failed to even start (hit critical-low context

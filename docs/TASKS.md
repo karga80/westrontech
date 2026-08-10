@@ -1168,7 +1168,7 @@ denmez.
 **Ajanlar:** → Emir'e sor (staging ortamı/test cüzdanı kurulumu onun hesap açması gerektiren bir
 adım olabilir — CLAUDE.md madde 6) → sonra `vault`/`vera`.
 
-## T17 — Cüzdan bazlı otonomi politikaları (wallet autonomy policy sistemi) 🆕 10.08.2026, Emir'in brief'inden — HENÜZ BAŞLANMADI, sadece kayıt
+## T17 — Cüzdan bazlı otonomi politikaları (wallet autonomy policy sistemi) ✅ TAMAMLANDI 10.08.2026 — 5 faz bitti, güvenlik incelemesinden geçti, gerçek tıklamayla doğrulandı
 
 Emir'in verdiği tam brief **`docs/WALLET_AUTONOMY_POLICY_BRIEF.md`** dosyasına taşındı — bu
 görevin tek doğru kaynağı odur, aşağıdaki madde sadece özettir. Uygulamaya başlamadan önce o
@@ -1241,3 +1241,46 @@ geçmeli (finansal/imza kodu).
 `forge`+`vault` (UI ve backend birlikte, CLAUDE.md'nin "aynı adresten gönderim sıralı" kuralı
 gereği eş zamanlı dosya çakışmasına dikkat) → `security-reviewer` → `vera` (gerçek tıklama,
 kill switch dahil).
+
+### Kapanış (10.08.2026) — gerçek, mock değil
+
+5 faz tamamlandı: (a) saf `AutonomyEngine::evaluate()` + kural motoru, (b) kalıcı politika
+deposu (`autonomy/store.rs`, cüzdan başına dosya), (c) hash-zincirli audit log
+(`autonomy/audit.rs`, keccak256 ile zincirlenmiş, tamper-evident), (d) gerçek imza/marketplace
+yollarına kablolama (`send_eth`, `transfer_nft`, `marketplace::list/bid/cancel` — hepsi
+`check_and_authorize`'dan geçiyor), (e) onay bekleyen işlem kuyruğu
+(`autonomy/pending.rs` + `list/approve/reject_action_proposal` komutları) ve UI
+(`src/app/settings/AutonomySection.tsx`, mod seçici, kural oluşturma/silme, audit log görünümü,
+kill switch bağlantısı).
+
+Gerçek: Rust motoru gerçek, kalıcılık diske gerçek JSON/JSONL dosyaları yazıyor, audit log
+gerçek keccak256 zinciri (tamper testleriyle doğrulandı), Tauri komutları gerçek, UI gerçek
+komutlara bağlı. Sniping tarafı hâlâ simülasyon modunda — bu T17'nin kapsamı dışında,
+`MOCKS.md`'de zaten kayıtlı, değişmedi.
+
+**Güvenlik incelemesi bulguları — hepsi bu turda düzeltildi:**
+1. **KRİTİK** — `signing::LocalSigner::sign_and_send` çağıranın verdiği `wallet_address`'i
+   imzalayan key ile hiç karşılaştırmıyordu. `wallet::keychain::fetch_and_verify_key` (adres
+   key'den türetilip karşılaştırılıyor) artık paylaşılan tek fonksiyon; hem
+   `marketplace/client.rs` hem `signing/mod.rs` bunu kullanıyor.
+2. **KRİTİK** — `approve_action_proposal` aynı bekleyen işlemi iki kez çalıştırabiliyordu
+   (çift tıklama/tekrarlanan IPC çağrısı → çift ETH gönderimi veya çift marketplace emri).
+   Bellek içi `Mutex<HashSet<String>>` ile atomik "claim" adımı eklendi; eşzamanlı iki onay
+   testi (`gerçek OS thread'leriyle` ve `tokio` ile) sadece birinin yürüdüğünü doğruluyor.
+3. **ORTA** — hash-zincirli audit log'un `verify_chain` fonksiyonu vardı ve test edilmişti
+   ama hiçbir yerden çağrılmıyordu. Artık `check_and_authorize`'ın en başında çalışıyor;
+   zincir bozuksa/kurcalanmışsa otonom yürütme o cüzdan için `Deny` ile kilitleniyor
+   (fail-closed). Kurcalanmış bir audit dosyasıyla test edildi.
+
+**Doğrulama:** `cargo check --lib` 0 hata, `cargo test --lib` 164/164 geçti (önceki 161 + bu
+turun 3 yeni testi). `npx tsc --noEmit` temiz. UI gerçek tıklamayla doğrulandı: mod seçici,
+onay gate'i, kural oluşturma/silme, cüzdanlar-arası izolasyon, kill switch bağlantısı, audit
+log kalıcılığı.
+
+**Açık kalan tek madde — sonraki oturumun İLK bakacağı şey:** Sniping & Automation
+sayfasında, cüzdan-adresi input'unun yanında **etiketsiz, maskelenmiş bir alan** bulundu (son
+doğrulama turunda), henüz incelenmedi. Bu projenin CLAUDE.md'sinde belgelenen 09.08.2026
+olayı (private key'in adres alanına yazılıp düz metin localStorage'a gitmesi) tam olarak bu
+şekle benziyor — rastgele/gündelik bir gözle geçmemeli, ilk iş olarak açılıp ne olduğu,
+neye bağlı olduğu ve nereye gittiği (localStorage? state? bir komuta mı gidiyor?) satır satır
+izlenmeli.
