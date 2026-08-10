@@ -3,7 +3,26 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
-## Update (2026-08-11): T13 — Log In flakiness (vera's click-through), fix + open question
+## Update (2026-08-10): T13 — Log In fix re-verified by real clicking, T13 done, pushed
+
+Two fresh `vera` re-verification dispatches failed to even start (hit critical-low context
+after 2-4 tool calls, before touching the app). `orion` was dispatched instead and ran the
+real flow against the live worker: Sign Up → Log Out → Log In ×4 (2 typed, 2 pasted with a
+deliberately injected leading/trailing space + trailing newline — the exact defect shape the
+trim fix targets). **4/4 Log In attempts succeeded, zero retries needed.** The suspected
+mechanism (untrimmed password) is confirmed closed; a first-attempt human typo in the
+original report can't be ruled out with certainty (unfalsifiable), but the fix demonstrably
+holds under the worst-case whitespace scenario. Test account
+(`t13-verify-4471@example.com`) deleted from the live D1 database afterward, deletion
+confirmed with a follow-up `SELECT`. A stray local-only session artifact from an earlier
+stalled `vera` attempt (`vera-t13-probe@westron.local`) was also logged out of — it was never
+actually persisted server-side, so no D1 cleanup was needed for it.
+
+**T13 is done:** real protocol end-to-end (Rust + frontend), real signup/login/logout/check-
+status all clicked through against the live deployed worker, no fake success values, no
+mocks. Commits `3c69033`, `036f7f0`, `05a8b60` pushed to `origin/cowork-merge`.
+
+## Update (2026-08-10, superseded above): T13 — Log In flakiness (vera's click-through), fix + open question
 
 vera clicked through the whole flow for real: Sign Up, Check Status, Log Out, D1 cleanup all
 verified correctly. **Log In was inconsistent**: the first attempt with the same email/password

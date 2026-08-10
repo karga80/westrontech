@@ -1094,11 +1094,22 @@ sonraki girişe sızmasın diye — ayrı, daha küçük bir hijyen düzeltmesi)
 
 **Doğrulanan:** `cargo check`, `cargo test --lib subscription::` (9/9 geçti), `npx tsc --noEmit`
 — hepsi temiz.
-**Doğrulanmayan (açıkça belirtiliyor):** Bu değişikliğin gerçek Log In tutarsızlığını çözüp
-çözmediği gerçek uygulamada tıklanarak denenmedi. Bir sonraki `vera` turu login akışını birkaç
-kez art arda (özellikle parolayı panodan yapıştırarak ve elle yazarak) deneyip: (a) hâlâ
-tekrarlanıyorsa kök nedenin başka yerde olduğunu, (b) tekrarlanmıyorsa bu düzeltmenin işe
-yaradığını doğrulamalı.
+**10.08.2026 — gerçek tıklamayla doğrulandı (`orion`, iki `vera` turu context tükenmesiyle
+başlayamadığı için ürün tarafından devralındı):** Canlı Worker'a karşı Sign Up → Log Out →
+Log In ×4 (2 elle yazarak, 2'si bilinçli olarak bozuk panoya kopyalama simülasyonu —
+sondaki `\n`, başta/sonda boşluk) çalıştırıldı. **4/4 başarılı, hiç yeniden deneme
+gerekmedi.** Özellikle düzeltmenin hedeflediği görünmez-boşluk senaryosu bilerek enjekte
+edildi ve login'i bozmadı — orijinal raporun kök nedeni (insan yazım hatası) kesin olarak
+dışlanamaz (yapısal olarak kanıtlanamaz), ama vault'un şüphelendiği mekanizma (trim
+edilmemiş parola) artık kapalı. Test hesabı (`t13-verify-4471@example.com`) D1'den silindi
+ve silme doğrulandı (`SELECT` boş döndü). Ayrıca önceki context-tükenmesi yaşayan bir
+`vera` turundan kalma, sunucu tarafında hiç kaydı olmayan (yerel Keychain/oturum
+artığı) `vera-t13-probe@westron.local` hesabından da çıkış yapıldı — D1'de bu email için
+kayıt bulunmadığından silinecek bir şey yoktu.
+
+**Sonuç: T13 tamamlandı.** `cargo check`/`cargo test`/`tsc --noEmit` temiz + gerçek
+signup/login/logout/check-status akışı canlı Worker'a karşı gerçek tıklamayla doğrulandı.
+Commit'ler (`3c69033`, `036f7f0`, `05a8b60`) push edildi.
 
 ## T14 — Alchemy proxy rotaları masaüstü istemcisiyle uyuşmuyor 🆕 10.08.2026, `API.md`'den
 

@@ -31,10 +31,14 @@ All 5 secrets are set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY
   `subscriptionLogout`/`subscriptionCurrentAccount` wrappers. `src/app/settings/page.tsx`'s
   Billing section has a plain email/password sign-up/log-in/log-out form (unstyled is fine, per
   task scope) and no longer reads a wallet address for the check. `npx tsc --noEmit` is clean.
-  **Not yet verified:** this frontend wiring has only been typechecked, not clicked through in
-  the actual running desktop app — nobody has signed up, logged in, or seen "Check Status" show
-  a real active/inactive result on screen yet. That real-UI pass is still owed before this is
-  called fully done end-to-end.
+  **Verified end-to-end by real clicking (10.08.2026, `vera` then `orion`):** Sign Up, Check
+  Status, Log Out all confirmed working in the running desktop app against the live worker.
+  Log In was initially flaky (real 401 on first attempt, succeeded on manual retry) — traced
+  to an untrimmed password field, fixed in `05a8b60`, then re-verified with 4 real Log In
+  attempts (2 typed, 2 pasted with injected leading/trailing whitespace and a trailing
+  newline, deliberately targeting the suspected defect) — all 4 succeeded, 0 retries needed.
+  Test accounts created during verification were deleted from the live D1 database
+  afterward. This item is fully done end-to-end, not just typechecked.
 - API-key proxy (`/proxy/alchemy/*`, `/proxy/opensea/*`, `/proxy/etherscan/*`): **real**, each
   provider verified with a live authenticated request returning real data (real block number,
   real ETH supply, real BAYC collection data). See `probes/subscription-worker-proxy.md`.
