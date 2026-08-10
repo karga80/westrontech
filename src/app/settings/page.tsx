@@ -950,6 +950,9 @@ function NotificationsSection() {
 const PAYMENT_WALLET   = '0xYOUR_PAYMENT_WALLET_ADDRESS';
 const MONTHLY_ETH      = '0.01';
 const ANNUAL_ETH       = '0.09';
+// PAYMENT_WALLET above is a placeholder, not a real address — never show it as
+// something a user can send funds to until it's replaced with the real one.
+const PAYMENT_CONFIGURED = /^0x[a-fA-F0-9]{40}$/.test(PAYMENT_WALLET);
 
 function BillingSection() {
   const [sub, setSub] = useState<SubscriptionState | null>(null);
@@ -1100,21 +1103,32 @@ function BillingSection() {
             <span style={{ flex: 1 }} />
             <Tag variant="accent" size="xs">Save ~25%</Tag>
           </div>
-          {/* Payment address row */}
-          <div style={rowStyle}>
-            <span style={labelStyle}>Send To</span>
-            <span style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', wordBreak: 'break-all' }}>{PAYMENT_WALLET}</span>
-            <button onClick={handleCopy}
-              style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', padding: '4px 10px', cursor: 'pointer', backgroundColor: 'transparent', color: copied ? 'var(--wr-success)' : 'var(--wr-accent)', border: '1px solid var(--wr-border)', flexShrink: 0 }}>
-              {copied ? '✓ Copied' : 'Copy'}
-            </button>
-          </div>
-          {/* Note row */}
-          <div style={{ padding: '8px 16px', borderTop: 'none' }}>
-            <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', lineHeight: 1.6 }}>
-              Send from your imported wallet. Subscription activates within minutes after confirmation. Then click Check Status above.
-            </span>
-          </div>
+          {PAYMENT_CONFIGURED ? (
+            <>
+              {/* Payment address row */}
+              <div style={rowStyle}>
+                <span style={labelStyle}>Send To</span>
+                <span style={{ flex: 1, fontFamily: 'var(--font-jetbrains)', fontSize: '12px', color: 'var(--wr-text)', wordBreak: 'break-all' }}>{PAYMENT_WALLET}</span>
+                <button onClick={handleCopy}
+                  style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.05em', padding: '4px 10px', cursor: 'pointer', backgroundColor: 'transparent', color: copied ? 'var(--wr-success)' : 'var(--wr-accent)', border: '1px solid var(--wr-border)', flexShrink: 0 }}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+              {/* Note row */}
+              <div style={{ padding: '8px 16px', borderTop: 'none' }}>
+                <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-text-3)', lineHeight: 1.6 }}>
+                  Send from your imported wallet. Subscription activates within minutes after confirmation. Then click Check Status above.
+                </span>
+              </div>
+            </>
+          ) : (
+            /* Payment address not configured yet — do NOT show a fake "Send To" address. */
+            <div style={{ padding: '8px 16px', borderTop: 'none' }}>
+              <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '11px', color: 'var(--wr-danger)', lineHeight: 1.6 }}>
+                Payment not set up yet — subscribing is not available in this build. Do not send funds; no address has been configured.
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
