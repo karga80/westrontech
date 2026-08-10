@@ -766,7 +766,7 @@ Emir döndüğünde tek ekranda görülecek şekilde özetlenir.
 
 ---
 
-## T11 — Distribute Funds gerçekte çalışmıyor  🆕 10.08.2026, Emir gerçek kullanımda buldu, ÖNCELİKLİ
+## T11 — Distribute Funds gerçekte çalışmıyor  ✅ TAMAMLANDI 10.08.2026 (vera gerçek tıklamayla doğruladı)
 
 Emir'in kendi sözleri (uygulamayı gerçekten kullanarak test etti — vera'nın "kod temiz"
 demesi yetmedi, çünkü hiçbir ajan gerçek tıklama yapamadı):
@@ -906,3 +906,96 @@ bir işleve bağlanıyor (hangisi olduğu net yazılıyor); cüzdan başına far
 uçtan uca (gerçek tıklamayla) doğrulanıyor. Bunların hepsi `vera` tarafından gerçek
 tıklamayla teyit edilmeden "bitti" sayılmaz — bu T11 zaten "vera kod okuyup doğru
 görünüyor dedi ama gerçekte çalışmıyordu" örneği olduğu için ekstra dikkatli doğrulanacak.
+
+### vera doğrulaması (10.08.2026) — gerçek GUI tıklamasıyla
+
+**Yöntem (dürüstlük notu):** Bu ortamda Playwright/Puppeteer/Cypress yok. Onun yerine
+çalışan dev uygulamasına (`npm run dev:tauri`, `target/debug/app` süreci `ps aux` ile
+canlı doğrulandı) karşı gerçek OS-seviyesi tıklama yapıldı: `osascript`/System Events
+(Accessibility API) + `cliclick` + `screencapture -x`, her adımda ekran görüntüsü alınarak.
+Bu kod okuma değil, gerçek fare tıklaması ve gerçek klavye girişidir.
+
+**Ortam kirliliği ve düzeltmesi:** Bu makinede aynı anda açık diğer masaüstü uygulamaları
+(Outlook, ChatGPT, Chrome, WhatsApp) sık sık `frontmost` durumunu çalıyor; bu yüzden ilk
+turlarda bazı tıklamalar sessizce başka bir uygulamaya gitti ve geçici olarak "checkbox
+tıklanamıyor" sanrısına yol açtı. Çözüm: her tıklamadan hemen önce aynı bash komutunda
+`set frontmost of process "app" to true && cliclick ...` şeklinde zincirleme (atomic) yapıldı.
+Bu yöntemle önceden "kırık" görünen checkbox'lar (t2/t4) da dahil her element güvenilir
+şekilde tıklanabildi — önceki şüphe ortam kaynaklıydı, uygulama hatası değildi. Ayrıca
+oturum sırasında kazayla Window menüsünden "Minimize" tıklandı, `AXRaise`/cmd+tab ile
+düzeltildi, uygulama görsel olarak sağlam bırakıldı (aşağıda "sonuç" kısmına bakın).
+
+**Madde a — DOĞRULANDI.** Wallet-detail sayfasındaki "Distribute" CTA'sından açılan
+DistributeModal'da (FROM kilitli = t1, CUSTOM mode): t2'ye 0.011 ETH, t4'e 0.022 ETH
+yazıldığında "Review (2 wallets)" düğmesi devre dışından parlak yeşil aktife geçti;
+t4'ün tutarı "abc" yapıldığında düğme anında tekrar devre dışı kaldı (gri, not-allowed
+imleç) — her iki yön de canlı gözlemlendi. Dashboard CTA'sından açılan ikinci, bağımsız
+DistributeModal örneğinde (FROM açık dropdown, t1 seçildi, EQUAL mode) aynı davranış
+tekrarlandı: t2 işaretlenip 0.005 ETH yazılınca "Review (1 wallet)" pasiften aktife geçti.
+
+**Madde b — DOĞRULANDI.** Geçersiz tutar ("abc") yazılan alanın hemen altında kırmızı
+"Invalid amount — enter a number greater than 0" metni ve alanın kırmızı border'ı, herhangi
+bir gönder/submit gerekmeden, input anında belirdi. İki ayrı modal örneğinde de gözlemlendi.
+
+**Madde c — DOĞRULANDI (DistributeModal.tsx için).** CUSTOM modda t2 ve t4 için gerçekten
+iki ayrı, bağımsız düzenlenebilir, tam genişlikte input görüldü — biri değiştirilince diğeri
+etkilenmedi. EQUAL modda tek, tam genişlikte gerçek input ve dinamik placeholder ("Amount
+per wallet (applies to all N selected)") gözlemlendi. Forge'un iddia ettiği "artık büyük
+ama işlevsiz kutu yok" doğrulandı.
+
+**Madde d — DOĞRULANDI.** t2=0.011 ETH, t4=0.022 ETH farklı tutarlarla CUSTOM modda
+"Review" tıklanıp (Confirm & Send'e **asla** basılmadı) Step 2 "Confirm" ekranına geçildi:
+ekranda t2 satırı 0.011 ETH, t4 satırı 0.022 ETH olarak ayrı ayrı doğru gösterildi, Total
+0.0330 ETH olarak doğru toplandı. Bu, farklı cüzdan tutarlarının önizleme adımına doğru
+aktığının doğrudan görsel kanıtıdır.
+
+**Ek gözlem (T11 kapsamı dışı, karışmasın diye not):** Step 2'de "Spending envelope: Not
+authorized" ve her cüzdan için insan-okunur red sebebi gösterildi, Confirm & Send bu yüzden
+pasif kaldı. Bu CLAUDE.md'deki zarf modelinin doğru çalıştığının kanıtıdır — madde a'daki
+"sebepsiz pasif düğme" hatasıyla karıştırılmamalı, çünkü burada sebep ekranda açıkça yazılıydı.
+
+**`src/app/bulk/distribute/page.tsx` — DOĞRULANAMADI, ve ayrıca yeni bir bulgu: bu sayfa
+uygulama içinden hiçbir yerden erişilebilir değil.** `grep -rli "distribute" src/` ile
+üç gerçek giriş noktası da tarandı: `src/app/page.tsx` (Dashboard CTA), `src/app/wallets/page.tsx`,
+`src/app/wallet/[id]/WalletDetailClient.tsx` — üçü de yalnızca `DistributeModal` component'ini
+açıyor. Kod tabanının hiçbir yerinde `/bulk/distribute`'a giden bir `<Link>`, `router.push`
+veya benzeri bir gezinme çağrısı yok (üst nav'daki "Bulk" sekmesi tıklanarak doğrulandı —
+List/Bid/Cancel kartlarına gidiyor, distribute'a değil). Yani bu 791 satırlık ayrı
+implementasyon şu an gerçek kullanıcı akışında **ölü kod / yetim sayfa**: yalnızca adres
+çubuğuna elle URL yazarak erişilebilir, ki Tauri masaüstü uygulamasında kullanıcının böyle
+bir adres çubuğu yok. Bu ekranda madde a/b/c/d canlı tıklamayla test edilmedi — çünkü gerçek
+kullanıcı bu ekrana hiç ulaşamıyor, test etmek yanlış bir güvence verirdi. Bu ayrıca
+CLAUDE.md'nin "aynı işi yapan iki üç ekran büyütüp birbirinden ayırma" uyarısının somut bir
+örneği: `DistributeModal` gerçek/kullanılan yol, `bulk/distribute/page.tsx` kullanılmayan
+bir ikinci implementasyon.
+
+**Sonuç:** Emir'in bildirdiği 4 maddenin hepsi (a, b, c, d) gerçek GUI tıklamasıyla, iki
+ayrı DistributeModal giriş noktasında (Dashboard CTA + wallet-detail CTA) tekrar tekrar
+doğrulandı, gönderim **hiçbir zaman** tetiklenmedi. `bulk/distribute/page.tsx` doğrulanamadı
+çünkü uygulama içinden erişilebilir değil — bu, T11'in orijinal kapsamından bağımsız yeni
+bir temizlik maddesi (bkz. T12).
+
+**T11 durumu: ✅ TAMAMLANDI** — Emir'in gerçekte kullandığı ve şikayet ettiği yol
+(`DistributeModal`, üç gerçek giriş noktasının hepsinde) için 4 madde de gerçek tıklamayla
+doğrulandı. `bulk/distribute/page.tsx`'in erişilemez/yetim olması T11'i geçersiz kılmıyor
+(Emir o ekrandan hiç bahsetmedi ve zaten ulaşamıyor) ama T12 olarak takip edilmeli.
+
+---
+
+## T12 — `src/app/bulk/distribute/page.tsx` yetim sayfa, temizlenmeli  🆕 10.08.2026, vera buldu
+
+T11 doğrulaması sırasında bulundu: `src/app/bulk/distribute/page.tsx` (791 satır, kendi
+state'i, kendi validasyonu, `DistributeModal.tsx`'ten tamamen bağımsız ikinci bir
+implementasyon) uygulama içinde **hiçbir yerden** bağlı değil. `grep -rn "bulk/distribute" src/`
+sonucu boş — hiçbir `<Link>`/`router.push` yok. Üst nav'daki "Bulk" sekmesi List/Bid/Cancel'a
+gidiyor, bu sayfaya değil. Gerçek kullanıcı bu ekrana asla ulaşamıyor.
+
+**Bitti sayılır:** Ya (a) sayfa silinir ve `docs/TASKS.md`'deki T9c gibi eski referanslar
+"artık kullanılmıyor" diye güncellenir, ya da (b) gerçekten kullanılacaksa nav'a bağlanır
+VE `DistributeModal.tsx` ile aynı `isValidEthAmount`/`amountFieldError` mantığını paylaştığı
+kod incelemesiyle (ya da tercihen tek bir paylaşılan component'e indirgenerek) teyit edilir.
+CLAUDE.md'nin "aynı işi yapan iki üç ekran büyütme" kuralı gereği (b) yerine (a) tercih edilmeli
+— iki implementasyonu senkron tutmak kalıcı bir bakım yüküdür ve zaten bir kez (T11'de)
+ayrışmaya sebep oldu.
+
+**Ajanlar:** → Emir'e sor (silinsin mi, yoksa nav'a mı bağlansın) → `forge` (karara göre uygula).
