@@ -472,12 +472,45 @@ fn open_external_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("failed to open URL: {}", e))
 }
 
-/// Check subscription status for a wallet. Fetches a fresh signed license from
-/// the worker when online, verifies it with the embedded public key, caches it,
-/// and re-verifies offline with clock-rollback protection. See `subscription` module.
+/// Check subscription status for the currently logged-in account. Fetches a
+/// fresh signed license from the worker when online, verifies it with the
+/// embedded public key, caches it, and re-verifies offline with
+/// clock-rollback protection. See `subscription` module. Returns an
+/// `active: false` result with an explanatory `error` if no account is
+/// logged in yet — call `subscription_signup`/`subscription_login` first.
 #[tauri::command]
-async fn check_subscription(wallet_address: String) -> subscription::SubscriptionCheckResult {
-    subscription::evaluate(&wallet_address).await
+async fn check_subscription() -> subscription::SubscriptionCheckResult {
+    subscription::evaluate().await
+}
+
+/// Create a new account (email + password) and store the resulting session.
+#[tauri::command]
+async fn subscription_signup(
+    email: String,
+    password: String,
+) -> Result<subscription::SubscriptionCheckResult, String> {
+    subscription::signup(&email, &password).await
+}
+
+/// Log in to an existing account and store the resulting session.
+#[tauri::command]
+async fn subscription_login(
+    email: String,
+    password: String,
+) -> Result<subscription::SubscriptionCheckResult, String> {
+    subscription::login(&email, &password).await
+}
+
+/// Forget the current session and its cached license.
+#[tauri::command]
+fn subscription_logout() -> Result<(), String> {
+    subscription::logout()
+}
+
+/// Email of the currently logged-in account, if any — for display only.
+#[tauri::command]
+fn subscription_current_account() -> Option<String> {
+    subscription::current_account_email()
 }
 
 // ── NFT PnL: locally-stored cost basis (recorded once from marketplace sales) ──
@@ -840,6 +873,10 @@ pub fn run() {
         fetch_nft_detail,
         open_external_url,
         check_subscription,
+        subscription_signup,
+        subscription_login,
+        subscription_logout,
+        subscription_current_account,
         start_stream,
         stop_stream,
         get_stream_status,

@@ -3,6 +3,55 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-10): T13 — subscription protocol rewrite, Rust side only
+
+`docs/TASKS.md` T13: the deployed Cloudflare Worker moved to an account + bearer-token
+protocol (`POST /signup`/`POST /login` → `{token, account, access, license}`,
+`POST /license` requires `Authorization: Bearer <token>` → `{access, license:{payload, sig}}`,
+`license.payload` is `{account_id, email, active, reason, plan, expires_at, issued_at}`), but
+`src-tauri/src/subscription/mod.rs` still spoke the old wallet-based protocol
+(`POST /license {wallet}`, no auth header, top-level `{active, payload, sig}`). Every real
+subscription check from the desktop app was silently getting a `401` and falling back to a
+stale/no cache — **no real subscription could be confirmed on desktop.**
+
+**Rust side — done, verified against the live worker, committed:**
+- `src-tauri/src/subscription/mod.rs` fully rewritten: `signup()`, `login()`, `logout()`,
+  `current_account_email()`, and a token-based `evaluate()` (no `wallet` argument anymore).
+  `Payload` now matches the worker's account-shaped JSON exactly — the old wallet shape is
+  **structurally rejected** (fails to deserialize), not bridged. Signature verification
+  (`verify()`) and the anti-rollback disk cache (`store_license`/`load_license`,
+  `last_seen`/`effective_now`) are unchanged in mechanism, just applied to the new payload shape.
+  A `401` from `/license` (bad/expired token) is treated as "log in again", distinct from a
+  network failure (which still falls back to the offline cache) — these were conflated before.
+- `src-tauri/src/wallet/keychain.rs`: added `store_subscription_token`/`fetch_subscription_token`/
+  `delete_subscription_token`, same dispatch pattern as `store_alchemy_key` etc.
+- `src-tauri/src/lib.rs`: `check_subscription` no longer takes `wallet_address`; added
+  `subscription_signup`, `subscription_login`, `subscription_logout`,
+  `subscription_current_account` Tauri commands, all registered in `invoke_handler`.
+- **Verified live** (not just read/reasoned about): real signup, real bearer-authenticated
+  `/license` fetch, real `401` on a garbage token, real login, and the returned Ed25519 signature
+  verified against the embedded `LICENSE_PUBLIC_KEY_B64` using the actual `verify()` function.
+  Probe account created and **deleted from the live D1 database** afterward. Full request/response
+  record: `probes/subscription-worker-account-protocol-t13.md`.
+- `cargo check` clean, `cargo test` 99/99 (6 new subscription tests, including one asserting the
+  old wallet-shaped payload no longer deserializes).
+
+**NOT done yet — frontend is still on the old protocol, app will not build against the new Rust
+commands until this lands:**
+- `src/lib/tauri.ts`: `checkSubscription(walletAddress)` needs to become a zero-arg call, and
+  `subscriptionSignup`/`subscriptionLogin`/`subscriptionLogout`/`subscriptionCurrentAccount`
+  wrappers need adding.
+- `src/app/settings/page.tsx` `BillingSection`/`handleCheckStatus`: currently checks a status by
+  wallet address; needs a simple email+password signup/login form (no wallet involved) before
+  "Check Status" means anything.
+- No screen has ever called `subscription_signup`/`subscription_login` through the real Tauri
+  webview — that first click-through is still owed, plus `tsc --noEmit` has not been re-run
+  since this Rust change (the frontend `checkSubscription(addr)` call site will not type-check
+  against the new zero-arg Rust command until `tauri.ts` is updated).
+- **Kalan iş, kesin adım:** bir sonraki oturum `tauri.ts` + `settings/page.tsx`'i günceller,
+  `npx tsc --noEmit` temizler, sonra gerçek uygulamada signup/login formunu deneyip "Check
+  Status"ın gerçek aktif/pasif durumu gösterdiğini gözle doğrular.
+
 ## Update (2026-08-10): T11 — Distribute Funds validation fixes (Emir'in gerçek bug raporu)
 
 Full findings per madde (a/b/c/d): `docs/TASKS.md` T11 → "forge bulguları" bölümü.

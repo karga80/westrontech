@@ -10,6 +10,27 @@ All 5 secrets are set (`LICENSE_SIGNING_KEY`, `ALCHEMY_WEBHOOK_SECRET`, `ALCHEMY
 
 - Account signup/login/trial/license issuance: **real**, verified with a live request
   (`probes/subscription-worker-signup.md`).
+- **Desktop client protocol (T13, 2026-08-10): fixed, real end-to-end at the Rust layer.**
+  Until this session `src-tauri/src/subscription/mod.rs` still spoke the *old* wallet-based
+  protocol (`POST /license {wallet}`, no `Authorization` header, expected top-level
+  `{active, payload, sig}`) against a worker that had moved to account/bearer-token auth
+  (`POST /signup`/`POST /login` → `{token,...}`, `POST /license` requires
+  `Authorization: Bearer <token>`, returns `{access, license:{payload, sig}}`). Every real check
+  from the desktop app was getting a `401` and silently falling back to a stale/no cache — **no
+  real subscription could ever be confirmed on desktop.** Rewritten to the real protocol: new
+  `subscription::signup`/`login`/`logout`/`evaluate` functions, `Payload` now matches the
+  worker's account-shaped JSON (no `wallet` field, old shape is structurally rejected — see
+  `old_wallet_shaped_payload_is_rejected` test), token stored via new Keychain wrapper
+  (`store_subscription_token`). Verified against the **live deployed worker**: real signup, real
+  bearer-authenticated `/license` fetch, real 401 on a bad token, real login, and the returned
+  signature verified against the embedded public key — see
+  `probes/subscription-worker-account-protocol-t13.md`. Test account created and deleted from
+  the live D1 database after the probe.
+  **Not yet real:** the frontend (`src/lib/tauri.ts` `checkSubscription` wrapper still expects
+  the old `wallet_address` argument that no longer exists on the Rust side, and
+  `src/app/settings/page.tsx`'s Billing section has no signup/login form) has not been updated
+  in this session — the app will not build/run against the new Rust commands until that's done.
+  Tracked as the immediate next step in `docs/TASKS.md` T13.
 - API-key proxy (`/proxy/alchemy/*`, `/proxy/opensea/*`, `/proxy/etherscan/*`): **real**, each
   provider verified with a live authenticated request returning real data (real block number,
   real ETH supply, real BAYC collection data). See `probes/subscription-worker-proxy.md`.

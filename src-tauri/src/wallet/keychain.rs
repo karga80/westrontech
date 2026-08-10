@@ -438,6 +438,23 @@ pub fn delete_etherscan_key() -> Result<(), String> {
     delete_secret("etherscan")
 }
 
+// ── Subscription session token ────────────────────────────────────────────────
+// Holds the subscription module's own JSON-encoded `{token, account_id,
+// email}` bundle. This module doesn't know or care about that shape — it only
+// stores and returns a string, same as every other secret here.
+
+pub fn store_subscription_token(session_json: &str) -> Result<(), String> {
+    store_secret("subscription_token", session_json)
+}
+
+pub fn fetch_subscription_token() -> Result<String, String> {
+    fetch_secret("subscription_token")
+}
+
+pub fn delete_subscription_token() -> Result<(), String> {
+    delete_secret("subscription_token")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
