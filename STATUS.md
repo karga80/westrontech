@@ -789,3 +789,133 @@ eksik bir provisioning profile sorunu.
 profile'ı doğru şekilde halledebilir). Henüz doğrulanmadı: gerçek uygulama build'i şu an bu sorunu
 yaşıyor mu, yoksa Tauri'nin imzalama adımı bunu zaten doğru mu yapıyor. `probes/se-acl-probe-t19.md`
 ve `docs/CUSTODY-HARDENING-PLAN.md` W-1.x bu bulguyla güncellenmeli.
+
+## Update (2026-08-12): T19 — Touch ID engelinin GERÇEK kök nedeni bulundu, önceki iki varsayım da çürütüldü
+
+Bu oturum tek bir soruya odaklandı: `keystore/mac.rs` neden `-34018 errSecMissingEntitlement`
+veriyor. Üç deney gerçekten çalıştırıldı; tam kayıt: `probes/se-entitlement-wall-t19.md`,
+probe kodu `src-tauri/examples/se_filekeychain_probe.rs`.
+
+**Önce, önceki oturumun bir yanılgısı düzeltildi.** `se_acl_probe`'un "SE P-256 keygen OK"
+sonucu yanıltıcıymış: o probe `set_location` çağırmıyor, `security-framework` v3.7.0 ise
+`is_permanent = location.is_some()` yapıyor (`src/key.rs:417`) — yani o anahtar **hiç
+saklanmıyordu**. Kalıcılık hiç test edilmemişti; T19'un ihtiyacı olan şey ise tam olarak
+kalıcılık (sonraki app açılışında aynı anahtarla decrypt).
+
+**Deney 1 — kalıcı SE anahtarı, Data Protection yerine dosya keychain'i (imzasız):** `-34018`.
+Yani engel Data Protection Keychain'e özgü değil. (Önceki oturumun "gerçek imzalı Tauri
+bundle'ında düzelebilir" varsayımının ilk yarısı çürüdü.)
+
+**Deney 2 — gerçek `.app` bundle, gerçek kimlikle imzalı, yalnız `com.apple.security.app-sandbox`:**
+yine `-34018`. Sandbox tek başına keychain erişim grubu sağlamıyor. (Bundle'da test edildi —
+"gerçek app bundle'ında düzelir" varsayımının ikinci yarısı da çürüdü.)
+
+**Deney 3 — aynı bundle + `keychain-access-groups = ["ZWAS3MG895.com.westron.app"]`, profile YOK:**
+`EXIT=137` (SIGKILL). Kendi kodumuz hiç çalışmadı, AMFI açılışta öldürdü.
+
+**Kesin sonuç: kalıcı Secure Enclave anahtarı ⇒ keychain erişim grubu entitlement'ı ⇒ binary'ye
+gömülü provisioning profile.** Keychain seçimiyle, sandbox'la veya elle `codesign` ile
+aşılamıyor. Kod hatası değil, Apple'ın platform kuralı.
+
+Yan düzeltme: sertifikadaki gerçek Team ID `ZWAS3MG895` (OU alanı); CN parantezindeki
+`66AKR5F8YX` Team ID değil (`subject= /UID=5FT87CPN2U/CN=Apple Development: ebaltepe@gmail.com
+(66AKR5F8YX)/OU=ZWAS3MG895/O=EMİR BALTEPE/C=US`).
+
+**Araştırma (kaynaklı, bir ajan Apple birincil kaynaklarını çekti) — önceki oturumun "ücretsiz
+hesapla olmaz, $99/yıl şart" tahmini de kesin değil:**
+- Apple'ın resmî macOS yetenek matrisinde **"Keychain sharing" ücretsiz ("Apple Developer")
+  sütununda da ✓** — ücretli sütunlara özel değil.
+  (developer.apple.com/help/account/reference/supported-capabilities-macos)
+- TN3137 + Apple DTS (forum 786171) net: "Secure Enclave entitlement'ı diye bir şey yok;
+  erişim, provisioning profile ile yetkilendirilmiş bir App ID gerektirir — Data Protection
+  Keychain ile aynı kural." Yani profile şart, ama tier şartı ayrı bir soru.
+- Kuvvetli hipotez: profile'ın hiç üretilmemiş olmasının nedeni **Tauri'nin Xcode'un otomatik
+  provisioning akışını hiç tetiklememesi** — Tauri yalnız `codesign` çağırıyor, App ID/profile
+  üretmiyor. Elle `codesign --entitlements` de bu makineyi hiç Apple'a kaydettirmiyor.
+- Tauri v2 profile gömmeyi resmî destekliyor: `bundle.macOS.files` ile
+  `embedded.provisionprofile` → `Contents/` (v2.tauri.app/distribute/macos-application-bundle/).
+- **Profile'sız donanım-bağlı biyometri yolu YOK.** Dosya keychain ACL'i ve
+  `LAContext.evaluatePolicy` yalnız yazılım kapısı — yerel kod çalıştırabilen saldırgan atlar,
+  donanıma bağlı değil. Bunlar "Touch ID var" diye sunulamaz.
+- **$99/yıl üyelik T19'a özgü bir maliyet DEĞİL:** notarization + Developer ID yalnız ücretli
+  üyelikte (developer.apple.com/support/compare-memberships/), ve Catalina'dan beri Mac App
+  Store dışı dağıtım için zorunlu. Yani Westron dağıtıma çıkarken bu maliyeti zaten ödeyecek.
+
+**Şu an devam eden:** bir ajan, ücretsiz yolun gerçekten çalışıp çalışmadığını ampirik olarak
+test ediyor — scratchpad'de atılabilir bir Xcode projesi (bundle id `com.westron.app`, team
+`ZWAS3MG895`, Keychain Sharing capability) + `xcodebuild -allowProvisioningUpdates` ile gerçek
+bir Mac Development profile üretmeye çalışıyor. Başarılıysa profile `Probe.app`'e gömülüp probe
+tekrar çalıştırılacak; bu, $99 harcamadan Touch ID'yi doğrulamanın yolu olur.
+
+**Bu oturumda hiçbir üretim kodu değişmedi.** Yeni dosyalar: bir probe örneği + bir probe raporu.
+`keystore/mac.rs` henüz değiştirilmedi (`DataProtectionKeychain` kararı, profile sorunu
+çözülmeden değiştirilmemeli — Deney 1 zaten dosya keychain'inin de çözüm olmadığını gösterdi).
+
+## Update (2026-08-12, devam): ✅ DUVAR AŞILDI — Touch ID gerçek donanımda DOĞRULANDI, üstelik ÜCRETSİZ hesapla
+
+Yukarıdaki oturumun beklediği ampirik test yapıldı ve **geçti**.
+
+**1) Ücretsiz hesapla gerçek bir Mac Development provisioning profile üretildi** (bir ajan,
+scratchpad'de atılabilir bir Xcode projesiyle; repo'ya dokunulmadı, sudo/GUI kullanılmadı):
+
+```
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+  -project ProvProbe.xcodeproj -scheme ProvProbe -configuration Debug \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+** BUILD SUCCEEDED **
+Provisioning Profile: "Mac Team Provisioning Profile: com.westron.app"
+                      (6add9cfa-b425-4efd-a873-0285214932eb)
+```
+
+Profile `security cms -D -i` ile çözülüp içeriği gerçekten okundu:
+`com.apple.application-identifier = ZWAS3MG895.com.westron.app`,
+`keychain-access-groups = ["ZWAS3MG895.*"]`, TeamName "EMİR BALTEPE".
+Dosya yolu: `~/Library/Developer/Xcode/UserData/Provisioning Profiles/6add9cfa-….provisionprofile`
+(**not:** Xcode 27 artık `~/Library/MobileDevice/Provisioning Profiles/` dizinini hiç
+kullanmıyor — önceki oturumun "hiç profile yok" teşhisi doğruydu ama arayacağı yer de değişmiş).
+
+**$99/yıl Apple Developer Program üyeliği T19 için GEREKMİYOR.** (Dağıtım/notarization için
+hâlâ gerekecek — bkz. bir önceki güncelleme — ama geliştirme ve Touch ID doğrulaması için değil.)
+
+**2) Profile `Probe.app`'e gömüldü** (`Contents/embedded.provisionprofile`), bundle
+`keychain-access-groups = ["ZWAS3MG895.com.westron.app"]` entitlement'ıyla imzalandı
+(`codesign -d --entitlements -` ile binary üzerinde doğrulandı).
+
+**3) Belirleyici test — üretim yolunun aynısı (`DataProtectionKeychain`), gerçek çıktı:**
+
+```
+=== ADIM 1: kalıcı SE anahtarı, DataProtectionKeychain (üretim yolu) ===
+  SONUÇ: BAŞARILI — kalıcı SE anahtarı üretildi.
+=== ADIM 2: anahtar keychain'de gerçekten aranabiliyor mu ===
+  SONUÇ: BAŞARILI — anahtar etikete göre bulundu (kalıcı).
+=== ADIM 3: encrypt → decrypt (Touch ID BURADA beklenir) ===
+  encrypt: OK (126 bayt)
+  decrypt: OK, round-trip doğru.
+=== TEMİZLİK ===
+  probe anahtarı silindi.
+```
+
+**Emir ekranda Touch ID istemini gördü ve parmağını okutarak onayladı** — probe bunu kendi
+göremez, insan doğrulaması alındı. Yani ACL donanım tarafından gerçekten uygulanıyor; bu,
+"round-trip çalıştı" değil, **"biyometrik koruma gerçek"** demek.
+
+**T19 Faz 1'in "Touch ID gerçek imzada tetikleniyor" kabul kriteri KARŞILANDI.**
+
+**`keystore/mac.rs` DEĞİŞTİRİLMEDİ ve değiştirilmesine gerek yok** — `DataProtectionKeychain`
+kararı baştan doğruymuş; eksik olan tek şey kodda değil, bundle'da gömülü profile idi.
+
+### Sıradaki oturumun işleri (sırayla)
+
+1. **Gerçek Westron.app'e profile'ı gömle.** `tauri.conf.json` → `bundle.macOS.files` ile
+   `"embedded.provisionprofile": "<yol>"` (Tauri v2 bunu resmî destekliyor) + `signingIdentity`
+   ayarı. Şu an `signingIdentity: null` — yani gerçek app hâlâ imzasız, aynı duvarı yaşayacak.
+   Bu yapılmadan `keystore` gerçek imzalama yoluna bağlanmamalı.
+2. **UYARI — 7 günlük TTL:** ücretsiz takım profile'ları 7 gün sonra doluyor. Geliştirme
+   sırasında haftada bir `-allowProvisioningUpdates` ile yeniden üretilmesi gerekecek. Bu bir
+   operasyonel kısıt, sürpriz olmasın; kalıcı çözüm ücretli üyelik (dağıtım için zaten şart).
+3. Ancak (1) bittikten sonra: app-açılışı migrasyon kodu (`wallet::keychain` → `keystore`,
+   yaz-doğrula-sonra-sil), sonra `keystore`'un `signing/mod.rs` + `marketplace/client.rs`'e
+   bağlanması. Bu ikisi hâlâ yazılmadı.
+
+Yeni dosyalar: `src-tauri/examples/se_filekeychain_probe.rs`, `probes/se-entitlement-wall-t19.md`.
+Üretim kodunda değişiklik yok.
