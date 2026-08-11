@@ -1006,7 +1006,15 @@ Silmeden önce `grep -rn "bulk/distribute" src/` tekrar çalıştırıldı, sili
 referans çıkmadı. `npx tsc --noEmit` silme sonrası temiz. Artık uygulamada tek bir Distribute
 Funds implementasyonu var: `src/components/DistributeModal.tsx`. ✅ Tamamlandı.
 
-## T13 — Abonelik protokolü uyuşmazlığı: gerçek abonelik masaüstünde yenilenemiyor 🆕 10.08.2026, `API.md` canlı testinden, EN ÖNCELİKLİ
+## T13 — Abonelik protokolü uyuşmazlığı: gerçek abonelik masaüstünde yenilenemiyor ✅ TAMAMLANDI 10.08.2026
+
+> **Kapanış notu (12.08.2026):** bu başlık uzun süre `🆕 ... EN ÖNCELİKLİ` olarak kalmıştı
+> ama iş 10.08.2026'da bitmişti — Rust + frontend uçtan uca, gerçek signup/login/logout/
+> check-status canlı Worker'a karşı tıklanarak doğrulandı (`orion`: 4/4 Log In başarılı,
+> ikisi kasıtlı boşluk/newline enjekte edilmiş yapıştırmayla). Commit'ler `3c69033`,
+> `036f7f0`, `05a8b60` `origin/cowork-merge`'e push edildi. Tam kayıt: `STATUS.md`,
+> "T13 — Log In fix re-verified by real clicking" güncellemesi. Aşağıdaki gövde, işin
+> nasıl bulunduğunu belgelemek için orijinal haliyle bırakıldı.
 
 `API.md`'deki canlı Worker testinde bulundu (dosya köke commit edilmemiş haldeydi, şimdi
 commit edildi — bkz. altta). Cloudflare Worker (`https://westron-subscription.ebaltepe.workers.dev`)
