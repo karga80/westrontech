@@ -636,6 +636,56 @@ Send NFT sekmesinde, o NFT önceden seçili şekilde açıldığı **gözle
 görülmedi**. Yalnızca kod/tip/lint/test seviyesinde kanıt var. Gerçek bir
 NFT gönderimi bu görevde kesinlikle tetiklenmedi.
 
+### Durum değerlendirmesi — 12.08.2026
+
+**T9c (`bulk/distribute/page.tsx`'in gerçek gönderime bağlanması) artık geçersiz.**
+Yukarıdaki "Bitti sayılır" listesi o maddeyi hâlâ istiyor ama o sayfa 10.08.2026'da
+T12 kapsamında **Emir'in onayıyla silindi** (`9929ae4`). Karşılıksız bir kabul
+kriteri olarak kalmasın diye buraya yazıldı; T9'un kapanışı için aranmayacak.
+
+**Kod tarafı bitti, ekran tarafı bitmedi.** Bu oturumda baştan sona yeniden
+doğrulandı: `npx tsc --noEmit` temiz, `cargo check` temiz, `cargo test` 187/187,
+`npx jest` 24/24. NFT yolu dürüst — sahte `setTimeout` ilerleyişi veya uydurma
+hash yok; Send düğmesi gerçek zarf önizlemesine bağlı (`nftPreview?.authorized
+=== true`), otonomi politikası işi kuyruğa alırsa ekran "Waiting for approval"
+diyor ve olmayan bir hash iddia etmiyor.
+
+**Kapatılan gerçek boşluk (`b41b669`).** NFT transferi zarftan `value_wei = 0`
+ile geçiyor, yani per-tx tavanı ve hard cap **tasarım gereği** devre dışı — token
+taşımak ETH harcamıyor. Geriye tek koruma olarak scope / kill switch / expiry
+kalıyor ve bunların sıfır değerde de uygulandığı hiç test edilmemişti (mevcut
+"zero value" satırı yalnızca izin verilen hali kapsıyordu, dolayısıyla "sadece
+value > 0 ise kontrol et" diye yazılmış bir guard tüm suite'i geçerdi). 4 test
+eklendi, dördü de ilk çalıştırmada geçti: **bug yoktu, kanıtlanmamış bir iddia
+vardı.** Artık kanıtlı ve regresyona karşı kilitli.
+
+**DOĞRULANAMADI — ekran, ve sebebi kodda değil.** Bu oturumda uygulama iki kez
+çalıştırılmaya çalışıldı, ikisi de `errno -60 / ETIMEDOUT` ile düştü (birincisi
+cargo'nun link adımında, ikincisi build 602/604'teyken Next.js'in dosya
+okumasında). Kök neden ortam: proje iCloud'a senkronlanan `~/Desktop` altında
+duruyor ve disk %98 dolu (~12 GB boş), dosya okumaları aralıklı zaman aşımına
+uğruyor. Bu bir Westron hatası değil ve kodla çözülmez.
+
+Gözle görülmemiş olarak kalan maddeler: (a) wallet detail header'ında
+"Distribute" CTA'sının Etherscan'ın solunda çıktığı, (b) modalın kaynak kilitli
+açıldığı, (c) "Send NFT" sekmesinin gerçekten tıklanabilir olduğu (eski sürümde
+disabled'dı — asıl kontrol edilecek şey bu), (d) NFT listesinin/boş durumun
+göründüğü, (e) Confirm adımında zarf önizlemesinin bir sonuç gösterdiği.
+
+**Emir'in kendi doğrulayabileceği yol** (Send'e ASLA tıklamadan, en fazla
+Confirm adımına kadar):
+```
+cd "Projects/westron" && npm run dev:tauri
+```
+Beklenen: bir cüzdanın detay sayfasında, Etherscan düğmesinin solunda
+"Distribute" düğmesi. Tıklayınca modal açılıyor, kaynak cüzdan seçilemiyor
+(salt-okunur satır), üstte "Send Funds" / "Send NFT" sekmeleri ve Send NFT
+tıklanabiliyor. Build yine ETIMEDOUT verirse önce disk boşaltılmalı ya da
+proje iCloud senkronu dışındaki bir klasöre alınmalı.
+
+**T9 kapanış durumu:** kod ve zarf semantiği kanıtlanmış; ekran doğrulaması ve
+gerçek ilk NFT gönderimi Emir'e bağlı. Bu ikisi olmadan "tamamlandı" yazılmadı.
+
 ---
 
 ## T10 — Etherscan link'leri eksik  🆕 10.08.2026, Emir'den ekran görüntüsüyle geldi
