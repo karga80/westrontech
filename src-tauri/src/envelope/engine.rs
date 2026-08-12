@@ -639,6 +639,72 @@ mod tests {
         assert!(matches!(err, EnvelopeError::KillSwitchActive));
     }
 
+    // ── zero-value transfers: the NFT path ────────────────────────────────────
+
+    // An NFT transfer runs through this same engine with `value_wei = 0`
+    // (`signing::transfer_nft`), so the spend caps are bypassed *by design* —
+    // moving a token costs no ETH. That leaves scope, kill switch and expiry as
+    // the only things between an autonomous run and sending a token worth more
+    // than the whole hard cap to an arbitrary address.
+    //
+    // The existing "zero value" row in
+    // `preview_agrees_with_check_and_authorize_on_every_guard` only covers the
+    // ALLOWED case, so a guard written as "check only if value > 0" would still
+    // pass every other test in this file. These close that hole, and assert the
+    // preview agrees — that is what the Send NFT button gates on.
+
+    #[test]
+    fn zero_value_transfer_still_respects_scope() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, false, false);
+        let other = "0x1111111111111111111111111111111111111111";
+        let err = e.check_and_authorize(&req(other, 0)).unwrap_err();
+        assert!(
+            matches!(err, EnvelopeError::AddressOutOfScope { .. }),
+            "a zero-value (NFT) transfer to an out-of-scope address must be refused, got {err:?}"
+        );
+        assert_eq!(
+            e.preview(&req(other, 0)).reject_code.as_deref(),
+            Some(reject_code::OUT_OF_SCOPE)
+        );
+    }
+
+    #[test]
+    fn zero_value_transfer_still_blocked_by_kill_switch() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, true, false);
+        let err = e.check_and_authorize(&req(ADDR, 0)).unwrap_err();
+        assert!(
+            matches!(err, EnvelopeError::KillSwitchActive),
+            "the kill switch must stop NFT transfers too, got {err:?}"
+        );
+        assert_eq!(
+            e.preview(&req(ADDR, 0)).reject_code.as_deref(),
+            Some(reject_code::KILL_SWITCH)
+        );
+    }
+
+    #[test]
+    fn zero_value_transfer_still_blocked_after_expiry() {
+        let e = engine_with(10 * ETH, 100 * ETH, 0, false, true);
+        let err = e.check_and_authorize(&req(ADDR, 0)).unwrap_err();
+        assert!(
+            matches!(err, EnvelopeError::EnvelopeExpired { .. }),
+            "an expired envelope must not keep authorising NFT transfers, got {err:?}"
+        );
+        assert_eq!(
+            e.preview(&req(ADDR, 0)).reject_code.as_deref(),
+            Some(reject_code::EXPIRED)
+        );
+    }
+
+    /// The other direction: an NFT transfer must not silently eat the ETH
+    /// spend cap either, or a run of transfers would starve the funds budget.
+    #[test]
+    fn zero_value_transfer_consumes_no_budget() {
+        let e = engine_with(10 * ETH, 100 * ETH, 2 * ETH, false, false);
+        assert!(e.check_and_authorize(&req(ADDR, 0)).is_ok());
+        assert_eq!(e.get_status().unwrap().spent_wei, 2 * ETH);
+    }
+
     // ── preview: read-only, and identical to the real thing ───────────────────
 
     /// The defect this fixes: `check_transaction` calls `check_and_authorize`,
