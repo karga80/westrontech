@@ -919,3 +919,58 @@ kararı baştan doğruymuş; eksik olan tek şey kodda değil, bundle'da gömül
 
 Yeni dosyalar: `src-tauri/examples/se_filekeychain_probe.rs`, `probes/se-entitlement-wall-t19.md`.
 Üretim kodunda değişiklik yok.
+
+---
+
+## Update (2026-08-12, 3. oturum): T9 — kod bitti, ekran doğrulaması ortam yüzünden bloke
+
+**Bulgu 1: T9 kodda zaten bitmişti, `docs/TASKS.md` bayattı.** T13'te yaşadığımızın
+aynısı. T9b (Send NFT sekmesi) 10.08'de yapılmış (`d62a4e4`, `1aedd2c`) — sekme
+artık disabled değil, `transfer_nft` komutunu gerçekten çağırıyor.
+
+**Bulgu 2: T9c geçersiz.** "Bitti sayılır" listesi hâlâ `bulk/distribute/page.tsx`'in
+gerçek gönderime bağlanmasını istiyordu, ama o sayfa 10.08'de T12 kapsamında
+Emir'in onayıyla silindi (`9929ae4`). Karşılıksız kabul kriteri olarak duruyordu,
+`TASKS.md`'ye geçersiz olduğu yazıldı.
+
+**Bulgu 3 (asıl iş): sıfır değerli transferlerde guard'lar test edilmemişti.**
+NFT transferi zarftan `value_wei = 0` ile geçiyor → per-tx tavanı ve hard cap
+tasarım gereği devre dışı (token taşımak ETH harcamıyor). Geriye tek koruma olarak
+scope / kill switch / expiry kalıyor. Bunların sıfır değerde de uygulandığını
+hiçbir test kontrol etmiyordu: mevcut "zero value" satırı yalnızca izin verilen
+hali kapsıyordu, dolayısıyla "sadece value > 0 ise kontrol et" diye yazılmış bir
+guard 183 testin tamamını geçerdi. 4 test eklendi (`b41b669`), dördü de ilk
+çalıştırmada geçti — **bug yoktu, kanıtlanmamış bir varsayım vardı.**
+
+**Doğrulanan:** `npx tsc --noEmit` temiz · `cargo check` temiz · `cargo test`
+187/187 (183'ten) · `npx jest` 24/24. NFT yolu dürüst: sahte `setTimeout`
+ilerleyişi yok, uydurma hash yok, Send düğmesi gerçek zarf önizlemesine bağlı,
+otonomi kuyruğa alırsa "Waiting for approval" diyor.
+
+**DOĞRULANAMADI — ve sebebi kodda değil.** Uygulama iki kez çalıştırılmaya
+çalışıldı, ikisi de `errno -60 / ETIMEDOUT` ile düştü (1: cargo link adımı,
+2: build 602/604'teyken Next.js dosya okuması). Kök neden ortam: proje iCloud'a
+senkronlanan `~/Desktop` altında ve disk %98 dolu (~12 GB boş). Üçüncü deneme
+yapılmadı — aynı hatayı tekrar almak yeni bilgi vermezdi.
+
+Gözle görülmemiş kalanlar: (a) CTA'nın Etherscan'ın solunda çıktığı, (b) modalın
+kaynak kilitli açıldığı, (c) **Send NFT sekmesinin tıklanabilir olduğu** (eski
+sürümde disabled'dı — asıl kontrol edilecek şey bu), (d) NFT listesi/boş durum,
+(e) Confirm'de zarf önizlemesinin sonuç göstermesi.
+
+### Blocked — Emir'in yapması gerekenler
+1. **Disk/iCloud.** Build ETIMEDOUT veriyor. Ya disk boşaltılmalı ya da proje
+   iCloud senkronu dışındaki bir klasöre alınmalı (kalıcı çözüm bu; repo taşımak
+   Emir'in kararı, oturum kendiliğinden yapmadı).
+2. **T9 ekran kontrolü.** `npm run dev:tauri` → bir cüzdanın detay sayfası.
+   **Send'e ASLA tıklanmayacak**, en fazla Confirm adımına kadar.
+3. **Gerçek ilk NFT gönderimi** hâlâ Emir onayı bekliyor — hiç yapılmadı.
+
+### Sıradaki oturum nereden başlasın
+T9 kapanışı yukarıdaki 1-2'ye bağlı. Bunlar beklerken bağımsız olarak
+ilerletilebilecekler: T19'un kalan zinciri (provisioning profile'ı gerçek
+`Westron.app`'e gömmek, `signingIdentity`, keychain migration, `keystore`'u
+`signing/mod.rs` + `marketplace/client.rs`'e bağlamak) — ama o da build
+gerektirdiği için 1. maddeye takılabilir. Build'e ihtiyaç duymayanlar: T10
+(Etherscan link'leri), T8 (Emir kararı bekleyen maddeler + Apple Developer
+Program $99/yıl kararı).
