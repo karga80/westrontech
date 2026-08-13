@@ -1206,9 +1206,12 @@ etkilemiyor, ama proxy mimarisi ileride devreye alınırsa artık doğru çalı�
 
 `tools/westron-mcp/index.js`, doğrudan mı yoksa import olarak mı çalıştığını anlamak için
 `process.argv[1]`'i `new URL(import.meta.url).pathname` ile karşılaştırıyor. Bu workspace'in
-yolu boşluk içeriyor (`Cowork Projects`), `pathname` bunu `%20` olarak encode ediyor, karşılaştırma
-hep `false` dönüyor, çocuk süreç hemen kapanıyor. `node tools/westron-mcp/smoke.mjs` bu yüzden
-bu makinede hiç geçemiyor.
+yolu boşluk içerdiğinde (eski konum: `Cowork Projects`), `pathname` bunu `%20` olarak encode ediyor,
+karşılaştırma hep `false` dönüyor, çocuk süreç hemen kapanıyor.
+
+**13.08 notu:** Proje `/Users/byronic/Developer/westron` altına taşındı; yeni yolda boşluk yok,
+yani belirti maskelendi. Karşılaştırma hâlâ yanlış — encode gerektiren herhangi bir yol bileşeni
+aynı hatayı geri getirir. Düzeltme hâlâ gerekli, aciliyeti düştü.
 
 **Bitti sayılır:** `index.js`'te karşılaştırma `fileURLToPath(import.meta.url)` kullanacak
 şekilde düzeltilir (path encode sorunu ortadan kalkar), `node tools/westron-mcp/smoke.mjs`
