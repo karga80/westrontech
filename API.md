@@ -227,8 +227,11 @@ schemas and guardrails.
 
 3. **The MCP smoke test cannot start its child shim from this path.**
    `index.js` compares `process.argv[1]` to `new URL(import.meta.url).pathname`.
-   The latter contains `%20` for the `Cowork Projects` path, so the direct-run
-   comparison is false and the child exits immediately. Use
+   Any path component needing percent-encoding (a space becomes `%20`) makes the
+   direct-run comparison false and the child exits immediately. This was observed
+   under the old `Cowork Projects` path; the project now lives at
+   `/Users/byronic/Developer/westron`, which has no spaces, so the symptom is
+   masked — but the comparison is still wrong and must be fixed. Use
    `fileURLToPath(import.meta.url)` for the comparison, then rerun
    `node tools/westron-mcp/smoke.mjs`.
 
