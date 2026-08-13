@@ -1048,3 +1048,49 @@ projeyi iCloud senkronu dışına almak (Emir'in kararı, bu oturumda yapılmad�
 **Fırsat:** imzalı uygulama artık derleniyor ve çalışıyor, yani T9'un bekleyen ekran kontrolü
 (Send NFT sekmesi tıklanabilir mi, Confirm adımına kadar) ve T10'un Etherscan link kontrolü
 artık yapılabilir durumda. **Send'e basılmayacak.**
+
+---
+
+## 2026-08-13 (ikinci blok) — Proje iCloud dışına taşındı
+
+**Yeni konum:** `/Users/byronic/Developer/westron`
+(eski: `~/Desktop/Cowork Projects/Projects/westron` — iCloud senkronlu)
+
+**Nasıl yapıldı:** taşımadan önce git ağacının temiz olduğu doğrulandı; yeniden üretilebilir
+olan `src-tauri/target` (16 GB), `out/` ve `.next/` silindi, böylece yalnızca ~800 MB taşındı.
+Taşıma sonrası git deposu `96445e7`'te sağlam. Disk: 22 GB boş.
+
+**Bunun çözdüğü şey:** yukarıdaki `xattr -cr` geçici çözümü artık gerekmiyor. "resource fork,
+Finder information, or similar detritus not allowed" hatası iCloud'un iliştirdiği extended
+attribute'lardan geliyordu; yeni konum senkronlanmıyor. **Not: bu henüz yeni konumda bir build
+alınarak DOĞRULANMADI** — build ağacı bilerek silindi, ilk build sıfırdan derlenecek.
+
+**Yola bağlı düzeltmeler (yapıldı):**
+- `~/Library/Application Support/Claude/claude_desktop_config.json` — 2 referans yeni yola
+  çevrildi (yedek: aynı klasörde `.bak-premove`). T7 MCP kaydı kırılmadı.
+- `/Users/byronic/Developer/CLAUDE.md` → `~/Desktop/Cowork Projects/CLAUDE.md` symlink'i
+  kuruldu; workspace kuralları kopyalanmadı, tek kaynak korundu.
+- `API.md` ve `docs/TASKS.md` — T15 notu düzeltildi. Hata "klasör adında boşluk var" değil,
+  `process.argv[1]` ile `new URL(import.meta.url).pathname` karşılaştırmasının kendisi.
+  Yeni yolda boşluk olmadığı için **belirti maskelendi, hata duruyor** — düzeltme hâlâ gerekli,
+  aciliyeti düştü.
+
+Commit'ler: `96445e7` (imzalama), `b789b9f`, `9415712` (yol düzeltmeleri).
+
+### Temiz oturum için devir — T19'un kalanı
+
+Sıradaki oturum bu üçünü **tek seferde** bitirmeli; yarım bırakılırsa anahtar taşıma kodu
+yarım kalır ve bu en riskli hâlidir.
+
+1. `keystore::migration::migrate_into_keystore`'u `lib.rs` setup'ına bağla.
+   Kural değişmiyor: **yaz → geri oku → byte karşılaştır → sıfırla → ancak o zaman sil.**
+   Herhangi bir adım başarısızsa düz metin dosya yerinde kalır.
+2. Cutover: `wallet/keychain.rs` içindeki `store_key` / `fetch_key` / `delete_key`
+   `keystore`'a devredilir. Çağrı yerleri değişmez (`signing/mod.rs:111`,
+   `marketplace/client.rs:51,135,215`). İki keychain servisi (`"Westron"` /
+   `"com.westron.wallet"`) teke iner.
+3. `cargo test --lib` yeşil kalacak → imzalı build → **Emir gerçek cüzdanla gerçek Touch ID
+   istemini gözüyle görecek.** T19'un kabul kriteri ancak o zaman karşılanır.
+
+⏰ Provisioning profile **18.08.2026**'da doluyor. Zincir o tarihe kadar bitmezse profile
+`xcodebuild -allowProvisioningUpdates` ile yenilenmeli.
