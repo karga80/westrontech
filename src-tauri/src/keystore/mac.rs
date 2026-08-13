@@ -271,7 +271,7 @@ impl Backend for SecureEnclaveBackend {
             match generic_password(PasswordOptions::new_generic_password(KEYSTORE_SERVICE, account)) {
                 Ok(bytes) => bytes,
                 Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => {
-                    return Err("No matching entry found in secure storage".to_string())
+                    return Err(super::NOT_FOUND.to_string())
                 }
                 Err(e) => return Err(format!("Keychain read failed: {e}")),
             },

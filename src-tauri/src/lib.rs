@@ -1617,6 +1617,59 @@ async fn get_stream_status(
     }))
 }
 
+/// One-time key migrations, run once per launch on a background thread.
+///
+/// **Order is load-bearing.** `keychain_status()` runs `wallet::keychain`'s
+/// own sweep first: it drains every `*.key` plaintext file — wallet keys *and*
+/// API keys — into the `"Westron"` Keychain service. Only then does the
+/// keystore sweep run, and it takes `wallet_*` files only. Reversing the two,
+/// or dropping that filter, would encrypt `alchemy.key` behind Touch ID under
+/// a service `fetch_alchemy_key()` never looks at, and delete the plaintext
+/// original — the user's API key would be gone as far as the app is concerned.
+///
+/// On a background thread because both sweeps can block: the second one reads
+/// each migrated key back out of the Secure Enclave to verify it, which raises
+/// a Touch ID prompt. That must never sit in front of a window that has not
+/// been drawn yet. Nothing else waits on this — every read path
+/// (`fetch_key`, `fetch_alchemy_key`, …) resolves a legacy entry on its own.
+///
+/// Silent failure is not an option here (CLAUDE.md): every outcome, including
+/// "nothing to do", is logged with counts only — never key material.
+fn run_key_migrations() {
+    std::thread::spawn(|| {
+        let status = wallet::keychain::keychain_status();
+        if status.migrated > 0 || status.pending > 0 {
+            log::info!(
+                "keychain sweep: {} plaintext key file(s) moved into the Keychain, {} left on disk",
+                status.migrated,
+                status.pending
+            );
+        }
+        if let Some(err) = status.last_error.as_deref() {
+            log::error!("keychain sweep incomplete — plaintext key file(s) remain: {err}");
+        }
+
+        let dir = match keystore::migration::legacy_keys_dir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                log::error!("keystore migration skipped — could not locate the legacy key directory: {e}");
+                return;
+            }
+        };
+        let out = keystore::migration::migrate_into_keystore(&dir);
+        if out.migrated > 0 || out.pending > 0 {
+            log::info!(
+                "keystore migration: {} wallet key(s) moved into the Secure Enclave-backed keystore, {} left on disk",
+                out.migrated,
+                out.pending
+            );
+        }
+        if let Some(err) = out.last_error.as_deref() {
+            log::error!("keystore migration incomplete — plaintext wallet key(s) remain: {err}");
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // Persisted: spend cap, accumulated spend and kill switch all survive a
@@ -1656,6 +1709,7 @@ pub fn run() {
       // thing from the UI, from Claude, and inside the loop.
       let scheduler = control::start(control_engine.clone(), app.handle().clone());
       app.manage(scheduler);
+      run_key_migrations();
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![

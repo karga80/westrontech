@@ -60,7 +60,7 @@ impl Backend for MockBackend {
             s.borrow()
                 .get(account)
                 .cloned()
-                .ok_or_else(|| "No matching entry found in secure storage".to_string())
+                .ok_or_else(|| super::NOT_FOUND.to_string())
         })
     }
 

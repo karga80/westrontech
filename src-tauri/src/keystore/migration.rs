@@ -12,13 +12,15 @@
 //! read back and byte-for-byte compared against the original. Any failure at
 //! any step leaves the plaintext file exactly where it was.
 //!
-//! **Not wired into app startup by this task.** `migrate_key_files` is fully
-//! implemented and tested against a fake directory + fake store/fetch below,
-//! but nothing in `lib.rs` calls it automatically yet, and this session does
-//! not run it against the real
-//! `~/Library/Application Support/Westron/keys/` directory. Wiring an
-//! automatic run at app startup is a follow-up decision, not made here (see
-//! task boundary in the session's brief).
+//! **Wired into app startup** (T19 cutover, 13.08.2026): `lib.rs`'in `setup`
+//! kancası önce `wallet::keychain::keychain_status()`'u (düz metin dosyaları →
+//! `"Westron"` service'i) sonra buradaki [`migrate_into_keystore`]'u çağırır.
+//! Sıra bilinçli: `wallet::keychain`'in kendi migrasyonu API anahtarlarını da
+//! taşıdığı için önce o koşar; ondan sonra bu modül **yalnız cüzdan
+//! anahtarlarını** ([`WALLET_KEY_PREFIX`]) keystore'a alır. Bu ikinci filtre
+//! olmasaydı `alchemy.key` biyometri arkasına kilitlenir ve
+//! `fetch_alchemy_key()` (hâlâ `"Westron"` service'ine bakıyor) onu bir daha
+//! bulamazdı — anahtar kaybolmuş gibi görünürdü.
 
 use std::path::{Path, PathBuf};
 
@@ -29,10 +31,16 @@ pub struct MigrationOutcome {
     pub last_error: Option<String>,
 }
 
+/// File-name prefix every wallet private key is stored under
+/// (`wallet_<lowercase address>.key`, see `wallet::keychain::key_account`).
+/// Only these belong in the biometry-gated keystore — API keys must stay in
+/// the un-gated `"Westron"` service, or every background Alchemy call would
+/// sit behind a Touch ID prompt (plan item W-1.5 keeps them separate).
+pub const WALLET_KEY_PREFIX: &str = "wallet_";
+
 /// The legacy plaintext key directory. Not created here — callers that only
 /// want to read or migrate must not bring a fresh install's directory into
 /// existence.
-#[allow(dead_code)]
 pub fn legacy_keys_dir() -> Result<PathBuf, String> {
     let base = dirs_next::data_dir().ok_or_else(|| "Could not determine data directory".to_string())?;
     Ok(base.join("Westron").join("keys"))
@@ -48,6 +56,19 @@ pub fn legacy_keys_dir() -> Result<PathBuf, String> {
 /// error conditions.
 pub fn migrate_key_files(
     dir: &Path,
+    store: &dyn Fn(&str, &[u8]) -> Result<(), String>,
+    fetch: &dyn Fn(&str) -> Result<Vec<u8>, String>,
+) -> MigrationOutcome {
+    migrate_selected_key_files(dir, &|_| true, store, fetch)
+}
+
+/// Same as [`migrate_key_files`], but only for the file stems `accept`
+/// returns `true` for. A file this filter skips is left completely untouched
+/// — not read, not counted, not deleted — so a caller that only owns part of
+/// the directory cannot destroy the part it does not own.
+pub fn migrate_selected_key_files(
+    dir: &Path,
+    accept: &dyn Fn(&str) -> bool,
     store: &dyn Fn(&str, &[u8]) -> Result<(), String>,
     fetch: &dyn Fn(&str) -> Result<Vec<u8>, String>,
 ) -> MigrationOutcome {
@@ -70,6 +91,9 @@ pub fn migrate_key_files(
             continue;
         }
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            if !accept(stem) {
+                continue;
+            }
             names.push((stem.to_string(), path));
         }
     }
@@ -141,12 +165,13 @@ fn zero_and_remove(path: &Path, original_len: usize) -> Result<(), String> {
     std::fs::remove_file(path).map_err(|e| e.to_string())
 }
 
-/// Production entry point: migrates `dir` using the real keystore. Not
-/// called automatically anywhere in this codebase yet — see module doc.
-#[allow(dead_code)]
+/// Production entry point: migrates the **wallet keys** in `dir` using the
+/// real keystore. Called once at app startup from `lib.rs` — see module doc
+/// for why it runs second and why it takes only `wallet_*`.
 pub fn migrate_into_keystore(dir: &Path) -> MigrationOutcome {
-    migrate_key_files(
+    migrate_selected_key_files(
         dir,
+        &|stem| stem.starts_with(WALLET_KEY_PREFIX),
         &|id, secret| super::store_key(id, secret),
         &|id| super::load_key(id).map(|z| z.to_vec()),
     )
@@ -341,6 +366,55 @@ mod tests {
         let loaded = super::super::load_key("wallet_0xccc").unwrap();
         assert_eq!(&loaded[..], b"real-wiring-secret");
         assert!(!dir.join("wallet_0xccc.key").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The filter that keeps API keys usable. If this ever regresses, an
+    /// `alchemy.key` file would be encrypted behind Touch ID under the
+    /// keystore's service while `fetch_alchemy_key()` keeps looking in
+    /// `"Westron"` — from the user's side the key would simply have vanished,
+    /// and the plaintext file it came from would already be deleted.
+    #[test]
+    fn migrate_into_keystore_only_takes_wallet_keys_and_leaves_api_keys_alone() {
+        crate::keystore::mock::MockBackend::reset();
+        let dir = tmp_dir("wallet-only");
+        seed(&dir, "wallet_0xddd", b"wallet-secret");
+        seed(&dir, "alchemy", b"alch-key");
+        seed(&dir, "opensea", b"os-key");
+        seed(&dir, "subscription_token", b"{\"token\":\"t\"}");
+
+        let out = migrate_into_keystore(&dir);
+
+        assert_eq!(out.migrated, 1, "only the wallet key belongs in the keystore");
+        assert_eq!(out.pending, 0);
+        assert!(!dir.join("wallet_0xddd.key").exists());
+        for untouched in ["alchemy", "opensea", "subscription_token"] {
+            let path = dir.join(format!("{untouched}.key"));
+            assert!(path.exists(), "{untouched}.key must be left for wallet::keychain");
+            assert!(
+                super::super::load_key(untouched).is_err(),
+                "{untouched} must not be in the biometry-gated keystore"
+            );
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_filtered_out_file_is_never_read_or_deleted() {
+        let dir = tmp_dir("filter");
+        seed(&dir, "keep_me", b"still-here");
+
+        let out = migrate_selected_key_files(
+            &dir,
+            &|stem| stem != "keep_me",
+            &|_n, _v| panic!("store must not be called for a filtered-out file"),
+            &|_n| panic!("fetch must not be called for a filtered-out file"),
+        );
+
+        assert_eq!(out, MigrationOutcome::default());
+        assert_eq!(std::fs::read(dir.join("keep_me.key")).unwrap(), b"still-here");
 
         std::fs::remove_dir_all(&dir).ok();
     }

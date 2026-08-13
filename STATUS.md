@@ -1094,3 +1094,67 @@ yarım kalır ve bu en riskli hâlidir.
 
 ⏰ Provisioning profile **18.08.2026**'da doluyor. Zincir o tarihe kadar bitmezse profile
 `xcodebuild -allowProvisioningUpdates` ile yenilenmeli.
+
+---
+
+## Update (2026-08-13, üçüncü blok) — T19 cutover: cüzdan anahtarları artık keystore'da
+
+Devir notundaki üç maddenin **kod tarafı bitti**. Emir'in gözle doğrulaması bekleniyor
+(aşağıda "Doğrulanmadı").
+
+### 1. Migrasyon açılışa bağlandı
+`lib.rs` → `run_key_migrations()` (setup içinden, **arka plan thread'inde**). Sıra
+bilinçli ve kritik:
+1. `wallet::keychain::keychain_status()` — düz metin `*.key` dosyalarını (cüzdan **ve**
+   API anahtarları) `"Westron"` service'ine çeker. Mevcut, testli davranış.
+2. `keystore::migration::migrate_into_keystore(dir)` — geriye kalan **yalnız
+   `wallet_*`** dosyalarını SE-destekli keystore'a alır.
+
+`migrate_into_keystore` artık `WALLET_KEY_PREFIX` filtresiyle çalışıyor
+(`migrate_selected_key_files`). Filtre olmasaydı `alchemy.key` biyometri arkasına
+kilitlenir, `fetch_alchemy_key()` (hâlâ `"Westron"`'a bakıyor) onu bulamaz, düz metin
+orijinali de silinmiş olurdu — kullanıcı açısından API anahtarı kaybolurdu.
+Arka plan thread'i olmasının sebebi: geri-okuma doğrulaması Touch ID promptu
+çıkarabiliyor, bu prompt henüz çizilmemiş pencerenin önüne gelemez.
+
+### 2. Cutover yapıldı — `wallet/keychain.rs` → `keystore`
+`store_key` / `fetch_key` / `delete_key` artık `keystore`'a gidiyor. **Çağrı yerleri
+değişmedi** (`signing/mod.rs:111`, `marketplace/client.rs:51,135,215` —
+`fetch_and_verify_key` üzerinden). Karar mantığı yeni ve saf bir dosyada:
+`src/wallet/custody.rs` (depoya hiç dokunmaz, erişim closure olarak gelir — bu yüzden
+kurallar gerçek donanım olmadan test edilebiliyor).
+
+Korunan iki kural, ikisi de testli:
+- **Doğrulanmamış kopya silinmez.** Legacy `"Westron"` girdisi ancak keystore kopyası
+  geri okunup bayt bayt eşleştikten sonra silinir. Taze import'ta legacy kopya yoksa
+  geri okuma hiç yapılmaz (import anında gereksiz prompt çıkmasın diye).
+- **Reddedilen Touch ID legacy'ye düşmez.** `keystore` "kayıt yok" derse legacy'ye
+  bakılır; "çözülemedi / reddedildi" derse hata olduğu gibi döner. Aksi hâlde
+  kullanıcının "Hayır" demesi, uygulamanın biyometrisiz kopyayla imzalamasına yol
+  açardı. Ayrımı yapabilmek için `keystore::NOT_FOUND` / `is_not_found()` eklendi ve
+  üç backend'in tekrarlanan string'i tek kaynağa indirildi.
+
+Eski bir cüzdan ilk kullanıldığında legacy'den okunur ve **o anda** keystore'a taşınır
+(yaz → geri oku → karşılaştır → sil). Taşıma yarıda kalırsa legacy kopya yerinde kalır
+ve kullanıcı işlemsiz bırakılmaz; taşıma bir sonraki okumada yeniden denenir.
+
+API anahtarları ve subscription token **bilerek** `"Westron"` service'inde, biyometrisiz
+kaldı (plan W-1.5). Her fiyat yenilemesinin önüne Touch ID promptu koymak istemiyoruz.
+
+### Doğrulandı
+- `cargo test --lib` → **200 passed, 0 failed** (öncesi 187 — 13 yeni test).
+  Yeni testler: reddedilen prompt legacy'ye düşmüyor; doğrulanmayan geri okuma legacy'yi
+  silmiyor; taze import geri okuma yapmıyor; eski karışık-harf yazımı hâlâ bulunuyor;
+  `migrate_into_keystore` API anahtarı dosyalarına dokunmuyor; filtrelenen dosya
+  okunmuyor bile.
+
+### Doğrulanmadı (dürüstlük kaydı)
+- **Gerçek Touch ID promptu hâlâ gözle görülmedi.** `cargo test` altında `keystore`
+  daima bellek içi mock'a gider (`keystore::backend()`), yani SE yolu hiçbir otomatik
+  testte çalışmaz. Kabul kriteri: Emir imzalı `Westron.app`'te gerçek bir cüzdanla
+  gönderim akışını Confirm adımına kadar götürüp promptu görecek.
+- Migrasyonun gerçek `~/Library/Application Support/Westron/keys/` dizininde koştuğu
+  görülmedi (dizin büyük olasılıkla zaten boş — 09.08 migrasyonu onu çekmişti).
+  Bu durumda taşımayı asıl yapan yol, ilk imzada çalışan legacy→keystore promosyonudur.
+
+⏰ Provisioning profile **18.08.2026**'da doluyor.

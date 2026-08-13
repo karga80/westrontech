@@ -55,6 +55,23 @@ pub mod mock;
 /// module doc comment for why the two are not merged in this task.
 pub const KEYSTORE_SERVICE: &str = "com.westron.wallet";
 
+/// The one error text every backend returns when `id` simply is not stored
+/// here. It has a name because callers must be able to tell "nothing stored"
+/// apart from "stored, but the decrypt failed or the user declined Touch ID"
+/// — see [`is_not_found`].
+pub const NOT_FOUND: &str = "No matching entry found in secure storage";
+
+/// True only for the "nothing is stored under this id" error.
+///
+/// `wallet::keychain::fetch_key` uses this to decide whether it may fall back
+/// to the legacy plaintext-Keychain copy of a wallet key. Falling back on
+/// *any* error would turn a declined Touch ID prompt into a silent bypass of
+/// the biometric gate: the user says no, and the app quietly signs with the
+/// un-gated copy instead. Only a genuine miss is allowed to fall through.
+pub fn is_not_found(err: &str) -> bool {
+    err == NOT_FOUND
+}
+
 /// Which custody mode a given key ended up under. Surfaced so a future
 /// Settings screen (forge's job, not this task's) can tell the user whether
 /// they have Secure Enclave + biometry protection or a reduced fallback.
@@ -135,7 +152,7 @@ impl Backend for FileBackend {
 
     fn load(&self, account: &str) -> Result<Vec<u8>, String> {
         let path = Self::path(account)?;
-        std::fs::read(&path).map_err(|_| "No matching entry found in secure storage".to_string())
+        std::fs::read(&path).map_err(|_| NOT_FOUND.to_string())
     }
 
     fn delete(&self, account: &str) -> Result<(), String> {

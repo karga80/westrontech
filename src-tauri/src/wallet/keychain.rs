@@ -1,5 +1,16 @@
 //! Secret storage for wallet private keys and third-party API keys.
 //!
+//! **T19 cutover (13.08.2026):** wallet private keys no longer live here.
+//! `store_key`/`fetch_key`/`delete_key` now delegate to `crate::keystore` —
+//! Secure Enclave-wrapped, biometry-gated, service `"com.westron.wallet"` —
+//! through the pure decision logic in `wallet::custody`. Keys written by
+//! older builds are still readable from the `"Westron"` service and are moved
+//! across on first use, verified read-back before deletion. Everything else
+//! in this file (Alchemy/OpenSea/Etherscan keys, the subscription token)
+//! deliberately stays in `"Westron"` with no biometric gate: those are read
+//! on every background poll, and gating them would put a Touch ID prompt in
+//! front of a price refresh (plan item W-1.5 keeps them separate).
+//!
 //! On macOS every secret lives in the login Keychain as a generic-password
 //! item under service `Westron`, with the existing key name as the account.
 //! Nothing sensitive is written to disk by this module on that platform.
@@ -374,15 +385,64 @@ fn legacy_key_account(address: &str) -> String {
     format!("wallet_{}", address.trim())
 }
 
-pub fn store_key(address: &str, private_key_hex: &str) -> Result<(), String> {
-    store_secret(&key_account(address), private_key_hex)
+/// Adapters that give `wallet::custody` its two stores. The keystore side
+/// speaks bytes; wallet keys are hex text, so the conversion lives here — one
+/// place, not once per call site.
+///
+/// The `String` this returns is not a zeroizing type: `fetch_key`'s whole
+/// public contract is a `String` and every caller downstream already holds
+/// one. Tightening that is W-1.6 (bellek hijyeni), a separate plan item — not
+/// silently half-done here.
+fn keystore_store(account: &str, value: &str) -> Result<(), String> {
+    crate::keystore::store_key(account, value.as_bytes())
 }
 
-pub fn fetch_key(address: &str) -> Result<String, String> {
-    match fetch_secret(&key_account(address)) {
-        Ok(k) => Ok(k),
-        Err(e) => fetch_secret(&legacy_key_account(address)).map_err(|_| e),
+fn keystore_fetch(account: &str) -> Result<String, String> {
+    let bytes = crate::keystore::load_key(account)?;
+    String::from_utf8(bytes.to_vec())
+        .map_err(|_| "keystore entry for this wallet is not valid UTF-8".to_string())
+}
+
+fn custody_stores<'a>() -> super::custody::Stores<'a> {
+    super::custody::Stores {
+        keystore_store: &keystore_store,
+        keystore_fetch: &keystore_fetch,
+        legacy_fetch: &fetch_secret,
+        legacy_delete: &delete_secret,
     }
+}
+
+fn custody_accounts(address: &str) -> (String, String) {
+    (key_account(address), legacy_key_account(address))
+}
+
+/// Store a wallet private key. **Writes to the Secure Enclave-backed keystore**
+/// (`keystore`, service `"com.westron.wallet"`), not to the plain `"Westron"`
+/// Keychain service this module uses for API keys — that is the T19 cutover.
+/// An older plain copy of the same wallet is removed only after the new copy
+/// has been read back and compared; see `wallet::custody`.
+pub fn store_key(address: &str, private_key_hex: &str) -> Result<(), String> {
+    let (account, legacy_account) = custody_accounts(address);
+    super::custody::store_and_retire_legacy(
+        &super::custody::Accounts { account: &account, legacy_account: &legacy_account },
+        private_key_hex,
+        &custody_stores(),
+    )
+}
+
+/// Fetch a wallet private key, keystore first. A key written by an older
+/// build still resolves from the legacy `"Westron"` service and is moved into
+/// the keystore on that first read (write → read back → compare → delete).
+///
+/// **This is where Touch ID happens.** The prompt comes from macOS itself
+/// during the Secure Enclave decrypt inside `keystore::load_key`; no code
+/// here calls LocalAuthentication.
+pub fn fetch_key(address: &str) -> Result<String, String> {
+    let (account, legacy_account) = custody_accounts(address);
+    super::custody::fetch_or_promote(
+        &super::custody::Accounts { account: &account, legacy_account: &legacy_account },
+        &custody_stores(),
+    )
 }
 
 /// Fetch the Keychain-stored key for `wallet_address` and verify it actually
@@ -426,12 +486,16 @@ pub fn fetch_and_verify_key(wallet_address: &str) -> Result<String, String> {
     Ok(pk_hex)
 }
 
+/// Remove a wallet key from **every** store it could be in: the keystore, and
+/// both legacy spellings in the plain `"Westron"` service. A deleted wallet
+/// must not leave a key behind anywhere — that is the one operation where
+/// touching all three is the correct behaviour, not a hedge.
 #[allow(dead_code)]
 pub fn delete_key(address: &str) -> Result<(), String> {
-    let primary = delete_secret(&key_account(address));
-    // A legacy entry may exist under the original spelling; remove it too so a
-    // deleted wallet cannot leave a key behind.
-    let _ = delete_secret(&legacy_key_account(address));
+    let (account, legacy_account) = custody_accounts(address);
+    let primary = crate::keystore::delete_key(&account);
+    let _ = delete_secret(&account);
+    let _ = delete_secret(&legacy_account);
     primary
 }
 
