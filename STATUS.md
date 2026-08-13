@@ -974,3 +974,77 @@ ilerletilebilecekler: T19'un kalan zinciri (provisioning profile'ı gerçek
 gerektirdiği için 1. maddeye takılabilir. Build'e ihtiyaç duymayanlar: T10
 (Etherscan link'leri), T8 (Emir kararı bekleyen maddeler + Apple Developer
 Program $99/yıl kararı).
+
+---
+
+## Update (2026-08-13): T19 — gerçek `Westron.app` artık imzalı + provisioning profile gömülü, AMFI öldürmüyor
+
+Bir önceki oturumun "sıradaki iş" listesinin **1. maddesi bitti.**
+
+**Yapılan üç değişiklik (üretim config'i, kod değil):**
+- `src-tauri/embedded.provisionprofile` — 12.08'de üretilen "Mac Team Provisioning Profile:
+  com.westron.app" projeye kopyalandı. **`.gitignore`'a eklendi**: makineye/hesaba özel ve
+  ücretsiz takım profile'ı olduğu için **18.08.2026'da doluyor** — git'e girmesi onu kalıcı
+  sanmaya yol açardı. Yenileme yolu: `xcodebuild -allowProvisioningUpdates` (bkz. 12.08 kaydı).
+- `src-tauri/entitlements.plist` — `$(AppIdentifierPrefix)com.westron.app` yerine literal
+  `ZWAS3MG895.com.westron.app`. Sebep: `$(AppIdentifierPrefix)` bir **Xcode build değişkeni**;
+  Tauri düz `codesign` çağırıyor ve onu genişletmiyor, yani eski hali imzada anlamsız bir
+  string olarak kalıyordu.
+- `src-tauri/tauri.conf.json` — `signingIdentity` artık `null` değil
+  (`"Apple Development: ebaltepe@gmail.com (66AKR5F8YX)"`), ve `bundle.macOS.files` ile profile
+  `Contents/embedded.provisionprofile` olarak bundle'a gömülüyor.
+
+**Doğrulanan (gerçekten çalıştırıldı, çıktısı görüldü):**
+- `npm run build:tauri -- --bundles app` — Rust release derlemesi **temiz geçti**. 12.08'deki
+  `errno -60 / ETIMEDOUT` tekrarlamadı: disk o gün ~12 GB boştu, şimdi ~26 GB. **T9'un
+  "build çalışmıyor" blokajı kalktı.**
+- `codesign --verify --strict Westron.app` → temiz.
+- Binary üzerindeki gerçek entitlement'lar:
+  `{"com.apple.security.network.client":true,"keychain-access-groups":["ZWAS3MG895.com.westron.app"]}`
+- `Westron.app/Contents/embedded.provisionprofile` gerçekten bundle'ın içinde.
+- **Uygulama çalıştırıldı ve ayakta kaldı.** 12.08'deki Deneme 3'te (profile'sız, aynı
+  entitlement'lı bundle) AMFI süreci açılışta `EXIT=137` ile öldürüyordu — artık öldürmüyor.
+  Yani restricted entitlement bu bundle'da **geçerli sayılıyor**.
+
+**Bilinen tuzak — Tauri'nin kendi imzalama adımı bu makinede TEK BAŞINA çalışmıyor:**
+```
+Westron.app: resource fork, Finder information, or similar detritus not allowed
+failed to bundle project failed codesign application
+```
+Proje iCloud'a senkronlanan `~/Desktop` altında olduğu için Finder/iCloud `.app` içindeki
+dosyalara görünmez extended attribute'lar iliştiriyor ve `codesign` bunları reddediyor.
+Bu bir kod hatası değil, ortam sorunu. Geçici çözüm (bu oturumda kullanılan, işe yarıyor):
+```
+cd src-tauri/target/release/bundle/macos
+xattr -cr Westron.app
+codesign --force --deep --options runtime \
+  --entitlements ../../../../entitlements.plist \
+  --sign "Apple Development: ebaltepe@gmail.com (66AKR5F8YX)" Westron.app
+```
+Not: `xattr` temizliğinden sonra bile iCloud etiketleri geri koyabiliyor — `codesign --verify`
+bir kez daha "detritus" derse `xattr -cr`'yi tekrar çalıştırmak yetiyor. **Kalıcı çözüm hâlâ
+projeyi iCloud senkronu dışına almak (Emir'in kararı, bu oturumda yapılmadı).**
+
+**YAPILMADI (bilerek, sırası gelmedi):**
+- App-açılışı migrasyon kodu (`wallet::keychain` → `keystore`, yaz-doğrula-sonra-sil). Mantığın
+  kendisi `keystore/migration.rs`'te yazılı ve testli (`migrate_into_keystore`), ama `lib.rs`
+  onu hiçbir yerden **çağırmıyor**.
+- `keystore`'un gerçek imzalama yoluna bağlanması. Cutover yüzeyi ölçüldü ve **küçük**: tüm
+  gerçek imzalama `wallet::keychain::fetch_and_verify_key`'den geçiyor — 4 çağrı yeri, 2 dosya
+  (`signing/mod.rs:111`, `marketplace/client.rs:51,135,215`). Yani `wallet/keychain.rs` içindeki
+  `store_key`/`fetch_key`/`delete_key`'i `keystore`'a devretmek çağrı yerlerine hiç dokunmadan
+  yapılabilir — tek nokta.
+- **Touch ID hâlâ gerçek uygulamada tetiklenmedi** — tetiklenemez de, çünkü `keystore` daha
+  hiçbir imzalama yoluna bağlı değil. 12.08'de ayrı bir `Probe.app`'te donanımda doğrulanmıştı.
+
+### Sıradaki oturum nereden başlasın
+1. Migrasyon kodunu `lib.rs`'in setup'ına bağla (yaz → doğrula → ancak sonra sil).
+2. `wallet/keychain.rs`'in key fonksiyonlarını `keystore`'a devret (cutover) — iki paralel
+   keychain servisi (`"Westron"` vs `"com.westron.wallet"`) böylece teke iner.
+3. Yeniden imzalı build al, gerçek bir cüzdanla Touch ID istemini Emir'in Mac'inde gözle doğrula.
+   **T19'un kabul kriteri ancak o zaman karşılanır.**
+4. Profile 18.08'de doluyor — bu zincir o tarihten önce bitmezse profile yenilenmeli.
+
+**Fırsat:** imzalı uygulama artık derleniyor ve çalışıyor, yani T9'un bekleyen ekran kontrolü
+(Send NFT sekmesi tıklanabilir mi, Confirm adımına kadar) ve T10'un Etherscan link kontrolü
+artık yapılabilir durumda. **Send'e basılmayacak.**

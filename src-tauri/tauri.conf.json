@@ -44,8 +44,11 @@
     "macOS": {
       "entitlements": "./entitlements.plist",
       "minimumSystemVersion": "12.0",
-      "signingIdentity": null,
+      "signingIdentity": "Apple Development: ebaltepe@gmail.com (66AKR5F8YX)",
       "providerShortName": null,
+      "files": {
+        "embedded.provisionprofile": "./embedded.provisionprofile"
+      },
       "dmg": {
         "background": null,
         "windowSize": { "width": 540, "height": 380 }

@@ -58,3 +58,7 @@ _deferred/_applied-*.patch
 _deferred/*.dead
 _deferred/*.lock
 _to_delete/
+
+# macOS provisioning profile — machine/account specific, free-team profiles expire in 7 days.
+# Regenerate with the Xcode helper project (see docs/CUSTODY-HARDENING-PLAN.md / STATUS.md T19).
+src-tauri/embedded.provisionprofile

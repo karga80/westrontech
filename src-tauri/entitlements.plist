@@ -5,10 +5,15 @@
   <!-- Outbound network requests (Alchemy RPC, marketplace APIs) -->
   <key>com.apple.security.network.client</key>
   <true/>
-  <!-- macOS Keychain access (private key + API key storage) -->
+  <!-- macOS Keychain access (private key + API key storage).
+       The Team ID prefix is written out literally: $(AppIdentifierPrefix) is an Xcode build
+       variable and Tauri signs with plain `codesign`, which does not expand it. ZWAS3MG895 is
+       the OU field of the signing certificate (NOT the value in the CN parentheses).
+       This entitlement is "restricted" — it is only honoured when the bundle carries an
+       embedded provisioning profile granting it (see bundle.macOS.files in tauri.conf.json). -->
   <key>keychain-access-groups</key>
   <array>
-    <string>$(AppIdentifierPrefix)com.westron.app</string>
+    <string>ZWAS3MG895.com.westron.app</string>
   </array>
 </dict>
 </plist>
