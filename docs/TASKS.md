@@ -1577,3 +1577,50 @@ Tümü paralel. T18 tek çıktısı: bir keşif raporu. T19 bu rapor bitmeden ba
 **Emir'in onayı gereken nokta:** T18'in keşif raporu teslim edildikten hemen sonra, T19'un ilk
 kod satırı yazılmadan önce — bu, gerçek private key custody modelinin kökten değiştiği an,
 CLAUDE.md'nin hard-stop maddesi kapsamına giriyor, onay olmadan implementasyon başlamaz.
+
+---
+
+## T23 — Snipe yürütmesi otonomi motorunu ve audit log'unu atlıyor (gerçek fulfilment'ın önkoşulu)
+
+**Bulunma tarihi:** 15.08.2026 — arm-at-creation kodunun güvenlik incelemesi sırasında,
+`code-reviewer` ve `security-reviewer` bağımsız olarak aynı şeyi işaret etti.
+**Seviye:** HIGH. Bugün sömürülebilir değil, yarın para kaybettirir.
+
+### Sorun
+
+`sniping/engine.rs::execute_snipe` şu sırayı izliyor: silahlı mı → harcama tavanı →
+zarf (`check_and_authorize`) → sahte hash üret. Bu zincirde **iki halka eksik**:
+
+1. **Otonomi motoru (`autonomy/`) devrede değil.** Cüzdanın manual / assisted /
+   autonomous modu okunmuyor. `signing/mod.rs::authorize_or_queue` çağrılmıyor, yani
+   `manual` moddaki bir cüzdan için bile onay kuyruğuna hiçbir şey düşmüyor.
+2. **Hash zincirli audit log'a hiçbir kayıt yazılmıyor.** Tetiklenen bir snipe
+   `audit/*.jsonl`'de görünmüyor. Zarfın kendi kaydı harcamayı yazıyor, ama "hangi kural,
+   hangi cüzdan, hangi modda, hangi kararla tetiklendi" bilgisi hiçbir yerde yok.
+
+Şu an zararsız olmasının **tek** sebebi, `execute_snipe`'ın gerçekte hiçbir şey
+imzalamaması: `0xSIMULATED_snipe_...` üretip duruyor (bkz. `MOCKS.md`, S1).
+
+### Neden gerçek fulfilment'ın önkoşulu
+
+Seaport fulfilment bağlandığı an bu iki eksik şuna dönüşür: `manual` moda alınmış bir
+cüzdan, kullanıcı onayı istenmeden, hiçbir iz bırakmadan gerçek ETH harcar. Kullanıcı
+sonradan ne olduğunu audit log'dan okuyamaz — çünkü kayıt yok.
+
+### Kabul kriteri (bu maddeler geçmeden Seaport fulfilment kodu yazılmaz)
+
+- [ ] `execute_snipe`, zarf kontrolünden sonra `signing::authorize_or_queue`'dan geçer.
+- [ ] `manual` moddaki cüzdan için snipe **imzalanmaz**, onay kuyruğuna düşer ve
+      `SnipeResult.error` bunu kullanıcının anlayacağı dille söyler ("waiting for your
+      approval", "silently did nothing" değil).
+- [ ] Her tetikleme — onaylanmış, kuyruğa alınmış veya reddedilmiş — hash zincirli
+      audit log'a bir satır yazar.
+- [ ] Testler: `manual` modda kuyruğa düştüğünü, `autonomous` modda geçtiğini ve her iki
+      durumda da audit satırının yazıldığını doğrulayan en az üç test.
+
+### Neden şimdi düzeltilmedi
+
+15.08.2026 oturumunun kapsamı arm-at-creation incelemesiydi. Bu düzeltme snipe yürütme
+yolunun yeniden kurulmasını gerektiriyor — o kapsamın dışında, ve yarım bırakılırsa
+CLAUDE.md'nin "yarım refactor" başarısızlık modu. Bu yüzden sessizce geçilmedi, buraya
+önkoşul olarak yazıldı.

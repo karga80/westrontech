@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getEnvelopeStatus,
   createEnvelope,
@@ -12,12 +12,29 @@ import {
   deleteSnipeRule,
   setSnipeRuleActive,
   runSnipeCheck,
+  armWalletForTasks,
+  disarmWalletForTasks,
+  walletArmedStatus,
+  schedulerStatus,
+  setSchedulerEnabled,
   type EnvelopeStatus,
   type SnipeRule,
   type SnipeRuleInput,
   type SnipeResult,
   type SnipeOpportunity,
+  type ArmedStatus,
+  type SchedulerStatus,
 } from '@/lib/tauri';
+import {
+  isArmedAt,
+  formatRemaining,
+  formatExpiryClock,
+  explainArmError,
+  armKey,
+  DEFAULT_ARM_TTL_HOURS,
+  MAX_ARM_TTL_HOURS,
+} from '@/lib/armed';
+import { isSimulatedHash, isRealTxHash } from '@/lib/txHash';
 import { EMPTY_SNIPE_RULES } from '@/lib/emptyData';
 import ProGate from '@/components/ProGate';
 
@@ -51,9 +68,11 @@ function formatExpiry(expiresAt: number): string {
 
 interface EnvelopePanelProps {
   isTauri: boolean;
+  /** Fired after the kill switch lands — it also drops every armed wallet. */
+  onKillSwitch: () => void;
 }
 
-function EnvelopePanel({ isTauri }: EnvelopePanelProps) {
+function EnvelopePanel({ isTauri, onKillSwitch }: EnvelopePanelProps) {
   const [status, setStatus] = useState<EnvelopeStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,13 +123,17 @@ function EnvelopePanel({ isTauri }: EnvelopePanelProps) {
   const handleKillSwitch = async () => {
     if (!isTauri) return;
     const confirmed = window.confirm(
-      'Kill switch will immediately halt all automated transactions. Continue?'
+      'Kill switch will immediately halt all automated transactions.\n\n' +
+        'It also disarms every armed wallet: the keys held in memory for scheduled ' +
+        'rules are dropped, and each wallet has to be re-armed with Touch ID before ' +
+        'any rule can fire again.\n\nContinue?'
     );
     if (!confirmed) return;
     setActionLoading('kill');
     setError(null);
     try {
       await activateKillSwitch();
+      onKillSwitch();
       await loadStatus();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -372,24 +395,227 @@ function EnvelopePanel({ isTauri }: EnvelopePanelProps) {
   );
 }
 
+// ─── Simulation notice ────────────────────────────────────────────────────────
+
+/**
+ * Permanent, non-dismissible. The snipe engine does not touch the chain yet
+ * (`src-tauri/src/sniping/engine.rs` produces a simulated hash and sends the
+ * transaction to the wallet itself), so a triggered rule has NOT bought
+ * anything. This banner comes down when real Seaport fulfilment is wired up —
+ * not before.
+ */
+function SimulationNotice() {
+  return (
+    <div className="mb-6 rounded-[8px] border border-[#ffb85c]/40 bg-[#ffb85c0f] px-5 py-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 shrink-0 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-[#ffb85c22] text-[#ffb85c]">
+          Simulation
+        </span>
+        <div className="text-sm leading-relaxed text-[#d8bd94]">
+          <p className="font-medium text-[#ffb85c]">
+            A triggered rule does not buy anything yet.
+          </p>
+          <p className="mt-1 text-[#9298b8]">
+            Sniping runs against real floor prices and real guardrails, but the purchase
+            itself is not sent to the chain — no ETH moves and no NFT arrives. Any
+            transaction hash shown for a trigger is simulated, not an on-chain receipt.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Scheduler banner ─────────────────────────────────────────────────────────
+
+/**
+ * The snipe loop ships OFF. While it is off, rules are stored but never
+ * checked — nothing fires on its own. Saying nothing here is the exact silent
+ * failure the honesty rules forbid: the user creates a rule, sees it listed as
+ * "active", and waits for something that will never happen.
+ */
+function SchedulerBanner({ isTauri }: { isTauri: boolean }) {
+  const [status, setStatus] = useState<SchedulerStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!isTauri) { setStatus(null); return; }
+    setError(null);
+    try {
+      setStatus(await schedulerStatus());
+    } catch (e: unknown) {
+      setStatus(null);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [isTauri]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await setSchedulerEnabled(enabled));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!isTauri) return null;
+
+  if (error) {
+    return (
+      <div className="mb-6 rounded-[8px] border border-[#ff8a96]/40 bg-[#ff4d5e11] px-5 py-4 text-sm text-[#ff8a96]">
+        Could not read the scheduler state, so this screen cannot tell you whether rules
+        are being checked: {error}
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="mb-6 rounded-[8px] border border-[#14161f] bg-[#14161f] px-5 py-4 text-sm text-[#6e7590]">
+        Reading scheduler state…
+      </div>
+    );
+  }
+
+  const lastCheck = status.last_check_at
+    ? new Date(status.last_check_at).toLocaleString()
+    : null;
+  const skipped = status.last_cycle?.skipped_reason ?? null;
+
+  return (
+    <div
+      className={`mb-6 rounded-[8px] border px-5 py-4 ${
+        status.enabled
+          ? 'border-[#4fe9b4]/30 bg-[#00d68f09]'
+          : 'border-[#ff8a96]/40 bg-[#ff4d5e11]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="text-sm">
+          {status.enabled ? (
+            <>
+              <p className="font-medium text-[#4fe9b4]">
+                Scheduler is on — active rules are checked every {status.interval_secs}s.
+              </p>
+              <p className="mt-1 text-[#6e7590]">
+                {lastCheck ? `Last check: ${lastCheck}` : 'No cycle has run yet.'}
+                {status.cycles_run > 0 && ` · ${status.cycles_run} cycles this session`}
+              </p>
+              {skipped && (
+                <p className="mt-1 text-[#ffb85c]">
+                  Last cycle did no work: {skipped}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-[#ff8a96]">
+                Scheduler is off — no rule will ever fire on its own.
+              </p>
+              <p className="mt-1 text-[#9298b8]">
+                Rules below are stored, but nothing checks them. Turn the scheduler on, or
+                use Run Check Now for a single manual pass.
+              </p>
+            </>
+          )}
+        </div>
+        <button
+          onClick={() => toggle(!status.enabled)}
+          disabled={busy}
+          className={`shrink-0 rounded-[6px] px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+            status.enabled
+              ? 'bg-[#14161f] text-[#9298b8] hover:text-white'
+              : 'bg-[#7c5cff] text-black hover:opacity-90'
+          }`}
+        >
+          {busy ? 'Saving…' : status.enabled ? 'Turn off' : 'Turn on'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Armed badge ──────────────────────────────────────────────────────────────
+
+interface ArmedBadgeProps {
+  status: ArmedStatus | undefined;
+  /** Set when the status could not be read — never render "Disarmed" on a guess. */
+  unknown: boolean;
+  nowSec: number;
+}
+
+function ArmedBadge({ status, unknown, nowSec }: ArmedBadgeProps) {
+  if (unknown || !status) {
+    return (
+      <span className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-[#14161f] text-[#6e7590]">
+        Arming unknown
+      </span>
+    );
+  }
+  const armed = isArmedAt(status, nowSec);
+  return (
+    <span
+      className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+        armed ? 'bg-[#00d68f22] text-[#4fe9b4]' : 'bg-[#ff4d5e22] text-[#ff8a96]'
+      }`}
+      title={
+        armed && status.expires_at !== null
+          ? `Armed until ${formatExpiryClock(status.expires_at)}`
+          : 'This wallet cannot sign — rules on it will not fire.'
+      }
+    >
+      {armed && status.expires_at !== null
+        ? `Armed · ${formatRemaining(status.expires_at, nowSec)}`
+        : 'Disarmed'}
+    </span>
+  );
+}
+
 // ─── Snipe Rule Row ───────────────────────────────────────────────────────────
 
 interface SnipeRuleRowProps {
   rule: SnipeRule;
   result: SnipeResult | undefined;
+  armedStatus: ArmedStatus | undefined;
+  armedUnknown: boolean;
+  nowSec: number;
+  rearmBusy: boolean;
+  onRearm: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }
 
-function SnipeRuleRow({ rule, result, onToggle, onDelete }: SnipeRuleRowProps) {
+function SnipeRuleRow({
+  rule,
+  result,
+  armedStatus,
+  armedUnknown,
+  nowSec,
+  rearmBusy,
+  onRearm,
+  onToggle,
+  onDelete,
+}: SnipeRuleRowProps) {
   let rowHighlight = '';
   if (result) {
     if (result.triggered) rowHighlight = 'bg-[#00d68f09] border-l-2 border-[#4fe9b4]';
     else if (result.error) rowHighlight = 'bg-red-500/5 border-l-2 border-[#ff8a96]';
   }
 
+  // A disarmed wallet cannot sign, so the rule is inert whatever its toggle
+  // says. Greying it out is the honest reading — but it is recoverable, so the
+  // row also carries the one click that fixes it.
+  const armed = isArmedAt(armedStatus, nowSec);
+  const inert = !armedUnknown && !armed;
+
   return (
-    <div className={`px-6 py-4 flex items-center gap-4 hover:bg-[#14161f]/40 transition-colors ${rowHighlight}`}>
+    <div className={`px-6 py-4 flex items-center gap-4 hover:bg-[#14161f]/40 transition-colors ${rowHighlight} ${inert ? 'opacity-60' : ''}`}>
       {/* Collection badge */}
       <span className="shrink-0 text-xs px-2 py-0.5 rounded font-medium font-mono" style={{ backgroundColor: 'var(--tag-purple-bg)', color: 'var(--tag-purple-text)', border: '1px solid var(--tag-purple-border)' }}>
         {rule.collection_slug}
@@ -407,9 +633,17 @@ function SnipeRuleRow({ rule, result, onToggle, onDelete }: SnipeRuleRowProps) {
           <span className="text-[#9298b8]">Triggered:</span>
           <span className="text-white">{rule.triggered_count}</span>
         </div>
-        <p className="text-xs text-[#2b2e3f] mt-0.5 font-mono truncate">
-          {rule.wallet_address.slice(0, 10)}...{rule.wallet_address.slice(-6)}
-        </p>
+        <div className="mt-0.5 flex items-center gap-2">
+          <p className="text-xs text-[#2b2e3f] font-mono truncate">
+            {rule.wallet_address.slice(0, 10)}...{rule.wallet_address.slice(-6)}
+          </p>
+          <ArmedBadge status={armedStatus} unknown={armedUnknown} nowSec={nowSec} />
+        </div>
+        {inert && (
+          <p className="mt-1 text-xs text-[#ff8a96]">
+            This wallet is disarmed — the rule cannot fire until you re-arm it with Touch ID.
+          </p>
+        )}
         {result && (
           <p className={`text-xs mt-1 ${
             result.triggered
@@ -422,16 +656,42 @@ function SnipeRuleRow({ rule, result, onToggle, onDelete }: SnipeRuleRowProps) {
             {!result.triggered && !result.error && 'No match'}
             {result.error && `Error: ${result.error}`}
             {result.triggered && result.tx_hash ? (
-              <span style={{ marginLeft: '4px' }}>
-                — tx <span style={{ fontFamily: 'var(--font-jetbrains)', color: '#90a6ff' }}>{result.tx_hash.slice(0, 10)}…</span>
-                <a href={`https://etherscan.io/tx/${result.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: '4px', color: 'var(--wr-text-3)', display: 'inline-flex', verticalAlign: 'middle' }} className="hover:text-[#9298b8] transition-colors">
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </a>
-              </span>
+              !isRealTxHash(result.tx_hash) ? (
+                // The engine still returns `0xSIMULATED_...`: nothing was signed
+                // and nothing was broadcast. Linking that to Etherscan would
+                // send the user to a "transaction not found" page and let them
+                // conclude the chain is lagging rather than that no trade
+                // happened — so it is named for what it is, and not linked.
+                // Anything else that is not a 32-byte hash gets the same
+                // treatment: an unlinkable value is not evidence of a trade.
+                <span style={{ marginLeft: '4px' }} className="text-[#ffb46b]">
+                  {isSimulatedHash(result.tx_hash)
+                    ? '— simulated, nothing was sent'
+                    : '— no verifiable transaction hash'}
+                </span>
+              ) : (
+                <span style={{ marginLeft: '4px' }}>
+                  — tx <span style={{ fontFamily: 'var(--font-jetbrains)', color: '#90a6ff' }}>{result.tx_hash.slice(0, 10)}…</span>
+                  <a href={`https://etherscan.io/tx/${result.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: '4px', color: 'var(--wr-text-3)', display: 'inline-flex', verticalAlign: 'middle' }} className="hover:text-[#9298b8] transition-colors">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 1.5H8.5V4.5M8.5 1.5L4 6M3 2.5H1.5C1.2 2.5 1 2.7 1 3V8.5C1 8.8 1.2 9 1.5 9H7C7.3 9 7.5 8.8 7.5 8.5V7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </a>
+                </span>
+              )
             ) : ''}
           </p>
         )}
       </div>
+
+      {/* Re-arm — one click, and it prompts Touch ID again on purpose */}
+      {inert && (
+        <button
+          onClick={onRearm}
+          disabled={rearmBusy}
+          className="shrink-0 rounded-[6px] bg-[#7c5cff] px-3 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {rearmBusy ? 'Waiting for Touch ID…' : 'Re-arm'}
+        </button>
+      )}
 
       {/* Active toggle */}
       <button
@@ -472,8 +732,16 @@ export default function SnipingPage() {
   const [targetPrice, setTargetPrice] = useState('');
   const [maxQty, setMaxQty] = useState('1');
   const [ruleWallet, setRuleWallet] = useState('');
+  const [armTtlHours, setArmTtlHours] = useState(String(DEFAULT_ARM_TTL_HOURS));
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Armed sessions, keyed by lowercased address (the same key Rust uses).
+  // A missing entry means "not read yet / could not read" — never "disarmed".
+  const [armedMap, setArmedMap] = useState<Record<string, ArmedStatus>>({});
+  const [armedError, setArmedError] = useState<string | null>(null);
+  const [armBusy, setArmBusy] = useState<string | null>(null);
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
   // Rules list
   const [rules, setRules] = useState<SnipeRule[]>([]);
@@ -511,6 +779,57 @@ export default function SnipingPage() {
     }
   }, []);
 
+  // The countdown has to be visibly live: an armed window that silently lapses
+  // while the screen still says "Armed" is exactly the kind of stale claim that
+  // makes a user think a rule will fire when it cannot.
+  useEffect(() => {
+    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Ordering guard. Answers about a wallet arrive from two places at once: the
+  // 30s poll and the user's own Arm/Disarm click. They can overtake each other
+  // — a poll that left before the click can come back after it — and the loser
+  // must not win. Without this, clicking Disarm shows "Disarmed" and then the
+  // badge flips back to "Armed" for a wallet whose key is already gone, which
+  // is the screen claiming a rule can fire when it cannot.
+  //
+  // Every read takes a ticket *before* it starts; a write only lands if no
+  // newer ticket has already written that address.
+  const nextTicket = useRef(0);
+  const appliedTicket = useRef<Record<string, number>>({});
+
+  const applyArmed = useCallback((statuses: ArmedStatus[], ticket: number) => {
+    const fresh = statuses.filter(
+      s => (appliedTicket.current[armKey(s.address)] ?? 0) <= ticket
+    );
+    if (fresh.length === 0) return;
+    fresh.forEach(s => { appliedTicket.current[armKey(s.address)] = ticket; });
+    setArmedMap(prev => {
+      const next = { ...prev };
+      fresh.forEach(s => { next[armKey(s.address)] = s; });
+      return next;
+    });
+  }, []);
+
+  const refreshArmed = useCallback(async (addresses: string[]) => {
+    if (!isTauri) return;
+    const unique = Array.from(
+      new Set(addresses.filter(isValidEthAddress).map(armKey))
+    );
+    if (unique.length === 0) return;
+    const ticket = ++nextTicket.current;
+    try {
+      const statuses = await Promise.all(unique.map(a => walletArmedStatus(a)));
+      applyArmed(statuses, ticket);
+      setArmedError(null);
+    } catch (e: unknown) {
+      // Do not fall back to "disarmed": that is a claim, and the wrong one
+      // would either hide a live key or hide a dead rule.
+      setArmedError(e instanceof Error ? e.message : String(e));
+    }
+  }, [isTauri, applyArmed]);
+
   const loadRules = async (addr: string) => {
     if (!isTauri) { setRules(EMPTY_SNIPE_RULES); return; }
     setListLoading(true);
@@ -534,57 +853,84 @@ export default function SnipingPage() {
     }
   };
 
-  const handleCreateRule = async () => {
+  // A saved address used to be restored without ever loading its rules, so the
+  // list looked empty until the field was retyped.
+  useEffect(() => {
+    if (isTauri && isValidEthAddress(address)) loadRules(address);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTauri]);
+
+  useEffect(() => {
+    refreshArmed([ruleWallet, ...rules.map(r => r.wallet_address)]);
+  }, [refreshArmed, ruleWallet, rules]);
+
+  // Catches disarms that did not come from this screen — the kill switch from
+  // another window, or an expiry the backend has already dropped.
+  useEffect(() => {
+    if (!isTauri) return;
+    const id = setInterval(() => {
+      refreshArmed([ruleWallet, ...rules.map(r => r.wallet_address)]);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [isTauri, refreshArmed, ruleWallet, rules]);
+
+  /**
+   * Arm, then create. The Touch ID prompt comes out of `armWalletForTasks`, and
+   * the rule is only written if it succeeded — a rule on an unarmed wallet is
+   * stored but inert, which is the silent failure this flow exists to prevent.
+   * On a cancelled prompt the form is left exactly as typed.
+   */
+  const handleArmAndCreate = async () => {
     if (!isTauri) {
-      const price = parseFloat(targetPrice);
-      const qty = parseInt(maxQty, 10);
-      if (!collectionSlug.trim() || isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0) {
-        setFormError('Tüm alanları doğru doldurun.');
-        return;
-      }
-      const newRule: SnipeRule = {
-        id: `demo-${Date.now()}`,
-        collection_slug: collectionSlug.trim(),
-        target_price_eth: price,
-        max_quantity: qty,
-        wallet_address: ruleWallet || '0xd8dA...6045',
-        active: true,
-        triggered_count: 0,
-        created_at: new Date().toISOString(),
-      };
-      setRules(prev => [newRule, ...prev]);
-      setCollectionSlug('');
-      setTargetPrice('');
-      setMaxQty('1');
+      setFormError('Scheduled rules need the desktop app — the browser build has no key store and cannot arm a wallet.');
       return;
     }
     if (!collectionSlug.trim()) {
-      setFormError('Collection slug gerekli.');
+      setFormError('Collection slug is required.');
       return;
     }
     const price = parseFloat(targetPrice);
     if (isNaN(price) || price <= 0) {
-      setFormError('Gecerli bir ETH fiyati girin.');
+      setFormError('Enter a target price in ETH greater than zero.');
       return;
     }
     const qty = parseInt(maxQty, 10);
     if (isNaN(qty) || qty <= 0) {
-      setFormError('Max quantity en az 1 olmali.');
+      setFormError('Max quantity must be at least 1.');
       return;
     }
     if (!isValidEthAddress(ruleWallet)) {
-      setFormError('Gecersiz Ethereum adresi.');
+      setFormError('That is not a valid Ethereum address.');
+      return;
+    }
+    const ttl = parseInt(armTtlHours, 10);
+    if (isNaN(ttl) || ttl < 1 || ttl > MAX_ARM_TTL_HOURS) {
+      setFormError(`Arm the wallet for between 1 and ${MAX_ARM_TTL_HOURS} hours.`);
       return;
     }
 
+    const wallet = ruleWallet.trim();
     setFormLoading(true);
     setFormError(null);
+
+    let armed: ArmedStatus;
+    const ticket = ++nextTicket.current;
+    try {
+      armed = await armWalletForTasks(wallet, ttl);
+    } catch (e: unknown) {
+      setFormError(explainArmError(e instanceof Error ? e.message : String(e)));
+      setFormLoading(false);
+      await refreshArmed([wallet]);
+      return;
+    }
+    applyArmed([armed], ticket);
+
     try {
       const input: SnipeRuleInput = {
         collection_slug: collectionSlug.trim(),
         target_price_eth: price,
         max_quantity: qty,
-        wallet_address: ruleWallet.trim(),
+        wallet_address: wallet,
       };
       const newId = await createSnipeRule(input);
       const newRule: SnipeRule = {
@@ -602,9 +948,46 @@ export default function SnipingPage() {
       setTargetPrice('');
       setMaxQty('1');
     } catch (e: unknown) {
+      // The wallet stays armed here on purpose: the approval was real, and the
+      // panel above now says so. Only the rule failed.
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  /** Re-arm an existing rule's wallet. Prompts Touch ID again, always. */
+  const handleArm = async (wallet: string) => {
+    if (!isTauri) return;
+    const ttl = parseInt(armTtlHours, 10);
+    setArmBusy(armKey(wallet));
+    setArmedError(null);
+    const ticket = ++nextTicket.current;
+    try {
+      const status = await armWalletForTasks(
+        wallet,
+        isNaN(ttl) ? DEFAULT_ARM_TTL_HOURS : ttl
+      );
+      applyArmed([status], ticket);
+    } catch (e: unknown) {
+      setArmedError(explainArmError(e instanceof Error ? e.message : String(e)));
+    } finally {
+      setArmBusy(null);
+    }
+  };
+
+  const handleDisarm = async (wallet: string) => {
+    if (!isTauri) return;
+    setArmBusy(armKey(wallet));
+    setArmedError(null);
+    const ticket = ++nextTicket.current;
+    try {
+      const status = await disarmWalletForTasks(wallet);
+      applyArmed([status], ticket);
+    } catch (e: unknown) {
+      setArmedError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArmBusy(null);
     }
   };
 
@@ -631,14 +1014,11 @@ export default function SnipingPage() {
 
   const handleRunCheck = async () => {
     if (!isTauri) {
-      setCheckResults({
-        'mock-snipe-001': { rule_id: 'mock-snipe-001', collection_slug: 'azuki', floor_price_eth: 3.82, triggered: false },
-        'mock-snipe-002': { rule_id: 'mock-snipe-002', collection_slug: 'doodles-official', floor_price_eth: 0.91, triggered: false },
-      });
+      setCheckError('A snipe check reads live floor prices through the desktop app — the browser build cannot run one.');
       return;
     }
     if (!apiKey.trim()) {
-      setCheckError('Alchemy API key gerekli.');
+      setCheckError('An Alchemy API key is required to read floor prices.');
       return;
     }
     setCheckLoading(true);
@@ -670,6 +1050,11 @@ export default function SnipingPage() {
   const triggeredCount = Object.values(checkResults).filter(r => r.triggered).length;
   const errorCount = Object.values(checkResults).filter(r => Boolean(r.error)).length;
 
+  const ruleWalletKey = isValidEthAddress(ruleWallet) ? armKey(ruleWallet) : null;
+  const ruleWalletArmed = ruleWalletKey ? armedMap[ruleWalletKey] : undefined;
+  const ruleWalletIsArmed = isArmedAt(ruleWalletArmed, nowSec);
+  const armedUnknown = Boolean(armedError) || (ruleWalletKey !== null && !ruleWalletArmed);
+
   return (
     <ProGate feature="Sniping & Automation">
     <main className="min-h-full bg-[#0b0c14] text-white">
@@ -692,8 +1077,19 @@ export default function SnipingPage() {
           />
         </div>
 
+        {/* Two things the user must know before creating anything here */}
+        <SimulationNotice />
+        <SchedulerBanner isTauri={isTauri} />
+
         {/* Authorization Envelope */}
-        <EnvelopePanel isTauri={isTauri} />
+        <EnvelopePanel
+          isTauri={isTauri}
+          onKillSwitch={() => {
+            // The backend drops every armed wallet with the kill switch; read
+            // the real state back rather than assuming it.
+            refreshArmed([ruleWallet, ...rules.map(r => r.wallet_address)]);
+          }}
+        />
 
         {/* Create Snipe Rule */}
         <div className="bg-[#14161f] border border-[#14161f] rounded-[8px] p-6 mb-6">
@@ -752,7 +1148,87 @@ export default function SnipingPage() {
                 className={`w-full bg-[#14161f] border rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e7590] focus:outline-none transition-colors ${ruleWalletBorderClass}`}
               />
             </div>
+            <div>
+              <label className="block text-xs text-[#6e7590] mb-1.5">
+                Keep armed for (hours)
+              </label>
+              <input
+                type="number"
+                value={armTtlHours}
+                onChange={e => setArmTtlHours(e.target.value)}
+                min="1"
+                max={MAX_ARM_TTL_HOURS}
+                step="1"
+                className="w-full bg-[#14161f] border border-[#14161f] rounded-[6px] px-4 py-2 text-sm text-white placeholder-[#6e7590] focus:outline-none focus:border-[#7c5cff]"
+              />
+              <p className="text-xs text-[#2b2e3f] mt-1">
+                Max {MAX_ARM_TTL_HOURS}h. Quitting Westron ends it sooner.
+              </p>
+            </div>
           </div>
+
+          {/* ── Arming state for the wallet this rule will use ── */}
+          {isTauri && ruleWalletKey && (
+            <div
+              className={`mb-4 rounded-[6px] border px-4 py-3 ${
+                armedUnknown
+                  ? 'border-[#14161f] bg-[#14161f]'
+                  : ruleWalletIsArmed
+                  ? 'border-[#4fe9b4]/30 bg-[#00d68f09]'
+                  : 'border-[#ff8a96]/30 bg-[#ff4d5e11]'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <ArmedBadge
+                      status={ruleWalletArmed}
+                      unknown={armedUnknown}
+                      nowSec={nowSec}
+                    />
+                    <span className="font-mono text-xs text-[#6e7590]">
+                      {ruleWallet.slice(0, 10)}…{ruleWallet.slice(-6)}
+                    </span>
+                  </div>
+                  {armedUnknown ? (
+                    <p className="mt-2 text-[#9298b8]">
+                      {armedError
+                        ? `Could not read this wallet's arming state: ${armedError}`
+                        : 'Reading this wallet’s arming state…'}
+                    </p>
+                  ) : ruleWalletIsArmed && ruleWalletArmed?.expires_at ? (
+                    <p className="mt-2 text-[#9298b8]">
+                      This wallet is armed until{' '}
+                      <span className="text-white">
+                        {formatExpiryClock(ruleWalletArmed.expires_at)}
+                      </span>
+                      . Rules on it can sign without asking again during that window.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[#9298b8]">
+                      This wallet cannot sign. Arm & Create takes one Touch ID approval and
+                      opens the window.
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-[#6e7590]">
+                    The key is held in memory only. <span className="text-[#ffb85c]">Quitting
+                    Westron — or shutting the Mac down — disarms it immediately</span>, and
+                    rules stop firing until you arm it again. Every arming asks for Touch ID
+                    again, including extending one that is already open.
+                  </p>
+                </div>
+                {ruleWalletIsArmed && (
+                  <button
+                    onClick={() => handleDisarm(ruleWallet)}
+                    disabled={armBusy === ruleWalletKey}
+                    className="shrink-0 rounded-[6px] bg-[#14161f] px-4 py-2 text-sm font-semibold text-[#9298b8] transition-colors hover:text-white disabled:opacity-50"
+                  >
+                    {armBusy === ruleWalletKey ? 'Disarming…' : 'Disarm'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {formError && (
             <div className="mb-4 bg-[#ff4d5e11] border border-[#ff8a96]/30 rounded-[6px] px-4 py-3 text-[#ff8a96] text-sm">
@@ -761,12 +1237,16 @@ export default function SnipingPage() {
           )}
 
           <button
-            onClick={handleCreateRule}
+            onClick={handleArmAndCreate}
             disabled={formLoading}
             className="bg-[#7c5cff] text-black font-semibold px-6 py-2 rounded-[6px] text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {formLoading ? 'Creating...' : 'Create Snipe Rule'}
+            {formLoading ? 'Waiting for Touch ID…' : 'Arm & Create'}
           </button>
+          <p className="mt-2 text-xs text-[#6e7590]">
+            Creating a rule asks for Touch ID once and keeps the key in memory for the
+            window above.
+          </p>
         </div>
 
         {/* Snipe Rules List */}
@@ -836,6 +1316,13 @@ export default function SnipingPage() {
                   key={rule.id}
                   rule={rule}
                   result={checkResults[rule.id]}
+                  armedStatus={armedMap[armKey(rule.wallet_address)]}
+                  armedUnknown={
+                    Boolean(armedError) || !armedMap[armKey(rule.wallet_address)]
+                  }
+                  nowSec={nowSec}
+                  rearmBusy={armBusy === armKey(rule.wallet_address)}
+                  onRearm={() => handleArm(rule.wallet_address)}
                   onToggle={() => handleToggleRule(rule)}
                   onDelete={() => handleDeleteRule(rule.id)}
                 />

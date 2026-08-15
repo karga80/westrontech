@@ -557,6 +557,72 @@ export async function deleteEtherscanKey(): Promise<void> {
   return invoke('delete_etherscan_key_cmd');
 }
 
+// ─── Arm-at-creation (scheduled tasks) ──────────────────────────────────────
+//
+// A scheduled rule can only sign while its wallet is *armed*: the key is held
+// in memory for a window the user approved once with Touch ID. Quitting the
+// app ends that window — there is no persisted automation copy of the key.
+// `ArmedStatus` deliberately never carries the key itself.
+
+export interface ArmedStatus {
+  address: string;
+  armed: boolean;
+  /** Unix seconds, or null when not armed. */
+  armed_at: number | null;
+  expires_at: number | null;
+}
+
+/** Prompts Touch ID. Every call re-prompts — an armed wallet is never silently extended. */
+export async function armWalletForTasks(
+  walletAddress: string,
+  ttlHours?: number,
+): Promise<ArmedStatus> {
+  return invoke<ArmedStatus>('arm_wallet_for_tasks', { walletAddress, ttlHours });
+}
+
+export async function disarmWalletForTasks(walletAddress: string): Promise<ArmedStatus> {
+  return invoke<ArmedStatus>('disarm_wallet_for_tasks', { walletAddress });
+}
+
+export async function walletArmedStatus(walletAddress: string): Promise<ArmedStatus> {
+  return invoke<ArmedStatus>('wallet_armed_status', { walletAddress });
+}
+
+// ─── Snipe scheduler ────────────────────────────────────────────────────────
+//
+// Ships OFF by default. While it is off, rules are stored but never checked —
+// nothing fires on its own. Any screen that lets a user create a rule has to
+// say so, otherwise the rule looks armed when it is inert.
+
+export interface SchedulerCycleSummary {
+  checked_at: string;
+  active_rules: number;
+  expired_deactivated: number;
+  spend_capped_deactivated: number;
+  triggered: number;
+  skipped_reason: string | null;
+  results: SnipeResult[];
+}
+
+export interface SchedulerStatus {
+  enabled: boolean;
+  interval_secs: number;
+  last_check_at: string | null;
+  last_cycle: SchedulerCycleSummary | null;
+  cycles_run: number;
+}
+
+export async function schedulerStatus(): Promise<SchedulerStatus> {
+  return invoke<SchedulerStatus>('scheduler_status');
+}
+
+export async function setSchedulerEnabled(
+  enabled: boolean,
+  intervalSecs?: number,
+): Promise<SchedulerStatus> {
+  return invoke<SchedulerStatus>('set_scheduler_enabled', { enabled, intervalSecs });
+}
+
 // Sniping
 export interface SnipeRuleInput {
   collection_slug: string;
@@ -583,6 +649,8 @@ export interface SnipeResult {
   triggered: boolean;
   tx_hash?: string;
   error?: string;
+  /** `"expired"` or `"spend_cap_reached"` when this cycle switched the rule off. */
+  deactivated_reason?: string | null;
 }
 
 export async function createSnipeRule(input: SnipeRuleInput): Promise<string> {

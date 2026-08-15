@@ -58,6 +58,18 @@ Per `README.md`: sniping executes in **simulation** by design for this phase —
 labeled and intentional, not a hidden fake. Real on-chain execution is a later, separately-gated
 step.
 
+**2026-08-15 (T20):** the simulated hash is no longer rendered as if it were a transaction. The
+sniping screen used to show `0xSIMULATED_snipe_...` as a linked Etherscan hash — a user clicking
+it would land on "transaction not found" and reasonably conclude the chain was lagging, not that
+no trade had happened. It now reads "simulated, nothing was sent" and is not a link
+(`src/lib/txHash.ts` + `src/app/sniping/page.tsx`). Anything that is not a 32-byte hex hash gets
+the same treatment.
+
+**Prerequisite before real fulfilment — `docs/TASKS.md` T23 (HIGH):** `execute_snipe` bypasses
+the autonomy engine (`autonomy/`) and the hash-chained audit log. Harmless only while nothing is
+signed. Wiring Seaport fulfilment without closing T23 would let a wallet set to `manual` spend
+real ETH with no approval and no audit trail.
+
 ## 2026-08-02: dashboard/UI mock-facade cleanup
 
 Emir reported "dashboard is full of mock / wrong datas." Audit confirmed it — 9 screens had

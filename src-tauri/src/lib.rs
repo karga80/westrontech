@@ -6,15 +6,15 @@ mod data;
 mod envelope;
 mod marketplace;
 mod nft;
-mod stream;
-mod wallet;
+mod persist;
+mod pnl;
 mod rpc;
 mod signing;
-mod sniping;
 mod sister;
+mod sniping;
+mod stream;
 mod subscription;
-mod pnl;
-mod persist;
+mod wallet;
 // T19 Faz 1 (W-1.1 – W-1.4): Secure Enclave-wrapped keystore, built on top of
 // (not yet wired into) `wallet::keychain`. Not called from any signing path
 // in this task — see `keystore/mod.rs` module doc for scope and the
@@ -23,8 +23,8 @@ pub mod keystore;
 
 use autonomy::engine::AutonomyEngine;
 use envelope::engine::EnvelopeEngine;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -38,11 +38,17 @@ fn get_app_version() -> String {
 #[tauri::command]
 fn activate_kill_switch(engine: tauri::State<Arc<EnvelopeEngine>>) -> bool {
     engine.activate_kill_switch();
+    // "Her şeyi durdur" bellekte bekleyen imza yetkisini de kapsar. Zarf yeni
+    // işlemi reddetse bile silahlı bir anahtarın RAM'de kalması, kullanıcının
+    // durdurdum sandığı bir yetkinin sürmesi demek olurdu.
+    wallet::armed::disarm_all();
     true
 }
 
 #[tauri::command]
-fn get_envelope_status(engine: tauri::State<Arc<EnvelopeEngine>>) -> Option<envelope::engine::EnvelopeStatus> {
+fn get_envelope_status(
+    engine: tauri::State<Arc<EnvelopeEngine>>,
+) -> Option<envelope::engine::EnvelopeStatus> {
     engine.get_status()
 }
 
@@ -55,7 +61,8 @@ fn create_envelope(
     engine: tauri::State<Arc<EnvelopeEngine>>,
 ) -> Result<serde_json::Value, String> {
     // Shared with the control server's POST /envelope so the two cannot drift.
-    let env = envelope::build_envelope(per_tx_ceiling_eth, hard_cap_eth, scope_addresses, ttl_hours);
+    let env =
+        envelope::build_envelope(per_tx_ceiling_eth, hard_cap_eth, scope_addresses, ttl_hours);
     let envelope_id = env.id.to_string();
     let expires_at = env.expires_at;
     engine.create_envelope(env);
@@ -145,10 +152,7 @@ fn deactivate_kill_switch(engine: tauri::State<Arc<EnvelopeEngine>>) -> bool {
 /// only source of truth. A supplied address is treated as an assertion and must
 /// match, so a UI bug can no longer file a key under the wrong identity.
 #[tauri::command]
-fn import_wallet(
-    address: Option<String>,
-    private_key_hex: String,
-) -> Result<String, String> {
+fn import_wallet(address: Option<String>, private_key_hex: String) -> Result<String, String> {
     use alloy::signers::local::PrivateKeySigner;
 
     let pk_hex = private_key_hex.trim();
@@ -214,7 +218,10 @@ async fn get_eth_price_usd(api_key: String) -> Result<f64, String> {
     // Now sourced from Alchemy Prices API (CoinGecko removed).
     let provider = data::default_provider(&api_key);
     use data::PriceProvider;
-    provider.get_eth_price_usd().await.map_err(|e| e.to_string())
+    provider
+        .get_eth_price_usd()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── New data-layer commands (Phase 1–3): Prices, Portfolio, NFT enrichment ───
@@ -227,7 +234,10 @@ async fn get_token_prices_by_symbol(
     let provider = data::default_provider(&api_key);
     use data::PriceProvider;
     let refs: Vec<&str> = symbols.iter().map(|s| s.as_str()).collect();
-    provider.get_prices_by_symbol(&refs).await.map_err(|e| e.to_string())
+    provider
+        .get_prices_by_symbol(&refs)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -238,7 +248,10 @@ async fn get_token_prices_by_address(
     let provider = data::default_provider(&api_key);
     use data::PriceProvider;
     let refs: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();
-    provider.get_prices_by_address(&refs).await.map_err(|e| e.to_string())
+    provider
+        .get_prices_by_address(&refs)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -248,7 +261,10 @@ async fn get_wallet_portfolio(
 ) -> Result<data::WalletPortfolio, String> {
     let provider = data::default_provider(&api_key);
     use data::WalletDataProvider;
-    provider.get_wallet_portfolio(&wallet).await.map_err(|e| e.to_string())
+    provider
+        .get_wallet_portfolio(&wallet)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -258,7 +274,10 @@ async fn get_wallet_tokens(
 ) -> Result<Vec<data::types::WalletToken>, String> {
     let provider = data::default_provider(&api_key);
     use data::WalletDataProvider;
-    provider.get_wallet_tokens(&wallet).await.map_err(|e| e.to_string())
+    provider
+        .get_wallet_tokens(&wallet)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -268,7 +287,10 @@ async fn get_collection_metadata(
 ) -> Result<data::NftCollectionMeta, String> {
     let provider = data::default_provider(&api_key);
     use data::NftDataProvider;
-    provider.get_collection_metadata(&contract).await.map_err(|e| e.to_string())
+    provider
+        .get_collection_metadata(&contract)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -280,7 +302,10 @@ async fn get_nft_sales(
 ) -> Result<Vec<data::NftSale>, String> {
     let provider = data::default_provider(&api_key);
     use data::NftDataProvider;
-    provider.get_nft_sales(&contract, token_id.as_deref(), limit).await.map_err(|e| e.to_string())
+    provider
+        .get_nft_sales(&contract, token_id.as_deref(), limit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── Real-time subscription commands (Phase 4–5) ──────────────────────────────
@@ -289,7 +314,10 @@ async fn get_nft_sales(
 async fn realtime_init(
     api_key: String,
     app: tauri::AppHandle,
-    realtime: tauri::State<'_, std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>>,
+    realtime: tauri::State<
+        '_,
+        std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>,
+    >,
 ) -> Result<(), String> {
     let provider = data::default_provider(&api_key);
     let http = std::sync::Arc::new(data::alchemy::AlchemyHttpClient::new(&api_key));
@@ -302,10 +330,14 @@ async fn realtime_init(
 #[tauri::command]
 async fn realtime_set_watch_set(
     set: data::realtime::WatchSet,
-    realtime: tauri::State<'_, std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>>,
+    realtime: tauri::State<
+        '_,
+        std::sync::Mutex<Option<std::sync::Arc<data::realtime::RealtimeManager>>>,
+    >,
 ) -> Result<(), String> {
     let mgr = realtime.lock().unwrap().as_ref().cloned();
-    let mgr = mgr.ok_or_else(|| "realtime not initialized — call realtime_init first".to_string())?;
+    let mgr =
+        mgr.ok_or_else(|| "realtime not initialized — call realtime_init first".to_string())?;
     mgr.apply_watch_set(set).await.map_err(|e| e.to_string())
 }
 
@@ -316,7 +348,9 @@ async fn get_nfts_for_owner(
     page_key: Option<String>,
 ) -> Result<rpc::types::NftsForOwnerResponse, String> {
     let client = rpc::client::AlchemyClient::new(&api_key);
-    client.get_nfts_for_owner(&owner_address, page_key.as_deref()).await
+    client
+        .get_nfts_for_owner(&owner_address, page_key.as_deref())
+        .await
 }
 
 #[tauri::command]
@@ -403,7 +437,10 @@ async fn start_background_polling(
     api_key: String,
     app: tauri::AppHandle,
 ) -> Result<bool, String> {
-    if POLLING_ACTIVE.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if POLLING_ACTIVE
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Ok(false); // already running
     }
 
@@ -418,7 +455,9 @@ async fn start_background_polling(
                 // Check portfolio_value alerts for every configured wallet
                 for addr in &wallet_addresses {
                     if let Ok(balance) = rpc_client.get_eth_balance(addr).await {
-                        if let Ok(triggered) = engine.check_portfolio_value_alerts(addr, balance.eth) {
+                        if let Ok(triggered) =
+                            engine.check_portfolio_value_alerts(addr, balance.eth)
+                        {
                             for (rule, message) in triggered {
                                 let _ = engine.fire_alert(&rule, &message, &app).await;
                             }
@@ -432,8 +471,60 @@ async fn start_background_polling(
     Ok(true)
 }
 
+/// Silahlandırma: kural yaratılmadan önce çağrılır ve **Touch ID istemi tam
+/// burada çıkar**. Anahtar yalnız bellekte tutulur; komut anahtarı döndürmez,
+/// yalnız pencerenin ne zaman kapanacağını bildirir.
+#[tauri::command]
+async fn arm_wallet_for_tasks(
+    wallet_address: String,
+    ttl_hours: Option<u64>,
+) -> Result<wallet::armed::ArmedStatus, String> {
+    wallet::armed::arm(&wallet_address, ttl_hours)
+}
+
+#[tauri::command]
+async fn disarm_wallet_for_tasks(wallet_address: String) -> wallet::armed::ArmedStatus {
+    wallet::armed::disarm(&wallet_address);
+    wallet::armed::status(&wallet_address)
+}
+
+#[tauri::command]
+async fn wallet_armed_status(wallet_address: String) -> wallet::armed::ArmedStatus {
+    wallet::armed::status(&wallet_address)
+}
+
+/// Zamanlayıcının durumu. Ekran bunu göstermek **zorunda**: zamanlayıcı kapalıyken
+/// kural kaydedilir ama hiç kontrol edilmez, yani kullanıcı "kurdum" sanır ve
+/// hiçbir şey tetiklenmez. Bugüne kadar bu bilgi yalnız kontrol sunucusundan
+/// (HTTP/MCP) okunabiliyordu — arayüzün ona hiç erişimi yoktu.
+#[tauri::command]
+fn scheduler_status(
+    scheduler: tauri::State<Arc<control::SchedulerHandle>>,
+) -> control::scheduler::SchedulerStatus {
+    scheduler.snapshot()
+}
+
+/// Zamanlayıcıyı açar/kapar. `interval_secs` verilmezse mevcut kadans korunur;
+/// verilirse `SchedulerHandle::configure` içinde güvenli sınırlara çekilir.
+#[tauri::command]
+fn set_scheduler_enabled(
+    enabled: bool,
+    interval_secs: Option<u64>,
+    scheduler: tauri::State<Arc<control::SchedulerHandle>>,
+) -> control::scheduler::SchedulerStatus {
+    scheduler.configure(Some(enabled), interval_secs)
+}
+
+/// Kural yaratmak silahlı bir cüzdan gerektirir. Aksi hâlde kullanıcı kuralı
+/// kurar, ekranda "aktif" görür ve hiçbir şey tetiklenmez — sessiz başarısızlık.
+/// Önce `arm_wallet_for_tasks` çağrılır (Touch ID), sonra burası.
 #[tauri::command]
 async fn create_snipe_rule(input: sniping::SnipeRuleInput) -> Result<String, String> {
+    if !wallet::armed::status(&input.wallet_address).armed {
+        return Err(
+            "wallet is not armed — approve with Touch ID before creating the rule".to_string(),
+        );
+    }
     let db_path = sniping::ensure_db()?;
     sniping::db::create_rule(&db_path, &input)
 }
@@ -464,7 +555,9 @@ async fn run_snipe_check(
 ) -> Result<Vec<sniping::SnipeResult>, String> {
     let db_path = sniping::ensure_db()?;
     let snipe_engine = sniping::engine::SnipingEngine::new(db_path);
-    snipe_engine.check_snipe_rules(&api_key, &engine.inner().clone(), &app).await
+    snipe_engine
+        .check_snipe_rules(&api_key, &engine.inner().clone(), &app)
+        .await
 }
 
 // ── Subscription ─────────────────────────────────────────────────────────────
@@ -523,7 +616,10 @@ fn subscription_current_account() -> Option<String> {
 // ── NFT PnL: locally-stored cost basis (recorded once from marketplace sales) ──
 
 #[tauri::command]
-async fn backfill_nft_cost_basis(wallet: String, api_key: String) -> Result<pnl::BackfillResult, String> {
+async fn backfill_nft_cost_basis(
+    wallet: String,
+    api_key: String,
+) -> Result<pnl::BackfillResult, String> {
     pnl::backfill_cost_basis(&wallet, &api_key).await
 }
 
@@ -533,7 +629,12 @@ async fn get_nft_pnl(wallet: String, api_key: String) -> Result<pnl::NftPnlSumma
 }
 
 #[tauri::command]
-fn set_nft_cost_basis(wallet: String, contract: String, token_id: String, price_eth: f64) -> Result<(), String> {
+fn set_nft_cost_basis(
+    wallet: String,
+    contract: String,
+    token_id: String,
+    price_eth: f64,
+) -> Result<(), String> {
     pnl::set_manual_cost(&wallet, &contract, &token_id, price_eth)
 }
 
@@ -627,8 +728,10 @@ async fn authorize_marketplace_action(
         .check_and_authorize(&tx_req_envelope)
         .map_err(|e| format!("Envelope rejected: {e:?}"))?;
 
-    let kill_switch_active =
-        envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let kill_switch_active = envelope_engine
+        .get_status()
+        .map(|s| s.kill_switch)
+        .unwrap_or(false);
     let proposal = autonomy::types::ActionProposal {
         action_type,
         wallet_address: wallet_address.to_string(),
@@ -638,10 +741,18 @@ async fn authorize_marketplace_action(
         chain_id: signing::CHAIN_ID,
     };
     match signing::authorize_or_queue(autonomy_engine, &proposal, kill_switch_active, payload) {
-        Ok(signing::AuthorizationOutcome::Proceed) => Ok(MarketplaceAuthorization::Proceed(tx_req_envelope)),
-        Ok(signing::AuthorizationOutcome::Queued { proposal_id, reason }) => {
+        Ok(signing::AuthorizationOutcome::Proceed) => {
+            Ok(MarketplaceAuthorization::Proceed(tx_req_envelope))
+        }
+        Ok(signing::AuthorizationOutcome::Queued {
+            proposal_id,
+            reason,
+        }) => {
             envelope_engine.rollback_authorization(&tx_req_envelope);
-            Ok(MarketplaceAuthorization::Queued { proposal_id, reason })
+            Ok(MarketplaceAuthorization::Queued {
+                proposal_id,
+                reason,
+            })
         }
         Err(e) => {
             envelope_engine.rollback_authorization(&tx_req_envelope);
@@ -675,8 +786,9 @@ async fn marketplace_list_nft(
     envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
     autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
 ) -> Result<marketplace::MarketplaceActionOutcome, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     let mp = parse_marketplace_name(&marketplace);
 
     let payload = autonomy::pending::PendingActionPayload::MarketplaceList {
@@ -702,13 +814,26 @@ async fn marketplace_list_nft(
     )
     .await?;
     let tx_req_envelope = match authorization {
-        MarketplaceAuthorization::Queued { proposal_id, reason } => {
-            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        MarketplaceAuthorization::Queued {
+            proposal_id,
+            reason,
+        } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval {
+                proposal_id,
+                reason,
+            });
         }
         MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
     };
 
-    let input = marketplace::ListingInput { wallet_address, contract_address, token_id, price_eth, marketplace: mp, expiry_hours };
+    let input = marketplace::ListingInput {
+        wallet_address,
+        contract_address,
+        token_id,
+        price_eth,
+        marketplace: mp,
+        expiry_hours,
+    };
     let result = marketplace::list_nft(&input, &api_key, &opensea_key).await;
     if result.is_err() {
         envelope_engine.rollback_authorization(&tx_req_envelope);
@@ -728,8 +853,9 @@ async fn marketplace_place_bid(
     envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
     autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
 ) -> Result<marketplace::MarketplaceActionOutcome, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     let mp = parse_marketplace_name(&marketplace);
 
     let payload = autonomy::pending::PendingActionPayload::MarketplaceBid {
@@ -751,13 +877,26 @@ async fn marketplace_place_bid(
     )
     .await?;
     let tx_req_envelope = match authorization {
-        MarketplaceAuthorization::Queued { proposal_id, reason } => {
-            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        MarketplaceAuthorization::Queued {
+            proposal_id,
+            reason,
+        } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval {
+                proposal_id,
+                reason,
+            });
         }
         MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
     };
 
-    let input = marketplace::BidInput { wallet_address, contract_address, price_eth, quantity, marketplace: mp, expiry_hours };
+    let input = marketplace::BidInput {
+        wallet_address,
+        contract_address,
+        price_eth,
+        quantity,
+        marketplace: mp,
+        expiry_hours,
+    };
     let result = marketplace::place_bid(&input, &api_key, &opensea_key).await;
     if result.is_err() {
         envelope_engine.rollback_authorization(&tx_req_envelope);
@@ -774,8 +913,9 @@ async fn marketplace_cancel_order(
     envelope_engine: tauri::State<'_, Arc<EnvelopeEngine>>,
     autonomy_engine: tauri::State<'_, Arc<AutonomyEngine>>,
 ) -> Result<marketplace::MarketplaceActionOutcome, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     let mp = parse_marketplace_name(&marketplace);
 
     let payload = autonomy::pending::PendingActionPayload::MarketplaceCancel {
@@ -801,13 +941,23 @@ async fn marketplace_cancel_order(
     )
     .await?;
     let tx_req_envelope = match authorization {
-        MarketplaceAuthorization::Queued { proposal_id, reason } => {
-            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval { proposal_id, reason });
+        MarketplaceAuthorization::Queued {
+            proposal_id,
+            reason,
+        } => {
+            return Ok(marketplace::MarketplaceActionOutcome::PendingApproval {
+                proposal_id,
+                reason,
+            });
         }
         MarketplaceAuthorization::Proceed(tx_req_envelope) => tx_req_envelope,
     };
 
-    let input = marketplace::CancelInput { order_hash, wallet_address, marketplace: mp };
+    let input = marketplace::CancelInput {
+        order_hash,
+        wallet_address,
+        marketplace: mp,
+    };
     let result = marketplace::cancel_order(&input, &api_key, &opensea_key).await;
     if result.is_err() {
         envelope_engine.rollback_authorization(&tx_req_envelope);
@@ -891,7 +1041,11 @@ fn audit_policy_diff(
     use autonomy::audit::{append, AuditRecordKind, PolicyChangeKind};
 
     let mut log_change = |kind: PolicyChangeKind| {
-        if let Err(e) = append(wallet_address, AuditRecordKind::PolicyChanged { change: kind }, now) {
+        if let Err(e) = append(
+            wallet_address,
+            AuditRecordKind::PolicyChanged { change: kind },
+            now,
+        ) {
             log::error!(
                 "could not append autonomy policy-change audit record for {wallet_address}: {e}"
             );
@@ -899,16 +1053,25 @@ fn audit_policy_diff(
     };
 
     if before.mode != after.mode {
-        log_change(PolicyChangeKind::ModeChanged { from: before.mode, to: after.mode });
+        log_change(PolicyChangeKind::ModeChanged {
+            from: before.mode,
+            to: after.mode,
+        });
     }
     if before.enabled != after.enabled {
-        log_change(if after.enabled { PolicyChangeKind::Enabled } else { PolicyChangeKind::Disabled });
+        log_change(if after.enabled {
+            PolicyChangeKind::Enabled
+        } else {
+            PolicyChangeKind::Disabled
+        });
     }
     for idx in 0..after.rules.len().max(before.rules.len()) {
         match (before.rules.get(idx), after.rules.get(idx)) {
             (None, Some(_)) => log_change(PolicyChangeKind::RuleCreated { rule_index: idx }),
             (Some(_), None) => log_change(PolicyChangeKind::RuleDeleted { rule_index: idx }),
-            (Some(b), Some(a)) if b != a => log_change(PolicyChangeKind::RuleUpdated { rule_index: idx }),
+            (Some(b), Some(a)) if b != a => {
+                log_change(PolicyChangeKind::RuleUpdated { rule_index: idx })
+            }
             _ => {}
         }
     }
@@ -1010,9 +1173,17 @@ fn evaluate_action_proposal(
     autonomy_engine: tauri::State<Arc<AutonomyEngine>>,
 ) -> autonomy::types::AutonomyDecision {
     autonomy_engine.ensure_policy_loaded(&proposal.wallet_address);
-    let kill_switch_active = envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false);
+    let kill_switch_active = envelope_engine
+        .get_status()
+        .map(|s| s.kill_switch)
+        .unwrap_or(false);
     let now = chrono::Utc::now().timestamp();
-    autonomy_engine.preview_proposal(&proposal, kill_switch_active, /* watch_only */ false, now)
+    autonomy_engine.preview_proposal(
+        &proposal,
+        kill_switch_active,
+        /* watch_only */ false,
+        now,
+    )
 }
 
 #[tauri::command]
@@ -1054,11 +1225,10 @@ fn list_pending_action_proposals(
 }
 
 #[tauri::command]
-fn reject_action_proposal(
-    id: String,
-) -> Result<autonomy::pending::PendingActionProposal, String> {
+fn reject_action_proposal(id: String) -> Result<autonomy::pending::PendingActionProposal, String> {
     let now = chrono::Utc::now().timestamp();
-    let resolved = autonomy::pending::resolve(&id, autonomy::pending::PendingStatus::Rejected, now)?;
+    let resolved =
+        autonomy::pending::resolve(&id, autonomy::pending::PendingStatus::Rejected, now)?;
     if let Err(e) = autonomy::audit::append(
         &resolved.wallet_address,
         autonomy::audit::AuditRecordKind::Denied {
@@ -1066,7 +1236,10 @@ fn reject_action_proposal(
         },
         now,
     ) {
-        log::error!("could not append rejection audit record for {}: {e}", resolved.wallet_address);
+        log::error!(
+            "could not append rejection audit record for {}: {e}",
+            resolved.wallet_address
+        );
     }
     Ok(resolved)
 }
@@ -1107,20 +1280,30 @@ async fn execute_pending_payload(
                 .await
                 .map(|tx_hash| ApprovalResult::TxSent { tx_hash })
         }
-        PendingActionPayload::TransferNft { contract_address, token_id, to, token_standard, amount } => {
-            signing::build_and_send_nft_transfer(
-                wallet_address,
-                contract_address,
-                token_id,
-                to,
-                *token_standard,
-                amount.as_deref(),
-                &alchemy_key,
-            )
-            .await
-            .map(|tx_hash| ApprovalResult::TxSent { tx_hash })
-        }
-        PendingActionPayload::MarketplaceList { contract_address, token_id, price_eth, marketplace, expiry_hours } => {
+        PendingActionPayload::TransferNft {
+            contract_address,
+            token_id,
+            to,
+            token_standard,
+            amount,
+        } => signing::build_and_send_nft_transfer(
+            wallet_address,
+            contract_address,
+            token_id,
+            to,
+            *token_standard,
+            amount.as_deref(),
+            &alchemy_key,
+        )
+        .await
+        .map(|tx_hash| ApprovalResult::TxSent { tx_hash }),
+        PendingActionPayload::MarketplaceList {
+            contract_address,
+            token_id,
+            price_eth,
+            marketplace,
+            expiry_hours,
+        } => {
             let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
                 format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
             })?;
@@ -1136,7 +1319,13 @@ async fn execute_pending_payload(
                 .await
                 .map(|result| ApprovalResult::OrderCompleted { result })
         }
-        PendingActionPayload::MarketplaceBid { contract_address, price_eth, quantity, marketplace, expiry_hours } => {
+        PendingActionPayload::MarketplaceBid {
+            contract_address,
+            price_eth,
+            quantity,
+            marketplace,
+            expiry_hours,
+        } => {
             let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
                 format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
             })?;
@@ -1152,7 +1341,10 @@ async fn execute_pending_payload(
                 .await
                 .map(|result| ApprovalResult::OrderCompleted { result })
         }
-        PendingActionPayload::MarketplaceCancel { order_hash, marketplace } => {
+        PendingActionPayload::MarketplaceCancel {
+            order_hash,
+            marketplace,
+        } => {
             let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
                 format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
             })?;
@@ -1264,7 +1456,11 @@ async fn approve_action_proposal_in(
         ));
     }
 
-    if envelope_engine.get_status().map(|s| s.kill_switch).unwrap_or(false) {
+    if envelope_engine
+        .get_status()
+        .map(|s| s.kill_switch)
+        .unwrap_or(false)
+    {
         return Err("Cannot approve: the kill switch is active.".to_string());
     }
     let current_policy = autonomy::store::load_or_default(&found.wallet_address);
@@ -1310,10 +1506,15 @@ async fn approve_action_proposal_in(
     }
     if let Err(e) = autonomy::audit::append(
         &found.wallet_address,
-        autonomy::audit::AuditRecordKind::Approved { note: Some(format!("proposal {id}")) },
+        autonomy::audit::AuditRecordKind::Approved {
+            note: Some(format!("proposal {id}")),
+        },
         now,
     ) {
-        log::error!("could not append approval audit record for {}: {e}", found.wallet_address);
+        log::error!(
+            "could not append approval audit record for {}: {e}",
+            found.wallet_address
+        );
     }
 
     Ok(execution)
@@ -1336,8 +1537,10 @@ mod approve_action_proposal_tests {
     use std::sync::Barrier;
 
     fn tmp_pending_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir()
-            .join(format!("westron-approve-test-{tag}-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!(
+            "westron-approve-test-{tag}-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -1392,7 +1595,10 @@ mod approve_action_proposal_tests {
         let result_b = handle_b.join().unwrap();
 
         let ok_count = [&result_a, &result_b].iter().filter(|r| r.is_ok()).count();
-        assert_eq!(ok_count, 1, "exactly one of two concurrent claims must succeed");
+        assert_eq!(
+            ok_count, 1,
+            "exactly one of two concurrent claims must succeed"
+        );
         let err = result_a
             .as_ref()
             .err()
@@ -1426,13 +1632,15 @@ mod approve_action_proposal_tests {
         let engine = Arc::new(EnvelopeEngine::new());
         let barrier = Arc::new(Barrier::new(2));
 
-        let (dir_a, id_a, engine_a, barrier_a) = (dir.clone(), id.clone(), engine.clone(), barrier.clone());
+        let (dir_a, id_a, engine_a, barrier_a) =
+            (dir.clone(), id.clone(), engine.clone(), barrier.clone());
         let task_a = tokio::spawn(async move {
             barrier_a.wait();
             approve_action_proposal_in(&dir_a, &id_a, &engine_a).await
         });
 
-        let (dir_b, id_b, engine_b, barrier_b) = (dir.clone(), id.clone(), engine.clone(), barrier.clone());
+        let (dir_b, id_b, engine_b, barrier_b) =
+            (dir.clone(), id.clone(), engine.clone(), barrier.clone());
         let task_b = tokio::spawn(async move {
             barrier_b.wait();
             approve_action_proposal_in(&dir_b, &id_b, &engine_b).await
@@ -1450,9 +1658,15 @@ mod approve_action_proposal_tests {
         // call wins the claim still fails — just for a *different* reason
         // (policy disabled), proving it actually reached real business
         // logic rather than also being rejected by the claim.
-        assert_eq!(errors.len(), 2, "both calls should fail in this test, got: {errors:?}");
-        let claim_rejections =
-            errors.iter().filter(|e| e.contains("already being approved")).count();
+        assert_eq!(
+            errors.len(),
+            2,
+            "both calls should fail in this test, got: {errors:?}"
+        );
+        let claim_rejections = errors
+            .iter()
+            .filter(|e| e.contains("already being approved"))
+            .count();
         assert_eq!(
             claim_rejections, 1,
             "exactly one of the two concurrent calls must be rejected by the claim, got: {errors:?}"
@@ -1473,9 +1687,13 @@ mod approve_action_proposal_tests {
 // ── Marketplace metadata commands ───────────────────────────────────────────
 
 #[tauri::command]
-async fn fetch_collection_nfts(collection_slug: String, limit: u32) -> Result<Vec<marketplace::NftAsset>, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_nfts(
+    collection_slug: String,
+    limit: u32,
+) -> Result<Vec<marketplace::NftAsset>, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1491,8 +1709,9 @@ async fn fetch_nfts_by_collection(
     sort: String,
     limit: u32,
 ) -> Result<marketplace::NftPage, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1509,9 +1728,12 @@ async fn fetch_nfts_by_collection(
 }
 
 #[tauri::command]
-async fn fetch_collection_by_contract(contract_address: String) -> Result<marketplace::CollectionInfo, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_by_contract(
+    contract_address: String,
+) -> Result<marketplace::CollectionInfo, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1521,9 +1743,12 @@ async fn fetch_collection_by_contract(contract_address: String) -> Result<market
 // ── Collection data commands ──────────────────────────────────────────────────
 
 #[tauri::command]
-async fn fetch_collection_stats(collection_slug: String) -> Result<marketplace::CollectionStats, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_stats(
+    collection_slug: String,
+) -> Result<marketplace::CollectionStats, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1531,9 +1756,14 @@ async fn fetch_collection_stats(collection_slug: String) -> Result<marketplace::
 }
 
 #[tauri::command]
-async fn fetch_collection_events(collection_slug: String, event_type: String, limit: u32) -> Result<Vec<marketplace::CollectionEvent>, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_events(
+    collection_slug: String,
+    event_type: String,
+    limit: u32,
+) -> Result<Vec<marketplace::CollectionEvent>, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1541,20 +1771,34 @@ async fn fetch_collection_events(collection_slug: String, event_type: String, li
 }
 
 #[tauri::command]
-async fn fetch_collection_holders(contract_address: String, limit: u32) -> Result<Vec<marketplace::CollectionHolder>, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_holders(
+    contract_address: String,
+    limit: u32,
+) -> Result<Vec<marketplace::CollectionHolder>, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
     let alchemy_key = wallet::keychain::fetch_alchemy_key().unwrap_or_default();
-    marketplace::fetch_collection_holders(&contract_address, &alchemy_key, limit as usize, &opensea_key).await
+    marketplace::fetch_collection_holders(
+        &contract_address,
+        &alchemy_key,
+        limit as usize,
+        &opensea_key,
+    )
+    .await
 }
 
 #[tauri::command]
-async fn fetch_collection_offers(collection_slug: String, limit: u32) -> Result<Vec<marketplace::CollectionOffer>, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_offers(
+    collection_slug: String,
+    limit: u32,
+) -> Result<Vec<marketplace::CollectionOffer>, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1562,9 +1806,13 @@ async fn fetch_collection_offers(collection_slug: String, limit: u32) -> Result<
 }
 
 #[tauri::command]
-async fn fetch_collection_traits(collection_slug: String, total_supply: u64) -> Result<Vec<marketplace::CollectionTrait>, String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+async fn fetch_collection_traits(
+    collection_slug: String,
+    total_supply: u64,
+) -> Result<Vec<marketplace::CollectionTrait>, String> {
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1572,7 +1820,10 @@ async fn fetch_collection_traits(collection_slug: String, total_supply: u64) -> 
 }
 
 #[tauri::command]
-async fn fetch_nft_detail(contract_address: String, token_id: String) -> Result<marketplace::NftDetail, String> {
+async fn fetch_nft_detail(
+    contract_address: String,
+    token_id: String,
+) -> Result<marketplace::NftDetail, String> {
     let opensea_key = wallet::keychain::fetch_opensea_key()
         .map_err(|e| format!("Could not read OpenSea key: {e}"))?;
     if opensea_key.is_empty() {
@@ -1590,8 +1841,9 @@ async fn start_stream(
     stream_manager: tauri::State<'_, Arc<stream::StreamManager>>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let opensea_key = wallet::keychain::fetch_opensea_key()
-        .map_err(|e| format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings"))?;
+    let opensea_key = wallet::keychain::fetch_opensea_key().map_err(|e| {
+        format!("Could not read OpenSea key (Keychain error: {e}) — try saving again in Settings")
+    })?;
     if opensea_key.is_empty() {
         return Err("OpenSea API key is empty — add it in Settings".to_string());
     }
@@ -1652,7 +1904,9 @@ fn run_key_migrations() {
         let dir = match keystore::migration::legacy_keys_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                log::error!("keystore migration skipped — could not locate the legacy key directory: {e}");
+                log::error!(
+                    "keystore migration skipped — could not locate the legacy key directory: {e}"
+                );
                 return;
             }
         };
@@ -1672,135 +1926,140 @@ fn run_key_migrations() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // Persisted: spend cap, accumulated spend and kill switch all survive a
-  // restart. An expired envelope is not restored as active.
-  let engine = Arc::new(EnvelopeEngine::load_or_new());
-  // In-memory only: no disk-backed `load_or_new` counterpart exists for
-  // autonomy policies. Each wallet's policy is populated lazily on first use
-  // (`AutonomyEngine::ensure_policy_loaded`, called from the signing entry
-  // points) via `autonomy::store::load_or_default`, mirroring the envelope
-  // engine's persistence without inventing a second bootstrapping path.
-  let autonomy_engine = Arc::new(AutonomyEngine::new());
-  let stream_manager = Arc::new(stream::StreamManager::new());
-  // Realtime manager is built lazily by `realtime_init` — store an empty slot
-  // so the Tauri command handler can fill it in once we have the API key.
-  let realtime_slot: std::sync::Mutex<Option<Arc<data::realtime::RealtimeManager>>> =
-      std::sync::Mutex::new(None);
+    // Persisted: spend cap, accumulated spend and kill switch all survive a
+    // restart. An expired envelope is not restored as active.
+    let engine = Arc::new(EnvelopeEngine::load_or_new());
+    // In-memory only: no disk-backed `load_or_new` counterpart exists for
+    // autonomy policies. Each wallet's policy is populated lazily on first use
+    // (`AutonomyEngine::ensure_policy_loaded`, called from the signing entry
+    // points) via `autonomy::store::load_or_default`, mirroring the envelope
+    // engine's persistence without inventing a second bootstrapping path.
+    let autonomy_engine = Arc::new(AutonomyEngine::new());
+    let stream_manager = Arc::new(stream::StreamManager::new());
+    // Realtime manager is built lazily by `realtime_init` — store an empty slot
+    // so the Tauri command handler can fill it in once we have the API key.
+    let realtime_slot: std::sync::Mutex<Option<Arc<data::realtime::RealtimeManager>>> =
+        std::sync::Mutex::new(None);
 
-  // Clone for the control server / scheduler, which are started from `setup`
-  // (the first point where an `AppHandle` exists for event emission).
-  let control_engine = engine.clone();
+    // Clone for the control server / scheduler, which are started from `setup`
+    // (the first point where an `AppHandle` exists for event emission).
+    let control_engine = engine.clone();
 
-  tauri::Builder::default()
-    .manage(engine)
-    .manage(autonomy_engine)
-    .manage(stream_manager)
-    .manage(realtime_slot)
-    .setup(move |app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      // Loopback control server (Bearer-token auth) + snipe scheduler loop.
-      // Both share the live EnvelopeEngine so the kill switch means the same
-      // thing from the UI, from Claude, and inside the loop.
-      let scheduler = control::start(control_engine.clone(), app.handle().clone());
-      app.manage(scheduler);
-      run_key_migrations();
-      Ok(())
-    })
-    .invoke_handler(tauri::generate_handler![
-        get_app_version,
-        create_envelope,
-        revoke_envelope,
-        check_transaction,
-        preview_transaction,
-        activate_kill_switch,
-        deactivate_kill_switch,
-        get_envelope_status,
-        import_wallet,
-        get_eth_balance,
-        get_token_balances,
-        get_asset_transfers,
-        get_token_metadata,
-        get_eth_price_usd,
-        save_alchemy_key,
-        load_alchemy_key,
-        delete_alchemy_key_cmd,
-        get_keychain_status,
-        save_opensea_key,
-        load_opensea_key,
-        delete_opensea_key_cmd,
-        save_etherscan_key,
-        load_etherscan_key,
-        delete_etherscan_key_cmd,
-        find_sister_wallets,
-        backfill_nft_cost_basis,
-        get_nft_pnl,
-        set_nft_cost_basis,
-        get_nfts_for_owner,
-        get_floor_price,
-        create_alert,
-        list_alerts,
-        delete_alert,
-        set_alert_active,
-        check_alerts_now,
-        start_background_polling,
-        signing::send_eth,
-        signing::estimate_gas,
-        signing::transfer_nft,
-        create_snipe_rule,
-        list_snipe_rules,
-        delete_snipe_rule,
-        set_snipe_rule_active,
-        run_snipe_check,
-        analytics::engine::get_pnl_summary,
-        analytics::engine::get_trade_history,
-        analytics::engine::get_portfolio_snapshot,
-        marketplace_list_nft,
-        marketplace_place_bid,
-        marketplace_cancel_order,
-        get_wallet_policy,
-        list_wallet_policies,
-        create_or_update_wallet_policy,
-        set_wallet_autonomy_mode,
-        set_wallet_policy_enabled,
-        pause_wallet_autonomy,
-        evaluate_action_proposal,
-        list_autonomy_audit,
-        list_pending_action_proposals,
-        approve_action_proposal,
-        reject_action_proposal,
-        fetch_collection_nfts,
-        fetch_nfts_by_collection,
-        fetch_collection_by_contract,
-        fetch_collection_stats,
-        fetch_collection_events,
-        fetch_collection_holders,
-        fetch_collection_offers,
-        fetch_collection_traits,
-        fetch_nft_detail,
-        open_external_url,
-        check_subscription,
-        subscription_signup,
-        subscription_login,
-        subscription_logout,
-        subscription_current_account,
-        start_stream,
-        stop_stream,
-        get_stream_status,
-        get_token_prices_by_symbol,
-        get_token_prices_by_address,
-        get_wallet_portfolio,
-        get_wallet_tokens,
-        get_collection_metadata,
-        get_nft_sales,
-        realtime_init,
-        realtime_set_watch_set,
-    ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        .manage(engine)
+        .manage(autonomy_engine)
+        .manage(stream_manager)
+        .manage(realtime_slot)
+        .setup(move |app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            // Loopback control server (Bearer-token auth) + snipe scheduler loop.
+            // Both share the live EnvelopeEngine so the kill switch means the same
+            // thing from the UI, from Claude, and inside the loop.
+            let scheduler = control::start(control_engine.clone(), app.handle().clone());
+            app.manage(scheduler);
+            run_key_migrations();
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_app_version,
+            create_envelope,
+            revoke_envelope,
+            check_transaction,
+            preview_transaction,
+            activate_kill_switch,
+            deactivate_kill_switch,
+            get_envelope_status,
+            import_wallet,
+            get_eth_balance,
+            get_token_balances,
+            get_asset_transfers,
+            get_token_metadata,
+            get_eth_price_usd,
+            save_alchemy_key,
+            load_alchemy_key,
+            delete_alchemy_key_cmd,
+            get_keychain_status,
+            save_opensea_key,
+            load_opensea_key,
+            delete_opensea_key_cmd,
+            save_etherscan_key,
+            load_etherscan_key,
+            delete_etherscan_key_cmd,
+            find_sister_wallets,
+            backfill_nft_cost_basis,
+            get_nft_pnl,
+            set_nft_cost_basis,
+            get_nfts_for_owner,
+            get_floor_price,
+            create_alert,
+            list_alerts,
+            delete_alert,
+            set_alert_active,
+            check_alerts_now,
+            start_background_polling,
+            signing::send_eth,
+            signing::estimate_gas,
+            signing::transfer_nft,
+            arm_wallet_for_tasks,
+            disarm_wallet_for_tasks,
+            wallet_armed_status,
+            scheduler_status,
+            set_scheduler_enabled,
+            create_snipe_rule,
+            list_snipe_rules,
+            delete_snipe_rule,
+            set_snipe_rule_active,
+            run_snipe_check,
+            analytics::engine::get_pnl_summary,
+            analytics::engine::get_trade_history,
+            analytics::engine::get_portfolio_snapshot,
+            marketplace_list_nft,
+            marketplace_place_bid,
+            marketplace_cancel_order,
+            get_wallet_policy,
+            list_wallet_policies,
+            create_or_update_wallet_policy,
+            set_wallet_autonomy_mode,
+            set_wallet_policy_enabled,
+            pause_wallet_autonomy,
+            evaluate_action_proposal,
+            list_autonomy_audit,
+            list_pending_action_proposals,
+            approve_action_proposal,
+            reject_action_proposal,
+            fetch_collection_nfts,
+            fetch_nfts_by_collection,
+            fetch_collection_by_contract,
+            fetch_collection_stats,
+            fetch_collection_events,
+            fetch_collection_holders,
+            fetch_collection_offers,
+            fetch_collection_traits,
+            fetch_nft_detail,
+            open_external_url,
+            check_subscription,
+            subscription_signup,
+            subscription_login,
+            subscription_logout,
+            subscription_current_account,
+            start_stream,
+            stop_stream,
+            get_stream_status,
+            get_token_prices_by_symbol,
+            get_token_prices_by_address,
+            get_wallet_portfolio,
+            get_wallet_tokens,
+            get_collection_metadata,
+            get_nft_sales,
+            realtime_init,
+            realtime_set_watch_set,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

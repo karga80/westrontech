@@ -1,13 +1,13 @@
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use serde::Serialize;
 use tauri::Emitter;
 
+use super::db;
+use super::types::{SnipeResult, SnipeRule};
 use crate::envelope::engine::EnvelopeEngine;
 use crate::envelope::types::TransactionRequest;
 use crate::rpc::client::AlchemyClient;
-use super::db;
-use super::types::{SnipeRule, SnipeResult};
 
 pub struct SnipingEngine {
     pub db_path: PathBuf,
@@ -29,6 +29,39 @@ pub fn rule_is_expired(rule: &SnipeRule) -> bool {
 /// Projected (simulated) spend for one full trigger of `rule` at `floor_price`.
 fn projected_spend_eth(rule: &SnipeRule, floor_price: f64) -> f64 {
     floor_price * rule.max_quantity as f64
+}
+
+/// Arm-at-creation gate: a rule may only fire while its wallet is armed — the
+/// key lives in memory for the window the user approved with Touch ID, and
+/// quitting the app ends it.
+///
+/// The rule is deliberately NOT deactivated (`deactivated_reason` stays `None`):
+/// being disarmed is recoverable in one click, and switching the rule off would
+/// make a temporary state look permanent.
+///
+/// `is_armed` is taken as a closure so the gate is testable without a Keychain,
+/// and so the caller cannot accidentally reach for `key_for` — answering a
+/// yes/no question with a copy of the raw private key, once per rule per
+/// scheduler tick, for the whole armed window.
+fn disarmed_block(
+    rule: &SnipeRule,
+    floor_price: f64,
+    is_armed: impl Fn(&str) -> bool,
+) -> Option<SnipeResult> {
+    if is_armed(&rule.wallet_address) {
+        return None;
+    }
+    Some(SnipeResult {
+        rule_id: rule.id.clone(),
+        collection_slug: rule.collection_slug.clone(),
+        floor_price_eth: floor_price,
+        triggered: false,
+        tx_hash: None,
+        error: Some(
+            "wallet is disarmed — re-arm it with Touch ID for this rule to fire".to_string(),
+        ),
+        deactivated_reason: None,
+    })
 }
 
 /// Guardrail: would triggering this rule now push it past its own spend cap?
@@ -75,7 +108,8 @@ impl SnipingEngine {
         for rule in &active_rules {
             // Guardrail: skip and deactivate rules past their expiry.
             if rule_is_expired(rule) {
-                let _ = db::deactivate_with_reason(&self.db_path, &rule.id, db::DEACTIVATED_EXPIRED);
+                let _ =
+                    db::deactivate_with_reason(&self.db_path, &rule.id, db::DEACTIVATED_EXPIRED);
                 results.push(SnipeResult {
                     rule_id: rule.id.clone(),
                     collection_slug: rule.collection_slug.clone(),
@@ -153,6 +187,12 @@ impl SnipingEngine {
         envelope_engine: &Arc<EnvelopeEngine>,
         app: &tauri::AppHandle,
     ) -> SnipeResult {
+        if let Some(blocked) = disarmed_block(rule, floor_price, |addr| {
+            crate::wallet::armed::is_armed(addr)
+        }) {
+            return blocked;
+        }
+
         // Guardrail: per-rule total spend ceiling. Checked before the envelope so
         // that a rule that has exhausted its own budget never even reaches it.
         // The rule is also switched off: it can never trigger again, so leaving it
@@ -180,24 +220,19 @@ impl SnipingEngine {
         let tx_request = TransactionRequest {
             to: rule.wallet_address.clone(),
             value_wei,
-            calldata: format!(
-                "snipe:{}:qty:{}",
-                rule.collection_slug, rule.max_quantity
-            ),
+            calldata: format!("snipe:{}:qty:{}", rule.collection_slug, rule.max_quantity),
         };
 
         match envelope_engine.check_and_authorize(&tx_request) {
-            Err(envelope_err) => {
-                SnipeResult {
-                    rule_id: rule.id.clone(),
-                    collection_slug: rule.collection_slug.clone(),
-                    floor_price_eth: floor_price,
-                    triggered: false,
-                    tx_hash: None,
-                    error: Some(format!("envelope blocked: {:?}", envelope_err)),
-                    deactivated_reason: None,
-                }
-            }
+            Err(envelope_err) => SnipeResult {
+                rule_id: rule.id.clone(),
+                collection_slug: rule.collection_slug.clone(),
+                floor_price_eth: floor_price,
+                triggered: false,
+                tx_hash: None,
+                error: Some(format!("envelope blocked: {:?}", envelope_err)),
+                deactivated_reason: None,
+            },
             Ok(()) => {
                 // Envelope authorized — emit event to frontend
                 let tx_hash = format!(
@@ -267,6 +302,41 @@ mod tests {
         assert!(!rule_is_expired(&rule(&future, None, 0.0, 1)));
         assert!(!rule_is_expired(&rule("", None, 0.0, 1)));
         assert!(!rule_is_expired(&rule("not-a-timestamp", None, 0.0, 1)));
+    }
+
+    #[test]
+    fn a_disarmed_wallet_blocks_the_trigger_without_deactivating_the_rule() {
+        let r = rule("", None, 0.0, 1);
+        let blocked = disarmed_block(&r, 0.4, |_| false).expect("disarmed must block");
+
+        assert!(!blocked.triggered);
+        assert!(blocked.tx_hash.is_none(), "a blocked trigger has no hash");
+        assert!(blocked.error.as_deref().unwrap().contains("disarmed"));
+        // The whole point: disarmed is a temporary state the user can undo, so
+        // the rule must survive it. If this ever starts carrying a reason, a
+        // Touch ID window lapsing overnight would silently kill the rule.
+        assert!(blocked.deactivated_reason.is_none());
+        assert_eq!(blocked.rule_id, r.id);
+        assert_eq!(blocked.floor_price_eth, 0.4);
+    }
+
+    #[test]
+    fn an_armed_wallet_does_not_block() {
+        assert!(disarmed_block(&rule("", None, 0.0, 1), 0.4, |_| true).is_none());
+    }
+
+    #[test]
+    fn the_gate_asks_about_the_rules_own_wallet() {
+        let r = rule("", None, 0.0, 1);
+        let asked = std::cell::RefCell::new(None);
+        disarmed_block(&r, 0.4, |addr| {
+            *asked.borrow_mut() = Some(addr.to_string());
+            true
+        });
+        assert_eq!(
+            asked.into_inner().as_deref(),
+            Some(r.wallet_address.as_str())
+        );
     }
 
     #[test]

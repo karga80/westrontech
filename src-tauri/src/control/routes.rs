@@ -95,14 +95,16 @@ pub struct SchedulerBody {
 /// GET /status — everything an operator needs to decide whether the loop is alive.
 pub async fn status(State(st): State<ControlState>) -> ApiResult {
     let envelope_status = st.envelope.get_status();
-    let kill_switch = envelope_status.as_ref().map(|s| s.kill_switch).unwrap_or(false);
+    let kill_switch = envelope_status
+        .as_ref()
+        .map(|s| s.kill_switch)
+        .unwrap_or(false);
 
-    let (active_rules, rules_error) = match sniping::ensure_db()
-        .and_then(|p| sniping::db::count_active_rules(&p))
-    {
-        Ok(n) => (n, None),
-        Err(e) => (0, Some(e)),
-    };
+    let (active_rules, rules_error) =
+        match sniping::ensure_db().and_then(|p| sniping::db::count_active_rules(&p)) {
+            Ok(n) => (n, None),
+            Err(e) => (0, Some(e)),
+        };
 
     let scheduler = st.scheduler.snapshot();
     let scheduler_hint = scheduler.hint();
@@ -174,10 +176,23 @@ pub async fn create_rule(
         return Err(ApiError::bad_request("wallet_address is required"));
     }
     if !(input.target_price_eth > 0.0) {
-        return Err(ApiError::bad_request("target_price_eth must be greater than 0"));
+        return Err(ApiError::bad_request(
+            "target_price_eth must be greater than 0",
+        ));
     }
     if input.max_quantity == 0 {
         return Err(ApiError::bad_request("max_quantity must be at least 1"));
+    }
+    // Same gate as the `create_snipe_rule` command. This endpoint cannot raise a
+    // Touch ID prompt — there is no user in front of an HTTP call — so it cannot
+    // arm the wallet itself. What it must not do is write a rule that looks
+    // created and is inert: `execute_snipe` refuses to fire on a disarmed
+    // wallet, so accepting here would be a silent failure with a 200 on it.
+    if !crate::wallet::armed::is_armed(&input.wallet_address) {
+        return Err(ApiError::bad_request(
+            "wallet is not armed — arm it in Westron with Touch ID before creating a rule for it, \
+             otherwise the rule is stored but can never fire",
+        ));
     }
     let db_path = sniping::ensure_db().map_err(ApiError::internal)?;
     let id = sniping::db::create_rule(&db_path, &input).map_err(ApiError::internal)?;
@@ -223,7 +238,9 @@ pub async fn create_alert(Json(input): Json<alerts::AlertRuleInput>) -> ApiResul
         return Err(ApiError::bad_request("wallet_address is required"));
     }
     if !matches!(input.condition.as_str(), "above" | "below") {
-        return Err(ApiError::bad_request("condition must be \"above\" or \"below\""));
+        return Err(ApiError::bad_request(
+            "condition must be \"above\" or \"below\"",
+        ));
     }
     let db_path = alerts::ensure_db().map_err(ApiError::internal)?;
     let id = alerts::db::create_alert(&db_path, &input).map_err(ApiError::internal)?;
@@ -288,7 +305,10 @@ pub async fn revoke_envelope(State(st): State<ControlState>) -> ApiResult {
 }
 
 /// POST /kill-switch — `{"active": true}` engages, `false` releases.
-pub async fn kill_switch(State(st): State<ControlState>, Json(body): Json<ActiveBody>) -> ApiResult {
+pub async fn kill_switch(
+    State(st): State<ControlState>,
+    Json(body): Json<ActiveBody>,
+) -> ApiResult {
     if body.active {
         st.envelope.activate_kill_switch();
     } else {

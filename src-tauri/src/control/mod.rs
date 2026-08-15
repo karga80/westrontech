@@ -30,7 +30,7 @@ use axum::{
 use serde_json::json;
 
 use crate::envelope::engine::EnvelopeEngine;
-use scheduler::SchedulerHandle;
+pub use scheduler::SchedulerHandle;
 
 /// Default loopback port; override with `WESTRON_CONTROL_PORT`.
 pub const DEFAULT_PORT: u16 = 7777;

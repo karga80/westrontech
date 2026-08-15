@@ -3,6 +3,58 @@
 Live truth. Disk and git win over this file if they disagree — fix this file, not your assumptions.
 Full feature/architecture overview: `README.md`. This file tracks what's proven vs mock vs blocked.
 
+## Update (2026-08-15): T20 — Arm-at-creation (sniper armed/disarmed), code + security reviewed, **Touch ID NOT eyeball-verified**
+
+**What it is:** UI-BRIEF §13 önceliği #1. Zamanlanmış bir sniper kuralı yaratılırken **bir kez**
+Touch ID istenir; çözülmüş anahtar `Zeroizing<String>` olarak sınırlı bir pencere boyunca RAM'de
+tutulur, uygulama kapanınca pencere biter ve kural kendiliğinden disarm olur. Karar 14.08.2026,
+Emir — `docs/UI-BRIEF.md` §2 karar 2. Spec: aynı dosya §5.
+
+**Gerçek olan:** `src-tauri/src/wallet/armed.rs` (yeni modül), `arm_wallet_for_tasks` /
+`disarm_wallet_for_tasks` / `wallet_armed_status` komutları, kill switch'in `disarm_all()`
+çağırması, `create_snipe_rule`'un silahsız cüzdanda `Err` dönmesi, `execute_snipe`'ın silahsız
+cüzdanda tetiklenmeyi reddetmesi, sniping ekranındaki armed rozeti + canlı geri sayım + inert
+kural satırı + yeniden silahlandırma düğmesi.
+
+**Hâlâ simülasyon (değişmedi):** snipe tetiklendiğinde hiçbir şey imzalanmıyor,
+`0xSIMULATED_snipe_...` üretiliyor. `MOCKS.md` S1 geçerli. Bu oturumda ekran artık bu sahte
+hash'i Etherscan'e **linklemiyor** ve "simulated, nothing was sent" diyor — eskiden linkliyordu,
+kullanıcı "transaction not found" sayfasını görüp zincirin geride kaldığını sanabilirdi.
+
+**İnceleme sonucu (`code-reviewer` + `security-reviewer`, paralel, bağımsız):** ikisi de aynı
+ham anahtar kopyalama sorununu işaret etti. Bu oturumda düzeltilenler:
+1. `execute_snipe` "silahlı mı" sorusunu `key_for()` ile soruyordu — yani her kural için, her
+   zamanlayıcı turunda, tüm pencere boyunca private key'in bir kopyasını heap'e çıkarıyordu.
+   Anahtara hiç dokunmayan `is_armed()` eklendi; kapı saf, test edilebilir `disarmed_block()`
+   fonksiyonuna çıkarıldı.
+2. `Armed` için elle yazılmış redakte eden `Debug` — türetilmiş `Debug` ham anahtarı basardı.
+3. Süre dolumuna monotonik ikinci tavan: duvar saati geri alınırsa (NTP veya Sistem Ayarları)
+   `expires_at` kontrolü tek başına pencereyi sessizce uzatıyordu.
+4. Zehirlenmiş mutex'te `disarm_all()` (kill switch) artık yine de temizliyor.
+5. `explainArmError` gerçek backend metnini ("No matching entry found in secure storage")
+   kaçırıyordu — dostane dal hiç çalışmıyordu.
+6. Ekrandaki armed durumunda yarış koruması: 30 sn'lik yoklama ile kullanıcının Disarm tıklaması
+   birbirini geçebiliyordu; eski cevap yenisinin üstüne yazınca rozet "Armed"a geri dönüyordu.
+7. Loopback `POST /rules` silahsız cüzdana sessizce inert kural yazıyordu; artık komutla aynı
+   şekilde reddediyor.
+
+**Düzeltilmedi, önkoşul olarak yazıldı — `docs/TASKS.md` T23 (HIGH):** `execute_snipe` otonomi
+motorunu (`autonomy/`) ve hash zincirli audit log'u atlıyor. Bugün zararsız, çünkü hiçbir şey
+imzalanmıyor. Gerçek Seaport fulfilment bağlanmadan önce kapatılmak zorunda.
+
+**Doğrulama:** `cargo test --lib` 218 geçti (210'du), `npx tsc --noEmit` temiz,
+`npx jest` 47 geçti (4 suite). **Bunlar yeterli değil ve öyle davranılmadı:**
+
+> **DOĞRULANMADI — Touch ID hiç gözle görülmedi.** Bu makinede hiçbir cüzdan yok
+> (`~/Library/Application Support/Westron/keys` boş, keystore boş), dolayısıyla `arm()` gerçek
+> bir Secure Enclave istemi çıkarmadı. `cargo test` her zaman bellek-içi keystore mock'unu
+> kullanıyor. Yani "Touch ID istemi çıkıyor ve anahtar pencerede tutuluyor" iddiasının
+> gözlemlenebilir kanıtı **yok**. Kanıt için Emir'in bir test cüzdanı import etmesi ve
+> uygulamada bir kural yaratması gerekiyor (`docs/UI-BRIEF.md` §14 açık sorusu).
+
+**Sonraki adım:** UI-BRIEF §13 önceliği #2 — sahte hash ve sahte "Confirmed" temizliği
+(bu oturumda sniping ekranında yapıldı, diğer ekranlar taranmadı).
+
 ## Update (2026-08-10): T17 — Wallet-level autonomy policies, done, security-reviewed, real click-through
 
 **What it is:** a wallet-level autonomy gate in front of every real signing/marketplace path
