@@ -275,7 +275,7 @@ pub struct ListingParams<'a> {
 pub fn build_listing_order(p: &ListingParams<'_>, private_key_hex: &str) -> Result<SignedOrder, String> {
     let now = unix_now()?;
     let end_time = now + p.expiry_hours * 3600;
-    let price_wei = eth_to_wei(p.price_eth);
+    let price_wei = eth_to_wei(p.price_eth)?;
     let fee_wei = (price_wei * OPENSEA_FEE_BPS) / 10_000;
     let seller_wei = price_wei - fee_wei;
     let salt = random_salt();
@@ -336,7 +336,7 @@ pub struct OfferParams<'a> {
 pub fn build_offer_order(p: &OfferParams<'_>, private_key_hex: &str) -> Result<SignedOrder, String> {
     let now = unix_now()?;
     let end_time = now + p.expiry_hours * 3600;
-    let per_item_wei = eth_to_wei(p.price_eth);
+    let per_item_wei = eth_to_wei(p.price_eth)?;
     let fee_wei = (per_item_wei * OPENSEA_FEE_BPS) / 10_000;
     // WETH offered = total item value (seller receives) + fee
     let weth_offer_wei = per_item_wei + fee_wei;
@@ -400,12 +400,60 @@ fn unix_now() -> Result<u64, String> {
 // need the exact same conversion before a listing/bid price enters an
 // `ActionProposal` — reusing this function instead of writing a second
 // `eth * 1e18` keeps that arithmetic in exactly one place.
-pub(crate) fn eth_to_wei(eth: f64) -> u128 {
-    (eth * 1e18) as u128
+/// Convert an ETH amount to wei, rejecting non-finite, negative, or absurdly
+/// large values.
+///
+/// Güvenlik denetimi #3 (2026-08-18): eski `(eth * 1e18) as u128` NaN'ı sessizce
+/// 0'a çeviriyordu (`NaN as u128 == 0`) — yani 0-wei / bedava listeleme riski —
+/// ve taşmada saturasyona gidiyordu. Artık non-finite / negatif / aralık-dışı
+/// değerler hata döner ve çağıran (`build_*_order`, `Result` dönüyor) `?` ile
+/// yayar.
+///
+/// NOT: f64 hâlâ ~0.009 ETH (2^53 wei) üstünde kesin DEĞİL. Tam kesinlik için
+/// fiyatın komut sınırına decimal string / wei-string olarak gelip `U256`'ya
+/// parse edilmesi gerekir — bu Kapı-3 takip işi. Bu fonksiyon yalnız
+/// para-kaybettiren uç durumları (NaN→0, taşma) kapatır; dust seviyesi
+/// yuvarlama hatası bilinçli olarak açık bırakılmıştır.
+pub(crate) fn eth_to_wei(eth: f64) -> Result<u128, String> {
+    if !eth.is_finite() || eth < 0.0 {
+        return Err(format!("invalid ETH amount: {eth}"));
+    }
+    let wei = eth * 1e18;
+    // 1e30 wei = 1e12 ETH — absürt bir üst sınır; ayrıca fee çarpımının
+    // (`* OPENSEA_FEE_BPS`, ×250) u128'de taşmamasını garanti eder.
+    if !wei.is_finite() || wei >= 1e30 {
+        return Err("ETH amount out of range".to_string());
+    }
+    Ok(wei as u128)
 }
 
 /// Generate a random u64 salt using UUID v4 bytes.
 fn random_salt() -> u64 {
     let bytes = uuid::Uuid::new_v4().as_bytes().to_owned();
     u64::from_le_bytes(bytes[..8].try_into().unwrap_or([0u8; 8]))
+}
+
+#[cfg(test)]
+mod eth_to_wei_tests {
+    use super::eth_to_wei;
+
+    #[test]
+    fn accepts_normal_amounts() {
+        assert_eq!(eth_to_wei(0.0).unwrap(), 0);
+        assert_eq!(eth_to_wei(1.0).unwrap(), 1_000_000_000_000_000_000);
+    }
+
+    #[test]
+    fn rejects_nan_so_it_can_never_become_a_zero_wei_free_listing() {
+        // Güvenlik denetimi #3: eski `(eth*1e18) as u128` NaN'ı 0'a çeviriyordu.
+        assert!(eth_to_wei(f64::NAN).is_err());
+    }
+
+    #[test]
+    fn rejects_infinite_and_negative_and_out_of_range() {
+        assert!(eth_to_wei(f64::INFINITY).is_err());
+        assert!(eth_to_wei(f64::NEG_INFINITY).is_err());
+        assert!(eth_to_wei(-1.0).is_err());
+        assert!(eth_to_wei(1e13).is_err()); // 1e13 ETH — aralık dışı
+    }
 }

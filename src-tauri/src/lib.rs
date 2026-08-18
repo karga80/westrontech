@@ -809,7 +809,7 @@ async fn marketplace_list_nft(
         &contract_address,
         autonomy::types::ActionType::MarketplaceList,
         Some(contract_address.clone()),
-        marketplace::seaport::eth_to_wei(price_eth),
+        marketplace::seaport::eth_to_wei(price_eth)?,
         payload,
     )
     .await?;
@@ -872,7 +872,7 @@ async fn marketplace_place_bid(
         &contract_address,
         autonomy::types::ActionType::MarketplaceBidOrOffer,
         Some(contract_address.clone()),
-        marketplace::seaport::eth_to_wei(price_eth),
+        marketplace::seaport::eth_to_wei(price_eth)?,
         payload,
     )
     .await?;

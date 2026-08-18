@@ -34,8 +34,8 @@ impl MarketplaceClient {
 
     /// Create a fixed-price ETH listing for an ERC-721 NFT on OpenSea.
     pub async fn list_nft(&self, input: &ListingInput) -> Result<OrderResult, String> {
-        if input.price_eth <= 0.0 {
-            return Err("listing price must be greater than 0".to_string());
+        if !input.price_eth.is_finite() || input.price_eth <= 0.0 {
+            return Err("listing price must be a positive, finite number".to_string());
         }
         if input.expiry_hours == 0 || input.expiry_hours > 720 {
             return Err("expiry_hours must be between 1 and 720".to_string());
@@ -119,8 +119,8 @@ impl MarketplaceClient {
 
     /// Place a WETH collection-level offer (bid) on OpenSea.
     pub async fn place_bid(&self, input: &BidInput) -> Result<OrderResult, String> {
-        if input.price_eth <= 0.0 {
-            return Err("bid price must be greater than 0".to_string());
+        if !input.price_eth.is_finite() || input.price_eth <= 0.0 {
+            return Err("bid price must be a positive, finite number".to_string());
         }
         if input.quantity == 0 {
             return Err("quantity must be at least 1".to_string());
@@ -200,88 +200,30 @@ impl MarketplaceClient {
         })
     }
 
-    /// Cancel an order off-chain via OpenSea API.
-    /// For on-chain cancellation (incrementNonce), use the envelope engine + direct RPC.
+    /// Cancel an order.
+    ///
+    /// DISABLED — 2026-08-18, güvenlik denetimi bulgusu #1 (canlı-test blocker).
+    /// Eski implementasyon çağırandan gelen `order_hash`'i EIP-712/191 zarfı
+    /// OLMADAN ham olarak imzalıyordu (`sign_hash_sync`). Bu bir kör-imza
+    /// oracle'ıydı: crafted bir `order_hash` = 0-ETH listeleme order'ının
+    /// EIP-712 digest'i olursa, kullanıcının anahtarı GEÇERLİ bir Seaport drain
+    /// imzası üretebiliyordu; envelope bu yolu `value_wei=0` gördüğü için
+    /// yakalayamıyordu (bkz. westron-canli-test-guvenlik-denetimi #1, ref §7.2).
+    ///
+    /// Güvenli yeniden implementasyon (OpenSea'nin tiplenmiş offchain-cancel
+    /// payload'ı EIP-712 olarak imzalanır, ya da on-chain `incrementCounter`)
+    /// yapılana kadar bu yol HİÇBİR imza atmaz — anahtarı fetch bile etmez.
     pub async fn cancel_order(&self, input: &CancelInput) -> Result<OrderResult, String> {
         if input.order_hash.is_empty() {
             return Err("order_hash must not be empty".to_string());
         }
-        if input.marketplace == Marketplace::Blur {
-            return Err("Blur cancellation not yet supported".to_string());
-        }
-
-        // OpenSea off-chain cancel: DELETE /v2/orders/{chain}/{protocol}/{order_hash}
-        // Requires the order creator's signature over the cancellation message.
-        let private_key = fetch_and_verify_key(&input.wallet_address)?;
-
-        // Build a minimal cancellation signature: sign the order hash directly
-        use alloy::primitives::B256;
-        use alloy::signers::{local::PrivateKeySigner, SignerSync};
-        let key_bytes = hex::decode(&private_key)
-            .map_err(|e| format!("invalid key hex: {}", e))?;
-        let signer = PrivateKeySigner::from_slice(&key_bytes)
-            .map_err(|e| format!("invalid key: {}", e))?;
-        let hash_bytes = hex::decode(
-            input.order_hash.strip_prefix("0x").unwrap_or(&input.order_hash),
+        Err(
+            "İptal bu sürümde geçici olarak devre dışı (güvenlik düzeltmesi bekleniyor — \
+             ham-hash imza açığı kapatıldı). Order'ı iptal etmek için şimdilik OpenSea \
+             arayüzünü kullanın; güvenli in-app iptal (tiplenmiş imza / on-chain counter) \
+             bir sonraki turda eklenecek."
+                .to_string(),
         )
-        .map_err(|e| format!("invalid order hash: {}", e))?;
-        let mut hash_arr = [0u8; 32];
-        let copy = hash_bytes.len().min(32);
-        hash_arr[32 - copy..].copy_from_slice(&hash_bytes[..copy]);
-        let hash = B256::from(hash_arr);
-        let sig = signer
-            .sign_hash_sync(&hash)
-            .map_err(|e| format!("sign failed: {}", e))?;
-        let mut sig_bytes = sig.as_bytes();
-        if sig_bytes[64] < 27 { sig_bytes[64] += 27; }
-        let signature_hex = format!("0x{}", hex::encode(sig_bytes));
-
-        let url = format!(
-            "{}/orders/chain/ethereum/protocol/{}/{}",
-            OPENSEA_API_BASE,
-            seaport::SEAPORT_1_6,
-            input.order_hash
-        );
-        let resp = self
-            .http
-            .delete(&url)
-            .header("x-api-key", &self.opensea_key)
-            .header("content-type", "application/json")
-            .json(&serde_json::json!({ "signature": signature_hex }))
-            .send()
-            .await
-            .map_err(|e| format!("OpenSea cancel request failed: {}", e))?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .unwrap_or_else(|_| serde_json::json!({}));
-            let msg = body
-                .get("errors")
-                .and_then(|e| e.as_array())
-                .and_then(|a| a.first())
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown error");
-            return Ok(OrderResult {
-                order_hash: input.order_hash.clone(),
-                action: "cancel".to_string(),
-                marketplace: "opensea".to_string(),
-                status: OrderStatus::Failed,
-                tx_hash: None,
-                error: Some(format!("OpenSea {} — {}", status.as_u16(), msg)),
-            });
-        }
-
-        Ok(OrderResult {
-            order_hash: input.order_hash.clone(),
-            action: "cancel".to_string(),
-            marketplace: "opensea".to_string(),
-            status: OrderStatus::Submitted,
-            tx_hash: None,
-            error: None,
-        })
     }
 
     /// Fetch listed NFTs from a collection sorted by price ascending.
@@ -808,7 +750,7 @@ impl MarketplaceClient {
                         .max(1.0);
                     total_eth / nft_qty
                 };
-                if price_eth <= 0.0 { return None; }
+                if !price_eth.is_finite() || price_eth <= 0.0 { return None; }
 
                 // Collection/item offers are always paid in WETH on OpenSea
                 let payment_symbol = "WETH".to_string();
