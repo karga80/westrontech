@@ -33,11 +33,17 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub struct AddressNonce {
     /// The nonce to use next, if we have successfully broadcast before.
     next: Option<u64>,
+    /// The highest nonce we have ever *committed* (successfully broadcast) for
+    /// this address. Kapı-2 / M1: `invalidate()` must never let the record fall
+    /// below this, otherwise a failed send that interleaves a burst can reset
+    /// the record and hand a later send a nonce we already used — silently
+    /// replacing an in-flight transaction. This is the high-water floor.
+    highest_committed: Option<u64>,
 }
 
 impl AddressNonce {
     pub fn new() -> Self {
-        Self { next: None }
+        Self { next: None, highest_committed: None }
     }
 
     /// Choose the nonce for the next transaction from this address.
@@ -55,16 +61,29 @@ impl AddressNonce {
     /// Record a successful broadcast. The next send uses `used + 1`.
     pub fn commit(&mut self, used: u64) {
         self.next = Some(used.saturating_add(1));
+        self.highest_committed = Some(match self.highest_committed {
+            Some(h) => h.max(used),
+            None => used,
+        });
     }
 
-    /// Forget our record and fall back to the chain on the next allocate.
+    /// Drop our forward record after a failed send, but never below the
+    /// high-water mark of nonces we have already committed.
     ///
     /// Called after *any* failed send, not just nonce faults: a transport error
-    /// or timeout can hide a transaction that actually reached the mempool, and
-    /// in that case our record is too low. Re-reading `pending` is always the
-    /// safe direction.
+    /// or timeout can hide a transaction that actually reached the mempool, so
+    /// on the next allocate we still want to re-read `pending` (the chain may
+    /// have advanced). But we must NOT forget nonces we already committed —
+    /// Kapı-2 / M1: resetting all the way to `None` let a failed send that
+    /// interleaves a burst hand a later send a nonce a prior committed send is
+    /// still holding in the mempool, silently replacing it. So we fall back to
+    /// `highest_committed + 1`, and `allocate` still takes `max(that, pending)`:
+    /// the chain wins if it has moved ahead (a hidden send landed), our floor
+    /// wins if the node is merely behind. A nonce that failed *without* ever
+    /// committing (e.g. this very send) is below the floor and gets reused —
+    /// which is correct, it never reached anyone.
     pub fn invalidate(&mut self) {
-        self.next = None;
+        self.next = self.highest_committed.map(|h| h.saturating_add(1));
     }
 
     /// The cached next nonce, for tests and diagnostics.
@@ -224,12 +243,43 @@ mod tests {
     }
 
     #[test]
-    fn invalidate_falls_back_to_the_chain() {
+    fn invalidate_never_falls_below_the_committed_high_water() {
+        // Kapı-2 / M1: after committing 9, invalidate must NOT let a later
+        // allocate reuse a nonce ≤ 9 just because the node reports a stale-low
+        // pending. The chain still wins if it has genuinely moved ahead.
         let mut n = AddressNonce::new();
         n.commit(9);
         assert_eq!(n.allocate(5), 10);
         n.invalidate();
-        assert_eq!(n.allocate(5), 5, "after invalidate the chain is the only source");
+        assert_eq!(
+            n.allocate(5), 10,
+            "invalidate must hold the committed floor, not reuse a nonce we already broadcast"
+        );
+        assert_eq!(
+            n.allocate(20), 20,
+            "but a chain that has genuinely advanced (a hidden send landed) still wins"
+        );
+    }
+
+    /// The exact M1 scenario the audit flagged: A commits nonce 7 (in mempool),
+    /// send B (nonce 8) fails and invalidates, then C must not be handed 7 and
+    /// silently replace A, even though the node still reports pending = 7.
+    #[test]
+    fn a_failed_send_after_a_commit_cannot_reuse_the_committed_nonce() {
+        let mut n = AddressNonce::new();
+        let stale_pending = 7;
+        // A: allocate + commit 7 (now in mempool; node hasn't counted it yet).
+        let a = n.allocate(stale_pending);
+        n.commit(a);
+        assert_eq!(a, 7);
+        // B: allocate 8, then its send fails → invalidate (B never committed).
+        let b = n.allocate(stale_pending);
+        assert_eq!(b, 8);
+        n.invalidate();
+        // C: with the node still stale at pending = 7, C must reuse 8 (B's free
+        // slot) — never 7, which would replace A.
+        let c = n.allocate(stale_pending);
+        assert_eq!(c, 8, "C reused a committed nonce and would have replaced an in-flight tx");
     }
 
     // ── Per-address isolation and serialisation ───────────────────────────────

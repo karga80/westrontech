@@ -199,6 +199,25 @@ impl LocalSigner {
             }
         };
 
+        // Kapı-2: mutlak gas-ücreti güvenlik tavanı. Fee oracle'ının (eth_gasPrice)
+        // sıçraması, zehirlenmesi ya da bir hesap bug'ı bu tek gönderiyi
+        // beklenmedik biçimde pahalı hale getirse bile, yakabileceği toplam gas
+        // ücretini mutlak bir tavanla sınırla. Bu kullanıcının fee tercihi DEĞİL —
+        // bir güvenlik backstop'u; normal gönderiler bunun 100-1000 kat altında
+        // (basit transfer ~21k gas × birkaç gwei). Tavanı aşarsa hiçbir şey
+        // imzalanmaz/yayınlanmaz; nonce commit edilmediği için tüketilmez ve
+        // çağıran katman envelope rezervasyonunu geri alır.
+        const MAX_TX_GAS_FEE_WEI: u128 = 100_000_000_000_000_000; // 0.1 ETH
+        let worst_case_gas_fee = max_fee.saturating_mul(gas_limit as u128);
+        if worst_case_gas_fee > MAX_TX_GAS_FEE_WEI {
+            return Err(format!(
+                "Gönderi güvenlik tavanını aştı: bu işlem en kötü ihtimalle {worst_case_gas_fee} wei \
+                 gas ücreti yakabilir (maxFee {max_fee} × gasLimit {gas_limit}), tavan \
+                 {MAX_TX_GAS_FEE_WEI} wei (0.1 ETH). Ağ ücretleri şu an anormal yüksek olabilir — \
+                 birazdan tekrar dene ya da işlemi ertele. Hiçbir şey gönderilmedi."
+            ));
+        }
+
         // 8. EIP-1559 tx oluştur
         let mut tx = TxEip1559 {
             chain_id: CHAIN_ID,

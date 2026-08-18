@@ -212,25 +212,57 @@ impl SnipingEngine {
 
         // Estimate value for the full sweep (floor * max_quantity), denominated in wei
         let projected_eth = projected_spend_eth(rule, floor_price);
-        let value_wei = (projected_eth * 1e18) as u128;
+        // Kapı-2: NaN/inf/negatif floor (zehirli ya da bozuk fiyat okuması)
+        // value_wei'yi sessizce 0'a çevirip envelope'u anlamsız kılmasın —
+        // aralık dışıysa u128::MAX ver, envelope kesin reddetsin (fail-closed).
+        let value_wei: u128 = if projected_eth.is_finite() && projected_eth >= 0.0 {
+            (projected_eth * 1e18) as u128
+        } else {
+            u128::MAX
+        };
 
-        // Build a synthetic transaction request for Envelope authorization.
-        // The "to" address is set to the wallet address itself as a placeholder;
-        // real Seaport contract address will be used in Phase 3.
+        // Synthetic envelope request. NOTE (Kapı-2): `to` is a PLACEHOLDER — the
+        // wallet's own address — because this path is still SIMULATED and the
+        // real Seaport fulfillment target is a Phase-3 blocker. Two consequences
+        // are enforced right here:
+        //   1) We call `preview` (READ-ONLY), never `check_and_authorize`, so a
+        //      simulated fire cannot consume the real shared envelope budget or
+        //      trip the persisted kill switch (audit HIGH-1). The per-rule
+        //      simulated spend is still tracked separately via `db::add_spent`.
+        //   2) Before this path may BROADCAST for real, `to` MUST become the real
+        //      fulfillment contract AND be run through the autonomy contract
+        //      allowlist. The debug_assert below is a tripwire against wiring
+        //      real broadcast while the placeholder is still in place.
         let tx_request = TransactionRequest {
             to: rule.wallet_address.clone(),
             value_wei,
             calldata: format!("snipe:{}:qty:{}", rule.collection_slug, rule.max_quantity),
         };
+        debug_assert!(
+            tx_request.to == rule.wallet_address,
+            "sniping still uses the placeholder envelope destination — do not enable real \
+             broadcast until `to` is the real Seaport target and the autonomy allowlist is checked"
+        );
 
-        match envelope_engine.check_and_authorize(&tx_request) {
+        // preview() runs the identical guards as check_and_authorize but mutates
+        // nothing — correct for a simulated fire.
+        let auth: Result<(), String> = {
+            let p = envelope_engine.preview(&tx_request);
+            if p.authorized {
+                Ok(())
+            } else {
+                Err(p.reject_reason.unwrap_or_else(|| "not authorized".to_string()))
+            }
+        };
+
+        match auth {
             Err(envelope_err) => SnipeResult {
                 rule_id: rule.id.clone(),
                 collection_slug: rule.collection_slug.clone(),
                 floor_price_eth: floor_price,
                 triggered: false,
                 tx_hash: None,
-                error: Some(format!("envelope blocked: {:?}", envelope_err)),
+                error: Some(format!("envelope blocked: {}", envelope_err)),
                 deactivated_reason: None,
             },
             Ok(()) => {

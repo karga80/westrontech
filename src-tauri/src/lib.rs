@@ -719,9 +719,22 @@ async fn authorize_marketplace_action(
     action_value_wei: u128,
     payload: autonomy::pending::PendingActionPayload,
 ) -> Result<MarketplaceAuthorization, String> {
+    // Kapı-2: the envelope must bound the ETH value a marketplace action puts at
+    // risk — not see 0 for everything, which let a bid/offer of any size slip
+    // past the per-tx ceiling and hard cap (audit HIGH). A bid/offer escrows
+    // WETH (1:1 with ETH) — real value the wallet is committing — so it is
+    // metered here. A listing surrenders an NFT and RECEIVES ETH (not a wei
+    // spend), and a cancel moves nothing, so those stay 0; their distinct risks
+    // (zero/under-price listing) are handled elsewhere, not by the spend cap.
+    // `action_value_wei` is the same price exposure the autonomy gate already
+    // uses, so the two layers now agree instead of the envelope seeing 0.
+    let envelope_value_wei = match &action_type {
+        autonomy::types::ActionType::MarketplaceBidOrOffer => action_value_wei,
+        _ => 0,
+    };
     let tx_req_envelope = envelope::types::TransactionRequest {
         to: envelope_to.to_string(),
-        value_wei: 0,
+        value_wei: envelope_value_wei,
         calldata: String::new(),
     };
     envelope_engine
